@@ -10,7 +10,7 @@ const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", ac
 const Sidebar = ({ page, onPage, account, onLogs, onQuit }) => (
   <aside className="side">
     <div className="brand"><div className="logo"><Pulse size={18} /></div>
-      <div className="brand-text"><span className="brand-name">BiliOshi</span></div>
+      <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
     </div>
     <nav className="nav" aria-label="主导航">
       {[ ["monitor", "monitor", "直播总览"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
@@ -316,7 +316,7 @@ function App() {
     remove: { title: "移除主播？", desc: `不再对「${dialog?.room?.name || ""}」执行挂机与每日任务。可随时重新添加。`, confirmLabel: "移除主播", danger: true },
     logout: { title: "退出 B 站账号？", desc: "将停止当前账号的挂机任务，并清除本机登录凭证。当天进度与发送额度会保留。", confirmLabel: "退出登录" },
     safety: { title: "恢复账号操作？", desc: "先在 B 站完成验证并确认限制已解除。恢复后会重新检查账号，当天发送额度不会重置。", confirmLabel: "确认并恢复" },
-    quit: { title: "退出 BiliOshi？", desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。", confirmLabel: "退出应用" }
+    quit: { title: "退出 ビリ推し？", desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。", confirmLabel: "退出应用" }
   };
 
   return (

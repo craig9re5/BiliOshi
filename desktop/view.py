@@ -53,7 +53,7 @@ class TrayUI:
         self.scale = self.root.winfo_fpixels("1i") / 96.0
         self.px = lambda value: max(1, round(value * self.scale))
         p = self.px
-        self.root.title("BiliOshi · 直播助手")
+        self.root.title("ビリ推し")
         w, h = (min(p(1180), self.root.winfo_screenwidth() - p(40)),
                 min(p(760), self.root.winfo_screenheight() - p(80)))
         self.root.geometry(f"{w}x{h}")
@@ -70,7 +70,7 @@ class TrayUI:
         self.tray = pystray.Icon(
             "BiliOshi",
             icon_image(),
-            "BiliOshi · 正在启动",
+            "ビリ推し",
             pystray.Menu(
                 pystray.MenuItem("查看状态", lambda: self.commands.put("show"), default=True),
                 pystray.MenuItem(
@@ -341,7 +341,7 @@ class TrayUI:
                     _, name, title = cmd
                     try:
                         self.tray.notify(
-                            f"【{name}】开播了：{title}", title="BiliOshi · 开播提醒"
+                            f"【{name}】开播了：{title}", title="ビリ推し · 开播提醒"
                         )
                     except Exception:
                         pass
@@ -479,7 +479,7 @@ class TrayUI:
             key = next((key for key in ("exit", "pause", "safety", "remove", "check") if key in self.control_messages))
             message, started = self.control_messages[key]
             self.summary.set(message + f" · 已等待 {max(0, int(time.monotonic()-started))} 秒")
-        self.tray.title = f"BiliOshi · {title}"
+        self.tray.title = f"ビリ推し · {title}"
         account = snap.get("account", "")
         if account and snap.get("account_confirmed"):
             checked = time.strftime("%H:%M", time.localtime(snap.get("account_checked_at") or 0))
@@ -623,7 +623,7 @@ class TrayUI:
             if key in self.watch_notices:
                 continue
             try:
-                self.tray.notify(f"【{row['name']}】{warning}", title="BiliOshi · 连接提醒" if connection else "BiliOshi · 看播收益提醒")
+                self.tray.notify(f"【{row['name']}】{warning}", title="ビリ推し · 连接提醒" if connection else "ビリ推し · 看播收益提醒")
             except Exception:
                 logging.exception("Watch reward notification failed")
             self.watch_notices.add(key)

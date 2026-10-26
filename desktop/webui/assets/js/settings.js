@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"2f5ff314f780cf4d1f70040d6e460182eb9808d5f2b710cdff7a25bed4047db7","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"34ef3f5b6a4e82f40df066e755108140c5df7d5ad10ba51a29bd60ec4260286b"} */
+/* BiliOshi JSX {"code_sha256":"4c3bf5c082acfb0bd31215c35e9b1825c9095861241e4ced3da4b3f7df9e9abe","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"ef10080d60e8e54b0710b6b52d96732381e39124481db8b5821e65519a2a671f"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -188,7 +188,7 @@ const AccountPage = ({
     className: "settings-note inside"
   }, "\u6700\u65E9\u6062\u590D\u65F6\u95F4\uFF1A", absoluteTime(hold.until), "\u3002\u51B7\u5374\u7ED3\u675F\u540E\u4F1A\u81EA\u52A8\u68C0\u67E5\u3002")), /*#__PURE__*/React.createElement("p", {
     className: "settings-note"
-  }, "BiliOshi ", version || "", " \xB7 \u5173\u95ED\u7A97\u53E3\u540E\u7EE7\u7EED\u5728\u6258\u76D8\u8FD0\u884C"))));
+  }, "\u30D3\u30EA\u63A8\u3057 ", version || "", " \xB7 \u5173\u95ED\u7A97\u53E3\u540E\u7EE7\u7EED\u5728\u6258\u76D8\u8FD0\u884C"))));
 };
 Object.assign(window, {
   SettingsPage,

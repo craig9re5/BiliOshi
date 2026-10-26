@@ -78,6 +78,7 @@ powershell -ExecutionPolicy Bypass -File build_desktop.ps1
 - [架构与调用关系](ARCHITECTURE.md)
 - [审计及分阶段计划](docs/REFACTOR_PLAN.md)
 - [重构结果与验证](docs/REFACTOR_RESULTS.md)
+- [品牌与 Logo 规范](docs/BRAND.md)
 - [贡献说明](CONTRIBUTING.md)、[安全报告与凭证处理](SECURITY.md)
 
 代码使用 [MIT License](LICENSE)。来源与许可说明见 [NOTICE.md](NOTICE.md)。

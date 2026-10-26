@@ -38,11 +38,11 @@ def build_header(self, body, p):
     title_box = tk.Frame(header, bg=BG_WINDOW)
     title_box.pack(side="left")
     tk.Label(
-        title_box, text="BiliOshi", font=("Segoe UI", 21, "bold"), bg=BG_WINDOW, fg=TEXT_MAIN
+        title_box, text="ビリ推し", font=("Segoe UI", 21, "bold"), bg=BG_WINDOW, fg=TEXT_MAIN
     ).pack(side="left")
     tk.Label(
         title_box,
-        text=f" · 直播助手  {APP_VERSION}",
+        text=f" · {APP_VERSION}",
         font=(FONT_FAMILY, 10),
         bg=BG_WINDOW,
         fg=TEXT_MUTED,

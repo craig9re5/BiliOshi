@@ -124,14 +124,20 @@ const Pulse = ({ size = 16, className = "" }) => (
     height={size}
     viewBox="0 0 24 24"
     fill="none"
-    stroke="currentColor"
-    strokeWidth="1.9"
-    strokeLinecap="round"
-    strokeLinejoin="round"
     className={className}
     aria-hidden="true"
   >
-    <path d="M2.6 12h4.2l2.3-6.2 3.5 12.4 2.6-8.6 1.7 2.4h4.5" />
+    <path
+      d="M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z"
+      fill="currentColor"
+    />
+    <path
+      d="M4.6 12h4.1l1.5-3.2 2.2 6.1 1.6-3.4 1.1 2.5h4.3"
+      stroke="#16383a"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 

@@ -161,7 +161,7 @@ class QrLoginDialog(QrSessionView, tk.Toplevel):
     """Compatibility host; workbench account pages use QrLoginPanel."""
     def __init__(self, parent, engine, px, on_login, session_factory=QrLoginSession):
         tk.Toplevel.__init__(self, parent)
-        self.title("B 站扫码登录 · BiliOshi")
+        self.title("扫码登录 · ビリ推し")
         w, h = px(410), px(500)
         self.geometry(f"{w}x{h}")
         self.resizable(False,False)

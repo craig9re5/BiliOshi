@@ -171,8 +171,7 @@ class Workbench:
         tk.Label(brand, image=self.brand_photo, bg=SIDE, bd=0).pack(side="left", padx=(0, p(8)))
         brand_text = tk.Frame(brand, bg=SIDE)
         brand_text.pack(side="left")
-        label(brand_text, "BiliOshi", size=12, color="#e5eeeb", bg=SIDE, bold=True).pack(anchor="w")
-        label(brand_text, "直播助手", size=8, color="#8ca9a1", bg=SIDE).pack(anchor="w", pady=(p(2), 0))
+        label(brand_text, "ビリ推し", size=12, color="#e5eeeb", bg=SIDE, bold=True).pack(anchor="w")
         self.nav_buttons, self.nav_photos = {}, {}
         for page, text, command in (
             ("monitor", "监控总览", lambda: self.show_page("monitor")),

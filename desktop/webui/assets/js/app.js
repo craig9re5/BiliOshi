@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"f12c3b3f0c3fd6c3391bdb166b8ad6ec9e14c4c3d0f524e7654d2143a2a77a1d","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"30a241c767f3086a48ea4b3536535810d2174738e24a561e1459e3661a67936b"} */
+/* BiliOshi JSX {"code_sha256":"30d8d928ed5cef35a7d8426950c6fe52cfecb78007542cf21a50a4b2f15546f0","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"0b19906477a398128dd2764691f962324f29f50ec0a52fb8e2a691c4a5b6a7c9"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -60,7 +60,7 @@ const Sidebar = ({
   className: "brand-text"
 }, /*#__PURE__*/React.createElement("span", {
   className: "brand-name"
-}, "BiliOshi"))), /*#__PURE__*/React.createElement("nav", {
+}, "\u30D3\u30EA\u63A8\u3057"))), /*#__PURE__*/React.createElement("nav", {
   className: "nav",
   "aria-label": "\u4E3B\u5BFC\u822A"
 }, [["monitor", "monitor", "直播总览"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
@@ -520,7 +520,7 @@ function App() {
       confirmLabel: "确认并恢复"
     },
     quit: {
-      title: "退出 BiliOshi？",
+      title: "退出 ビリ推し？",
       desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。",
       confirmLabel: "退出应用"
     }

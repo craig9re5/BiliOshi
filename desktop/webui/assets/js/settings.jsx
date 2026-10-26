@@ -92,7 +92,7 @@ const AccountPage = ({ account, onScan, onLogout, onResumeSafety, onCheck, busy,
         </SettingRow>
         {cooldown && <p className="settings-note inside">最早恢复时间：{absoluteTime(hold.until)}。冷却结束后会自动检查。</p>}
       </section>
-      <p className="settings-note">BiliOshi {version || ""} · 关闭窗口后继续在托盘运行</p>
+      <p className="settings-note">ビリ推し {version || ""} · 关闭窗口后继续在托盘运行</p>
     </div></div>
   </>);
 };

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"ef10fc3937792f81a75b6f0301dd197a7c68c8cca122cd2a3a25bbbcb3084382","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"4b31e2652c0eaf8d4276b254891822597121e40cd0f9649bb14d01649179ba84"} */
+/* BiliOshi JSX {"code_sha256":"07e1c2bb3e1bfd15cae1c5cbf1413758e596a001f7014924df6e856ea265b9b9","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"32c6f32a30cae4c7f9266055be2cd572fc80ad5f28a16a25114e85d5fea9f9a8"} */
 (function () {
 "use strict";
 /* Hand-drawn 16px stroke icons — one weight, round caps, currentColor.
@@ -180,14 +180,17 @@ const Pulse = ({
   height: size,
   viewBox: "0 0 24 24",
   fill: "none",
-  stroke: "currentColor",
-  strokeWidth: "1.9",
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
   className: className,
   "aria-hidden": "true"
 }, /*#__PURE__*/React.createElement("path", {
-  d: "M2.6 12h4.2l2.3-6.2 3.5 12.4 2.6-8.6 1.7 2.4h4.5"
+  d: "M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z",
+  fill: "currentColor"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M4.6 12h4.1l1.5-3.2 2.2 6.1 1.6-3.4 1.1 2.5h4.3",
+  stroke: "#16383a",
+  strokeWidth: "1.9",
+  strokeLinecap: "round",
+  strokeLinejoin: "round"
 }));
 Object.assign(window, {
   Icon,

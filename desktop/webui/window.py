@@ -56,7 +56,7 @@ class WebHost:
 
         try:
             self._window = webview.create_window(
-                "BiliOshi · 直播助手", url=INDEX.as_uri(), js_api=self._api,
+                "ビリ推し", url=INDEX.as_uri(), js_api=self._api,
                 width=1180, height=760, min_size=(900, 600), background_color="#faf9f7",
                 text_select=False, hidden=not (show or login), zoomable=True,
             )
@@ -275,7 +275,7 @@ class WebHost:
                 return
             if isinstance(command, tuple) and command[0] == "notify":
                 _, name, title = command
-                self._notify(f"【{name}】开播了：{title}", "BiliOshi · 开播提醒")
+                self._notify(f"【{name}】开播了：{title}", "ビリ推し · 开播提醒")
                 continue
             if self._closing.is_set() and command not in {"show", "logs", "exit", "supervisor_exit"}:
                 continue
@@ -340,7 +340,7 @@ class WebHost:
                 item("系统设置", "settings"), item("账号登录", "login"), item("查看日志", "logs"),
                 pystray.Menu.SEPARATOR, item("退出（停止全部挂机）", "exit"),
             )
-            self._tray = pystray.Icon("BiliOshi", icon_image(), "BiliOshi · 正在启动", menu)
+            self._tray = pystray.Icon("BiliOshi", icon_image(), "ビリ推し", menu)
 
             def setup(icon):
                 icon.visible = True
@@ -423,7 +423,7 @@ class WebHost:
             if key in self._watch_notices:
                 continue
             if self._notify(f"【{row['name']}】{warning}",
-                            "BiliOshi · 连接提醒" if connection else "BiliOshi · 看播收益提醒"):
+                            "ビリ推し · 连接提醒" if connection else "ビリ推し · 看播收益提醒"):
                 self._watch_notices.add(key)
 
 

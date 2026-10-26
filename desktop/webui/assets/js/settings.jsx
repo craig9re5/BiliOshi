@@ -16,7 +16,6 @@ const SettingsPage = ({ settings, onSetting, pendingSettings }) => {
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   return (<>
-    <header className="topbar"><h1>挂机设置</h1><span className="sub">更改后自动保存</span></header>
     <div className="settings" data-screen-label="挂机设置"><div className="settings-inner">
       <section className="group card">
         <header className="group-head">每日任务<small>开播后，按 B 站的任务进度自动完成</small></header>
@@ -63,7 +62,6 @@ const AccountPage = ({ account, onScan, onLogout, onResumeSafety, onCheck, busy,
   const action = !account.signed_in || needsLogin ? onScan : cooldown ? null : hold.blocked ? onResumeSafety : onCheck;
   const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "检查状态";
   return (<>
-    <header className="topbar"><h1>账号</h1><span className="sub">登录与账号保护</span></header>
     <div className="settings" data-screen-label="账号"><div className="settings-inner">
       <section className="group card">
         <header className="group-head">B 站账号</header>

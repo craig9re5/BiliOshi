@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"0120f5feaa8dee2b57bb5d664167c45063ed8f5dc3ca7864b4ec0b7c32cd9e2b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"2023cafd014eee20753d7817c29f5f47c0e10786e938a54cc9632103fca9e2eb"} */
+/* BiliOshi JSX {"code_sha256":"541fcaf4796cfd4beef22be1809bfd343ed084f53fa0d7a370dd78952d65a6fb","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"9355043d377765f3b2fdb9b7b796a40059acc89e5b72fd79bfeaf70fe39a8824"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -228,15 +228,36 @@ const DetailPanel = ({
     className: pending ? "spin" : ""
   }), pending ? "正在处理…" : "补齐任务"))));
 };
+const OverviewActions = ({
+  paused,
+  onTogglePause,
+  onCheck,
+  checking,
+  controlBusy,
+  closing
+}) => /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+  type: "button",
+  className: "btn",
+  onClick: onCheck,
+  disabled: checking || controlBusy || closing
+}, /*#__PURE__*/React.createElement(Icon, {
+  name: "refresh",
+  size: 13,
+  className: checking ? "spin" : ""
+}), checking ? "检查中…" : "立即检查"), /*#__PURE__*/React.createElement("button", {
+  type: "button",
+  className: `btn ${paused ? "primary" : ""}`,
+  onClick: onTogglePause,
+  disabled: controlBusy || closing
+}, /*#__PURE__*/React.createElement(Icon, {
+  name: paused ? "play" : "pause",
+  size: 13
+}), paused ? "恢复挂机" : "暂停挂机"));
 const Overview = ({
   rooms,
   selectedId,
   onSelect,
   paused,
-  onTogglePause,
-  onCheck,
-  checking,
-  summary,
   onAction,
   onOpen,
   onAddMember,
@@ -258,38 +279,7 @@ const Overview = ({
   const healthy = rooms.filter(room => room.healthy).length;
   const unknown = rooms.filter(room => room.live_status == null).length;
   const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : paused ? "已暂停挂机" : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("header", {
-    className: "topbar"
-  }, /*#__PURE__*/React.createElement("h1", null, "\u76F4\u64AD\u603B\u89C8"), /*#__PURE__*/React.createElement("span", {
-    className: "sub"
-  }, checking ? "正在检查直播状态…" : summary ? `${summary}检查` : ""), /*#__PURE__*/React.createElement("span", {
-    className: "spacer"
-  }), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn",
-    onClick: onAddMember,
-    disabled: closing
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "plus",
-    size: 13
-  }), "\u6DFB\u52A0\u4E3B\u64AD"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn",
-    onClick: onCheck,
-    disabled: checking || controlBusy || closing
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "refresh",
-    size: 13,
-    className: checking ? "spin" : ""
-  }), checking ? "检查中…" : "立即检查"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: `btn ${paused ? "primary" : ""}`,
-    onClick: onTogglePause,
-    disabled: controlBusy || closing
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: paused ? "play" : "pause",
-    size: 13
-  }), paused ? "恢复挂机" : "暂停挂机")), (error || recovery?.action === "login") && /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, (error || recovery?.action === "login") && /*#__PURE__*/React.createElement("div", {
     className: "banner",
     role: "status"
   }, /*#__PURE__*/React.createElement(Icon, {
@@ -313,6 +303,14 @@ const Overview = ({
   }, rooms.length), /*#__PURE__*/React.createElement("span", {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn ghost sm",
+    onClick: onAddMember,
+    disabled: closing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "plus",
+    size: 12
+  }), "\u6DFB\u52A0\u4E3B\u64AD"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn ghost sm",
     onClick: onSyncMedals,
@@ -360,6 +358,7 @@ const Overview = ({
 };
 Object.assign(window, {
   Overview,
+  OverviewActions,
   Avatar
 });
 })();

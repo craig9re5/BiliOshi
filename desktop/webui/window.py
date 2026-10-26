@@ -55,10 +55,14 @@ class WebHost:
         import webview
 
         try:
+            # The page draws its own title bar (brand, page title, window
+            # buttons). Frameless drops the second copy of the name; native
+            # hit-testing restores edge resizing and the drag region moves it.
             self._window = webview.create_window(
                 "ビリ推し", url=INDEX.as_uri(), js_api=self._api,
                 width=1180, height=760, min_size=(900, 600), background_color="#faf9f7",
                 text_select=False, hidden=not (show or login), zoomable=True,
+                frameless=True, easy_drag=True, shadow=True,
             )
             self._window.events.closing += self._on_closing
             self._window.events.closed += self._on_closed
@@ -80,6 +84,7 @@ class WebHost:
     def _on_loaded(self):
         # loaded/shown can fire before React has created window.LS. The pump
         # checks the actual handlers; ready() also verifies them before pushing.
+        self._install_resize_edges()
         self._ready.clear()
         self._wake.set()
         hook = getattr(self, "window_loaded_hook", None)
@@ -146,6 +151,74 @@ class WebHost:
         except Exception:
             logging.exception("Minimizing window failed")
             return False
+
+    def toggle_maximize(self):
+        try:
+            if self._window.maximized:
+                self._window.restore()
+            else:
+                self._window.maximize()
+            return True
+        except Exception:
+            logging.exception("Maximizing window failed")
+            return False
+
+    def _install_resize_edges(self):
+        """Give a frameless window resize borders again.
+
+        Removing the caption also removes the resizing frame, so the native
+        hit test is backed by a small window procedure. Dragging stays with
+        pywebview's drag region; only edge pixels are claimed here.
+        """
+        import ctypes
+        from ctypes import wintypes
+
+        try:
+            hwnd = self._window.native.Handle.ToInt32()
+        except Exception:
+            logging.exception("Cannot attach resize edges")
+            return
+        user32 = ctypes.windll.user32
+        WM_NCHITTEST, BORDER = 0x0084, 6
+        borders = {
+            (True, True): 13, (False, True): 14,
+            (True, False): 16, (False, False): 17,
+        }
+        wndproc = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT,
+                                     wintypes.WPARAM, wintypes.LPARAM)
+        user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+        user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+        user32.CallWindowProcW.restype = ctypes.c_ssize_t
+        user32.CallWindowProcW.argtypes = [ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT,
+                                           wintypes.WPARAM, wintypes.LPARAM]
+        previous = {"proc": user32.SetWindowLongPtrW(hwnd, -4, 0)}
+
+        def handle(h, msg, wparam, lparam):
+            if msg == WM_NCHITTEST and not self._window.maximized:
+                point = wintypes.POINT(ctypes.c_short(lparam & 0xFFFF).value,
+                                       ctypes.c_short((lparam >> 16) & 0xFFFF).value)
+                user32.ScreenToClient(h, ctypes.byref(point))
+                rect = wintypes.RECT()
+                user32.GetClientRect(h, ctypes.byref(rect))
+                left = point.x < BORDER
+                right = point.x >= rect.right - BORDER
+                top = point.y < BORDER
+                bottom = point.y >= rect.bottom - BORDER
+                if (top and left) or (top and right) or (bottom and left) or (bottom and right):
+                    return borders[(bottom, left)]
+                if left:
+                    return 10
+                if right:
+                    return 11
+                if top:
+                    return 12
+                if bottom:
+                    return 15
+            return user32.CallWindowProcW(previous["proc"], h, msg, wparam, lparam)
+
+        callback = wndproc(handle)
+        self._resize_proc = callback  # keep the callback alive while the window exists
+        user32.SetWindowLongPtrW(hwnd, -4, ctypes.cast(callback, ctypes.c_void_p).value)
 
     def quit(self, *, explicit=True):
         with self._lifecycle_lock:

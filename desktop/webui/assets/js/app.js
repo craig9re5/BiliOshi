@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"30d8d928ed5cef35a7d8426950c6fe52cfecb78007542cf21a50a4b2f15546f0","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"0b19906477a398128dd2764691f962324f29f50ec0a52fb8e2a691c4a5b6a7c9"} */
+/* BiliOshi JSX {"code_sha256":"0fd86471aebaaa8dde437b0fc7fe91c94aada9b556b5125f0420c667795562ee","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"36432767e96c95cf39e2d9b31d9ba2cf175379f09f81418d45bac24b491dcf73"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -47,10 +47,11 @@ const Sidebar = ({
   onPage,
   account,
   onLogs,
-  onQuit
+  onQuit,
+  brandHidden
 }) => /*#__PURE__*/React.createElement("aside", {
   className: "side"
-}, /*#__PURE__*/React.createElement("div", {
+}, !brandHidden && /*#__PURE__*/React.createElement("div", {
   className: "brand"
 }, /*#__PURE__*/React.createElement("div", {
   className: "logo"
@@ -104,6 +105,100 @@ const Sidebar = ({
 }, Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("span", {
   className: "sidebar-account-text"
 }, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")))));
+const pageTitles = {
+  monitor: {
+    title: "直播总览",
+    sub: ""
+  },
+  automation: {
+    title: "挂机设置",
+    sub: "更改后自动保存"
+  },
+  account: {
+    title: "账号",
+    sub: "登录与账号保护"
+  }
+};
+const WindowButtons = () => {
+  const [maximized, setMaximized] = useState(false);
+  const act = action => {
+    call("window", [action]).catch(() => {});
+  };
+  const toggle = async () => {
+    try {
+      await call("window", ["maximize"]);
+      setMaximized(value => !value);
+    } catch {}
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "win-buttons",
+    "aria-label": "\u7A97\u53E3\u63A7\u5236"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "win-btn",
+    "aria-label": "\u6700\u5C0F\u5316",
+    title: "\u6700\u5C0F\u5316",
+    onClick: () => act("minimize")
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "10",
+    height: "10",
+    viewBox: "0 0 10 10",
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M2 5h6",
+    stroke: "currentColor",
+    strokeWidth: "1.1"
+  }))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "win-btn",
+    "aria-label": maximized ? "还原" : "最大化",
+    title: maximized ? "还原" : "最大化",
+    onClick: toggle
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "10",
+    height: "10",
+    viewBox: "0 0 10 10",
+    "aria-hidden": "true"
+  }, maximized ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("rect", {
+    x: "2",
+    y: "3.2",
+    width: "4.8",
+    height: "4.8",
+    rx: "1",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.1"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M3.6 3.2V2.6a.6.6 0 0 1 .6-.6h3.2a.6.6 0 0 1 .6.6v3.2a.6.6 0 0 1-.6.6h-.6",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.1"
+  })) : /*#__PURE__*/React.createElement("rect", {
+    x: "2.2",
+    y: "2.2",
+    width: "5.6",
+    height: "5.6",
+    rx: "1",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.1"
+  }))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "win-btn close",
+    "aria-label": "\u5173\u95ED",
+    title: "\u5173\u95ED\u5230\u6258\u76D8",
+    onClick: () => act("close")
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "10",
+    height: "10",
+    viewBox: "0 0 10 10",
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M2.6 2.6l4.8 4.8M7.4 2.6l-4.8 4.8",
+    stroke: "currentColor",
+    strokeWidth: "1.1"
+  }))));
+};
 function App() {
   const [page, setPage] = useState("monitor");
   const [snap, setSnap] = useState(EMPTY_SNAPSHOT);
@@ -534,19 +629,48 @@ function App() {
     onLogs: () => invoke("open_logs"),
     onQuit: () => setDialog({
       type: "quit"
-    })
+    }),
+    brandHidden: true
   }), /*#__PURE__*/React.createElement("main", {
     className: "main",
     "aria-busy": !connected
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "chrome pywebview-drag-region"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "chrome-brand"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "logo"
+  }, /*#__PURE__*/React.createElement(Pulse, {
+    size: 15
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "chrome-name"
+  }, "\u30D3\u30EA\u63A8\u3057")), /*#__PURE__*/React.createElement("span", {
+    className: "chrome-divider",
+    "aria-hidden": "true"
+  }), /*#__PURE__*/React.createElement("h1", {
+    className: "chrome-title"
+  }, pageTitles[page].title), /*#__PURE__*/React.createElement("span", {
+    className: "chrome-sub"
+  }, page === "monitor" ? snap.checking ? "正在检查直播状态…" : snap.last_check ? `${relativeTime(snap.last_check)}检查` : "" : pageTitles[page].sub), /*#__PURE__*/React.createElement("span", {
+    className: "spacer"
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "chrome-actions"
+  }, page === "monitor" && /*#__PURE__*/React.createElement(window.OverviewActions, {
+    paused: snap.paused,
+    onTogglePause: () => control("toggle_pause"),
+    onCheck: () => control("check_now"),
+    checking: snap.checking,
+    controlBusy: controlBusy,
+    closing: closing
+  })), /*#__PURE__*/React.createElement(WindowButtons, {
+    key: page
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "page"
   }, page === "monitor" && /*#__PURE__*/React.createElement(window.Overview, {
     rooms: rooms,
     selectedId: selectedId,
     onSelect: select,
     paused: snap.paused,
-    onTogglePause: () => control("toggle_pause"),
-    onCheck: () => control("check_now"),
-    checking: snap.checking,
-    summary: snap.last_check ? relativeTime(snap.last_check) : "",
     onAction: roomAction,
     onOpen: id => invoke("open_room", [id]),
     onAddMember: openAdd,
@@ -579,7 +703,7 @@ function App() {
     onCheck: () => control("check_now"),
     busy: controlBusy || closing,
     version: snap.version
-  })), /*#__PURE__*/React.createElement("div", {
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "toasts",
     "aria-live": "polite"
   }, toasts.map(item => /*#__PURE__*/React.createElement("div", {

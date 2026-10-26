@@ -81,6 +81,7 @@
       state.recovery = { action: "login", label: "扫码登录" }; publish(); return { ok: true }; },
     resume_safety() { state.safety = { blocked: false }; publish(); return { ok: true }; },
     refresh() { publish(); return { ok: true }; },
+    window() { return { ok: true, message: "预览模式不控制窗口" }; },
     quit() { return { ok: false, error: "这是浏览器预览，关闭标签页即可" }; }
   } };
 })();

@@ -138,7 +138,16 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onRemove, image }) => {
   );
 };
 
-const Overview = ({ rooms, selectedId, onSelect, paused, onTogglePause, onCheck, checking, summary,
+const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy, closing }) => (
+  <>
+    <button type="button" className="btn" onClick={onCheck} disabled={checking || controlBusy || closing}>
+      <Icon name="refresh" size={13} className={checking ? "spin" : ""} />{checking ? "检查中…" : "立即检查"}</button>
+    <button type="button" className={`btn ${paused ? "primary" : ""}`} onClick={onTogglePause} disabled={controlBusy || closing}>
+      <Icon name={paused ? "play" : "pause"} size={13} />{paused ? "恢复挂机" : "暂停挂机"}</button>
+  </>
+);
+
+const Overview = ({ rooms, selectedId, onSelect, paused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, busyRoom, controlBusy,
   error, recovery, onRecovery, interval, images, signedIn, closing, bridgeConnected }) => {
   const selected = rooms.find((room) => room.room === selectedId);
@@ -148,17 +157,6 @@ const Overview = ({ rooms, selectedId, onSelect, paused, onTogglePause, onCheck,
     : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中`
     : unknown ? "等待检查" : "等待开播";
   return (<>
-    <header className="topbar">
-      <h1>直播总览</h1><span className="sub">{checking ? "正在检查直播状态…" : summary ? `${summary}检查` : ""}</span>
-      <span className="spacer" />
-      <button type="button" className="btn" onClick={onAddMember} disabled={closing}><Icon name="plus" size={13} />添加主播</button>
-      <button type="button" className="btn" onClick={onCheck} disabled={checking || controlBusy || closing}>
-        <Icon name="refresh" size={13} className={checking ? "spin" : ""} />{checking ? "检查中…" : "立即检查"}
-      </button>
-      <button type="button" className={`btn ${paused ? "primary" : ""}`} onClick={onTogglePause} disabled={controlBusy || closing}>
-        <Icon name={paused ? "play" : "pause"} size={13} />{paused ? "恢复挂机" : "暂停挂机"}
-      </button>
-    </header>
     {(error || recovery?.action === "login") && <div className="banner" role="status">
       <Icon name={recovery?.action === "login" ? "user" : "alert"} size={14} />
       <span>{!signedIn ? "登录 B 站，开始自动挂机与每日任务" : error || recovery?.message}</span>
@@ -167,7 +165,10 @@ const Overview = ({ rooms, selectedId, onSelect, paused, onTogglePause, onCheck,
     <div className="workspace">
       <section className="list card" aria-label="关注的直播间">
         <header className="list-head"><span className="list-title">关注的直播间</span><span className="list-count">{rooms.length}</span>
-          <span className="spacer" /><button type="button" className="btn ghost sm" onClick={onSyncMedals} disabled={closing}>
+          <span className="spacer" />
+          <button type="button" className="btn ghost sm" onClick={onAddMember} disabled={closing}>
+            <Icon name="plus" size={12} />添加主播</button>
+          <button type="button" className="btn ghost sm" onClick={onSyncMedals} disabled={closing}>
             <Icon name="medal" size={12} />同步粉丝牌</button>
         </header>
         <div className="rooms" role="listbox" aria-label="直播间列表">
@@ -187,4 +188,4 @@ const Overview = ({ rooms, selectedId, onSelect, paused, onTogglePause, onCheck,
   </>);
 };
 
-Object.assign(window, { Overview, Avatar });
+Object.assign(window, { Overview, OverviewActions, Avatar });

@@ -704,8 +704,9 @@ class Api:
 
     def window(self, action):
         try:
-            methods = {"minimize": self._ui.minimize, "close": self._ui.close_window,
-                       "show": self._ui.show, "exit": self._ui.quit, "quit": self._ui.quit}
+            methods = {"minimize": self._ui.minimize, "maximize": self._ui.toggle_maximize,
+                       "close": self._ui.close_window, "show": self._ui.show,
+                       "exit": self._ui.quit, "quit": self._ui.quit}
             method = methods.get(action)
             if method is None:
                 return {"ok": False, "error": "未知窗口操作。"}

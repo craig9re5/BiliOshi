@@ -7,11 +7,11 @@ const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, onLogs, onQuit }) => (
+const Sidebar = ({ page, onPage, account, onLogs, onQuit, brandHidden }) => (
   <aside className="side">
-    <div className="brand"><div className="logo"><Pulse size={18} /></div>
+    {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
       <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
-    </div>
+    </div>}
     <nav className="nav" aria-label="主导航">
       {[ ["monitor", "monitor", "直播总览"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
         <button type="button" key={key} className="nav-item" aria-current={page === key ? "page" : undefined}
@@ -28,6 +28,37 @@ const Sidebar = ({ page, onPage, account, onLogs, onQuit }) => (
     </button>
   </aside>
 );
+
+const pageTitles = {
+  monitor: { title: "直播总览", sub: "" },
+  automation: { title: "挂机设置", sub: "更改后自动保存" },
+  account: { title: "账号", sub: "登录与账号保护" }
+};
+
+const WindowButtons = () => {
+  const [maximized, setMaximized] = useState(false);
+  const act = (action) => { call("window", [action]).catch(() => {}); };
+  const toggle = async () => {
+    try { await call("window", ["maximize"]); setMaximized((value) => !value); } catch {}
+  };
+  return (
+    <div className="win-buttons" aria-label="窗口控制">
+      <button type="button" className="win-btn" aria-label="最小化" title="最小化" onClick={() => act("minimize")}>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6" stroke="currentColor" strokeWidth="1.1" /></svg>
+      </button>
+      <button type="button" className="win-btn" aria-label={maximized ? "还原" : "最大化"} title={maximized ? "还原" : "最大化"} onClick={toggle}>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          {maximized
+            ? <><rect x="2" y="3.2" width="4.8" height="4.8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.1" /><path d="M3.6 3.2V2.6a.6.6 0 0 1 .6-.6h3.2a.6.6 0 0 1 .6.6v3.2a.6.6 0 0 1-.6.6h-.6" fill="none" stroke="currentColor" strokeWidth="1.1" /></>
+            : <rect x="2.2" y="2.2" width="5.6" height="5.6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.1" />}
+        </svg>
+      </button>
+      <button type="button" className="win-btn close" aria-label="关闭" title="关闭到托盘" onClick={() => act("close")}>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.6 2.6l4.8 4.8M7.4 2.6l-4.8 4.8" stroke="currentColor" strokeWidth="1.1" /></svg>
+      </button>
+    </div>
+  );
+};
 
 function App() {
   const [page, setPage] = useState("monitor");
@@ -322,11 +353,27 @@ function App() {
   return (
     <div className="app">
       <Sidebar page={page} onPage={setPage} account={account} onLogs={() => invoke("open_logs")}
-        onQuit={() => setDialog({ type: "quit" })} />
+        onQuit={() => setDialog({ type: "quit" })} brandHidden />
       <main className="main" aria-busy={!connected}>
+        <header className="chrome pywebview-drag-region">
+          <div className="chrome-brand"><span className="logo"><Pulse size={15} /></span>
+            <span className="chrome-name">ビリ推し</span></div>
+          <span className="chrome-divider" aria-hidden="true" />
+          <h1 className="chrome-title">{pageTitles[page].title}</h1>
+          <span className="chrome-sub">{page === "monitor"
+            ? (snap.checking ? "正在检查直播状态…" : snap.last_check ? `${relativeTime(snap.last_check)}检查` : "")
+            : pageTitles[page].sub}</span>
+          <span className="spacer" />
+          <div className="chrome-actions">
+            {page === "monitor" && <window.OverviewActions paused={snap.paused} onTogglePause={() => control("toggle_pause")}
+              onCheck={() => control("check_now")} checking={snap.checking}
+              controlBusy={controlBusy} closing={closing} />}
+          </div>
+          <WindowButtons key={page} />
+        </header>
+        <div className="page">
         {page === "monitor" && <window.Overview rooms={rooms} selectedId={selectedId} onSelect={select}
-          paused={snap.paused} onTogglePause={() => control("toggle_pause")}
-          onCheck={() => control("check_now")} checking={snap.checking} summary={snap.last_check ? relativeTime(snap.last_check) : ""}
+          paused={snap.paused}
           onAction={roomAction} onOpen={(id) => invoke("open_room", [id])} onAddMember={openAdd} onSyncMedals={openMedals}
           onRemove={remove} onContextMenu={onContextMenu} busyRoom={busyRoom} controlBusy={controlBusy}
           error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
@@ -336,6 +383,7 @@ function App() {
         {page === "account" && <window.AccountPage account={account} onScan={openQr}
           onLogout={() => setDialog({ type: "logout" })} onResumeSafety={() => setDialog({ type: "safety" })}
           onCheck={() => control("check_now")} busy={controlBusy || closing} version={snap.version} />}
+        </div>
       </main>
       <div className="toasts" aria-live="polite">{toasts.map((item) => <div key={item.id} className={`toast ${item.tone}`}>
         <Icon name={item.tone === "info" ? "check" : "alert"} size={14} /><span>{item.text}</span></div>)}</div>

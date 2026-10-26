@@ -110,20 +110,30 @@ def run(output, screenshot=None):
             try:
                 wait("Boolean(window.LS && document.querySelectorAll('.room').length === 2)")
                 check("two rooms rendered", True)
-                report["typography"] = host._window.evaluate_js("({body:getComputedStyle(document.body).fontFamily, heading:getComputedStyle(document.querySelector('.topbar h1')).fontFamily})")
+                report["typography"] = host._window.evaluate_js("({body:getComputedStyle(document.body).fontFamily, heading:getComputedStyle(document.querySelector('.chrome-title')).fontFamily})")
                 check("account stays a string", isinstance(host._api.snapshot()["account"], str))
+                check("single title bar", host._window.evaluate_js(
+                    "document.querySelectorAll('.chrome').length === 1 && !document.querySelector('.topbar')"))
+                check("drag region present", host._window.evaluate_js(
+                    "Boolean(document.querySelector('.chrome.pywebview-drag-region'))"))
+                check("window buttons rendered", host._window.evaluate_js(
+                    "document.querySelectorAll('.win-btn').length === 3"))
+                host._api.window("maximize")
+                report["checks"].append("maximize requested")
+                host._api.window("maximize")
+                report["checks"].append("restore requested")
                 wait("document.querySelector('.detail-name')?.textContent === '测试主播'")
                 if screenshot:
                     _capture(host._window, screenshot)
                     report["screenshot"] = Path(screenshot).name
                 click('button[aria-label="挂机设置"]')
-                wait("document.querySelector('.topbar h1')?.textContent === '挂机设置'")
+                wait("document.querySelector('.chrome-title')?.textContent === '挂机设置'")
                 click('[role="switch"][aria-label="直播点赞"]')
                 wait("document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]')?.getAttribute('aria-checked') === 'true'")
                 wait("!document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]').disabled")
                 check("setting persisted", json.loads((root / "settings.json").read_text(encoding="utf-8"))["auto_like"] is True)
                 click('button[aria-label="账号"]')
-                wait("document.querySelector('.topbar h1')?.textContent === '账号'")
+                wait("document.querySelector('.chrome-title')?.textContent === '账号'")
                 check("account rendered", "示例账号" in host._window.evaluate_js("document.body.innerText"))
                 click('.setting .btn.primary')
                 wait("Boolean(document.querySelector('.qr-wrap img'))")
@@ -134,7 +144,7 @@ def run(output, screenshot=None):
                 wait("!document.querySelector('.modal')")
                 check("QR cancellation", host._api._qr_cancel_event is None)
                 click('button[aria-label="直播总览"]')
-                wait("document.querySelector('.topbar h1')?.textContent === '直播总览'")
+                wait("document.querySelector('.chrome-title')?.textContent === '直播总览'")
                 click('button[data-room="8"]')
                 wait("document.querySelector('.detail-name')?.textContent === '示例主播'")
                 check("offline action disabled", host._window.evaluate_js("document.querySelector('.detail-foot .primary').disabled"))

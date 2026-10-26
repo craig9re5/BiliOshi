@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"4c3bf5c082acfb0bd31215c35e9b1825c9095861241e4ced3da4b3f7df9e9abe","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"ef10080d60e8e54b0710b6b52d96732381e39124481db8b5821e65519a2a671f"} */
+/* BiliOshi JSX {"code_sha256":"af013af6d2e5cf62a6b59f7aa499888f9529ac9ad388781df3b3dfdf06ad076b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"deba1a6d7cde24b3d15a2d505b3c276f6be937277dee2a36c85fb0b6ac7a4abb"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -42,11 +42,7 @@ const SettingsPage = ({
 }) => {
   const disabled = key => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("header", {
-    className: "topbar"
-  }, /*#__PURE__*/React.createElement("h1", null, "\u6302\u673A\u8BBE\u7F6E"), /*#__PURE__*/React.createElement("span", {
-    className: "sub"
-  }, "\u66F4\u6539\u540E\u81EA\u52A8\u4FDD\u5B58")), /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u6302\u673A\u8BBE\u7F6E"
   }, /*#__PURE__*/React.createElement("div", {
@@ -130,11 +126,7 @@ const AccountPage = ({
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
   const action = !account.signed_in || needsLogin ? onScan : cooldown ? null : hold.blocked ? onResumeSafety : onCheck;
   const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "检查状态";
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("header", {
-    className: "topbar"
-  }, /*#__PURE__*/React.createElement("h1", null, "\u8D26\u53F7"), /*#__PURE__*/React.createElement("span", {
-    className: "sub"
-  }, "\u767B\u5F55\u4E0E\u8D26\u53F7\u4FDD\u62A4")), /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8D26\u53F7"
   }, /*#__PURE__*/React.createElement("div", {

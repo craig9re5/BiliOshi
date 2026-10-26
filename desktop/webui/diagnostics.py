@@ -118,10 +118,24 @@ def run(output, screenshot=None):
                     "Boolean(document.querySelector('.chrome.pywebview-drag-region'))"))
                 check("window buttons rendered", host._window.evaluate_js(
                     "document.querySelectorAll('.win-btn').length === 3"))
+                state = host._api.window("state")
+                check("window state readable", isinstance(state.get("maximized"), bool))
                 host._api.window("maximize")
-                report["checks"].append("maximize requested")
+                wait("document.documentElement.dataset.maximized === 'true'")
+                check("maximized state follows the window", True)
                 host._api.window("maximize")
-                report["checks"].append("restore requested")
+                wait("document.documentElement.dataset.maximized === 'false'")
+                check("restored state follows the window", True)
+                # The collapsed state is remembered between runs, so start from open.
+                if host._window.evaluate_js("document.querySelector('.app').classList.contains('side-collapsed')"):
+                    click('.side-btn')
+                    wait("!document.querySelector('.app').classList.contains('side-collapsed')")
+                click('.side-btn')
+                wait("document.querySelector('.app').classList.contains('side-collapsed')")
+                check("sidebar collapses", True)
+                click('.side-btn')
+                wait("!document.querySelector('.app').classList.contains('side-collapsed')")
+                check("sidebar reopens", True)
                 wait("document.querySelector('.detail-name')?.textContent === '测试主播'")
                 if screenshot:
                     _capture(host._window, screenshot)

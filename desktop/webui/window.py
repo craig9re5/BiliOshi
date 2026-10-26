@@ -50,6 +50,7 @@ class WebHost:
         self._watch_notice_day = None
         self._watch_notices = set()
         self._last_tray_color = None
+        self._last_zoomed = False
 
     def run(self, show=True, login=False):
         import webview
@@ -152,9 +153,22 @@ class WebHost:
             logging.exception("Minimizing window failed")
             return False
 
+    def _zoomed(self):
+        """Read the real maximize state; pywebview's attribute is never updated."""
+        import ctypes
+
+        try:
+            hwnd = self._window.native.Handle.ToInt32()
+            return bool(ctypes.windll.user32.IsZoomed(hwnd))
+        except Exception:
+            return bool(getattr(self._window, "maximized", False))
+
+    def window_state(self):
+        return {"ok": True, "maximized": self._zoomed()}
+
     def toggle_maximize(self):
         try:
-            if self._window.maximized:
+            if self._zoomed():
                 self._window.restore()
             else:
                 self._window.maximize()
@@ -179,6 +193,8 @@ class WebHost:
             logging.exception("Cannot attach resize edges")
             return
         user32 = ctypes.windll.user32
+        user32.IsZoomed.restype = ctypes.c_bool
+        user32.IsZoomed.argtypes = [wintypes.HWND]
         WM_NCHITTEST, BORDER = 0x0084, 6
         borders = {
             (True, True): 13, (False, True): 14,
@@ -193,8 +209,20 @@ class WebHost:
                                            wintypes.WPARAM, wintypes.LPARAM]
         previous = {"proc": user32.SetWindowLongPtrW(hwnd, -4, 0)}
 
+        WM_SIZE = 0x0005
+
         def handle(h, msg, wparam, lparam):
-            if msg == WM_NCHITTEST and not self._window.maximized:
+            if msg == WM_SIZE:
+                # Also covers resizing the window by any other means (double
+                # click, snap, keyboard), so the title-bar icon stays correct.
+                try:
+                    zoomed = bool(user32.IsZoomed(h))
+                    if zoomed != self._last_zoomed:
+                        self._last_zoomed = zoomed
+                        self.emit("window_state", {"maximized": zoomed})
+                except Exception:
+                    pass
+            if msg == WM_NCHITTEST and not self._zoomed():
                 point = wintypes.POINT(ctypes.c_short(lparam & 0xFFFF).value,
                                        ctypes.c_short((lparam >> 16) & 0xFFFF).value)
                 user32.ScreenToClient(h, ctypes.byref(point))

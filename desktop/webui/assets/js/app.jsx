@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, onLogs, onQuit, brandHidden }) => (
+const Sidebar = ({ page, onPage, account, onLogs, onQuit, brandHidden, collapsed }) => (
   <aside className="side">
     {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
       <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
@@ -37,31 +37,68 @@ const pageTitles = {
 
 const WindowButtons = () => {
   const [maximized, setMaximized] = useState(false);
-  const act = (action) => { call("window", [action]).catch(() => {}); };
-  const toggle = async () => {
-    try { await call("window", ["maximize"]); setMaximized((value) => !value); } catch {}
+  // The real state lives in the native window: resizing it by double click,
+  // snap or keyboard also has to flip the icon, so read it back after any
+  // change and listen for the WM_SIZE event pushed by the host.
+  const sync = async () => {
+    try { const state = await call("window", "state"); setMaximized(Boolean(state?.maximized)); } catch {}
   };
+  useEffect(() => {
+    sync();
+    const onState = (event) => { if (event?.type === "window_state") setMaximized(Boolean(event.payload?.maximized)); };
+    window.__onWindowState = onState;
+    return () => { if (window.__onWindowState === onState) delete window.__onWindowState; };
+  }, []);
+  const act = async (action) => { try { await call("window", action); } catch {} finally { if (action !== "close") sync(); } };
+  useEffect(() => {
+    document.documentElement.dataset.maximized = maximized ? "true" : "false";
+  }, [maximized]);
   return (
     <div className="win-buttons" aria-label="窗口控制">
       <button type="button" className="win-btn" aria-label="最小化" title="最小化" onClick={() => act("minimize")}>
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6" stroke="currentColor" strokeWidth="1.1" /></svg>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6h7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
       </button>
-      <button type="button" className="win-btn" aria-label={maximized ? "还原" : "最大化"} title={maximized ? "还原" : "最大化"} onClick={toggle}>
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <button type="button" className="win-btn" aria-label={maximized ? "还原" : "最大化"} title={maximized ? "还原" : "最大化"} onClick={() => act("maximize")}>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
           {maximized
-            ? <><rect x="2" y="3.2" width="4.8" height="4.8" rx="1" fill="none" stroke="currentColor" strokeWidth="1.1" /><path d="M3.6 3.2V2.6a.6.6 0 0 1 .6-.6h3.2a.6.6 0 0 1 .6.6v3.2a.6.6 0 0 1-.6.6h-.6" fill="none" stroke="currentColor" strokeWidth="1.1" /></>
-            : <rect x="2.2" y="2.2" width="5.6" height="5.6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.1" />}
+            ? <><rect x="2.4" y="4" width="5.4" height="5.4" rx="1.1" fill="none" stroke="currentColor" strokeWidth="1.2" /><path d="M4.4 4V3a.6.6 0 0 1 .6-.6h4a.6.6 0 0 1 .6.6v4a.6.6 0 0 1-.6.6h-1" fill="none" stroke="currentColor" strokeWidth="1.2" /></>
+            : <rect x="2.6" y="2.6" width="6.8" height="6.8" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.2" />}
         </svg>
       </button>
       <button type="button" className="win-btn close" aria-label="关闭" title="关闭到托盘" onClick={() => act("close")}>
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2.6 2.6l4.8 4.8M7.4 2.6l-4.8 4.8" stroke="currentColor" strokeWidth="1.1" /></svg>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" /></svg>
       </button>
     </div>
   );
 };
 
+/* Collapse the sidebar to icons, and reopen it, mirroring the desktop app's
+   left-hand panel control. */
+const SidebarToggle = ({ collapsed, onToggle }) => (
+  <div className="side-toggle">
+    <button type="button" className="side-btn" aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
+      title={collapsed ? "展开侧栏" : "收起侧栏"} aria-pressed={collapsed} onClick={onToggle}>
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M6.2 3.2v9.6" stroke="currentColor" strokeWidth="1.3" />
+        {collapsed && <path d="M9 6.4l1.8 1.6L9 9.6" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />}
+      </svg>
+    </button>
+  </div>
+);
+
 function App() {
   const [page, setPage] = useState("monitor");
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return window.localStorage.getItem("bilioshi.sidebar") === "collapsed"; } catch { return false; }
+  });
+  const toggleSidebar = useCallback(() => {
+    setCollapsed((value) => {
+      const next = !value;
+      try { window.localStorage.setItem("bilioshi.sidebar", next ? "collapsed" : "open"); } catch {}
+      return next;
+    });
+  }, []);
   const [snap, setSnap] = useState(EMPTY_SNAPSHOT);
   const [selectedId, setSelectedId] = useState(null);
   const [connected, setConnected] = useState(false);
@@ -126,6 +163,10 @@ function App() {
       onEvent: (event) => {
         if (!event || !alive.current) return;
         const payload = event.payload || {};
+        if (event.type === "window_state") {
+          if (typeof window.__onWindowState === "function") window.__onWindowState(event);
+          return;
+        }
         if (event.type === "qr_state") {
           if (!qrOpen.current) return;
           setQr((current) => {
@@ -351,11 +392,12 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
       <Sidebar page={page} onPage={setPage} account={account} onLogs={() => invoke("open_logs")}
-        onQuit={() => setDialog({ type: "quit" })} brandHidden />
+        onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} />
       <main className="main" aria-busy={!connected}>
         <header className="chrome pywebview-drag-region">
+          <SidebarToggle collapsed={collapsed} onToggle={toggleSidebar} />
           <div className="chrome-brand"><span className="logo"><Pulse size={15} /></span>
             <span className="chrome-name">ビリ推し</span></div>
           <span className="chrome-divider" aria-hidden="true" />

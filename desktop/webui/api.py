@@ -704,6 +704,8 @@ class Api:
 
     def window(self, action):
         try:
+            if action == "state":
+                return self._ui.window_state()
             methods = {"minimize": self._ui.minimize, "maximize": self._ui.toggle_maximize,
                        "close": self._ui.close_window, "show": self._ui.show,
                        "exit": self._ui.quit, "quit": self._ui.quit}

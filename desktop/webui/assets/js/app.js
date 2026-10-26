@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"0fd86471aebaaa8dde437b0fc7fe91c94aada9b556b5125f0420c667795562ee","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"36432767e96c95cf39e2d9b31d9ba2cf175379f09f81418d45bac24b491dcf73"} */
+/* BiliOshi JSX {"code_sha256":"78edc8023306e1b30ac7029ab1569b082181effa390dae380a1e13bba72336ed","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"70e8ae9d8ac499cd20fb81597750ff64b5a9e308ce46fbbacea748f6e7564552"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -48,7 +48,8 @@ const Sidebar = ({
   account,
   onLogs,
   onQuit,
-  brandHidden
+  brandHidden,
+  collapsed
 }) => /*#__PURE__*/React.createElement("aside", {
   className: "side"
 }, !brandHidden && /*#__PURE__*/React.createElement("div", {
@@ -121,15 +122,35 @@ const pageTitles = {
 };
 const WindowButtons = () => {
   const [maximized, setMaximized] = useState(false);
-  const act = action => {
-    call("window", [action]).catch(() => {});
-  };
-  const toggle = async () => {
+  // The real state lives in the native window: resizing it by double click,
+  // snap or keyboard also has to flip the icon, so read it back after any
+  // change and listen for the WM_SIZE event pushed by the host.
+  const sync = async () => {
     try {
-      await call("window", ["maximize"]);
-      setMaximized(value => !value);
+      const state = await call("window", "state");
+      setMaximized(Boolean(state?.maximized));
     } catch {}
   };
+  useEffect(() => {
+    sync();
+    const onState = event => {
+      if (event?.type === "window_state") setMaximized(Boolean(event.payload?.maximized));
+    };
+    window.__onWindowState = onState;
+    return () => {
+      if (window.__onWindowState === onState) delete window.__onWindowState;
+    };
+  }, []);
+  const act = async action => {
+    try {
+      await call("window", action);
+    } catch {} finally {
+      if (action !== "close") sync();
+    }
+  };
+  useEffect(() => {
+    document.documentElement.dataset.maximized = maximized ? "true" : "false";
+  }, [maximized]);
   return /*#__PURE__*/React.createElement("div", {
     className: "win-buttons",
     "aria-label": "\u7A97\u53E3\u63A7\u5236"
@@ -140,48 +161,49 @@ const WindowButtons = () => {
     title: "\u6700\u5C0F\u5316",
     onClick: () => act("minimize")
   }, /*#__PURE__*/React.createElement("svg", {
-    width: "10",
-    height: "10",
-    viewBox: "0 0 10 10",
+    width: "12",
+    height: "12",
+    viewBox: "0 0 12 12",
     "aria-hidden": "true"
   }, /*#__PURE__*/React.createElement("path", {
-    d: "M2 5h6",
+    d: "M2.5 6h7",
     stroke: "currentColor",
-    strokeWidth: "1.1"
+    strokeWidth: "1.2",
+    strokeLinecap: "round"
   }))), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "win-btn",
     "aria-label": maximized ? "还原" : "最大化",
     title: maximized ? "还原" : "最大化",
-    onClick: toggle
+    onClick: () => act("maximize")
   }, /*#__PURE__*/React.createElement("svg", {
-    width: "10",
-    height: "10",
-    viewBox: "0 0 10 10",
+    width: "12",
+    height: "12",
+    viewBox: "0 0 12 12",
     "aria-hidden": "true"
   }, maximized ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("rect", {
-    x: "2",
-    y: "3.2",
-    width: "4.8",
-    height: "4.8",
-    rx: "1",
+    x: "2.4",
+    y: "4",
+    width: "5.4",
+    height: "5.4",
+    rx: "1.1",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: "1.1"
+    strokeWidth: "1.2"
   }), /*#__PURE__*/React.createElement("path", {
-    d: "M3.6 3.2V2.6a.6.6 0 0 1 .6-.6h3.2a.6.6 0 0 1 .6.6v3.2a.6.6 0 0 1-.6.6h-.6",
+    d: "M4.4 4V3a.6.6 0 0 1 .6-.6h4a.6.6 0 0 1 .6.6v4a.6.6 0 0 1-.6.6h-1",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: "1.1"
+    strokeWidth: "1.2"
   })) : /*#__PURE__*/React.createElement("rect", {
-    x: "2.2",
-    y: "2.2",
-    width: "5.6",
-    height: "5.6",
-    rx: "1",
+    x: "2.6",
+    y: "2.6",
+    width: "6.8",
+    height: "6.8",
+    rx: "1.2",
     fill: "none",
     stroke: "currentColor",
-    strokeWidth: "1.1"
+    strokeWidth: "1.2"
   }))), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "win-btn close",
@@ -189,18 +211,76 @@ const WindowButtons = () => {
     title: "\u5173\u95ED\u5230\u6258\u76D8",
     onClick: () => act("close")
   }, /*#__PURE__*/React.createElement("svg", {
-    width: "10",
-    height: "10",
-    viewBox: "0 0 10 10",
+    width: "12",
+    height: "12",
+    viewBox: "0 0 12 12",
     "aria-hidden": "true"
   }, /*#__PURE__*/React.createElement("path", {
-    d: "M2.6 2.6l4.8 4.8M7.4 2.6l-4.8 4.8",
+    d: "M3 3l6 6M9 3l-6 6",
     stroke: "currentColor",
-    strokeWidth: "1.1"
+    strokeWidth: "1.2",
+    strokeLinecap: "round"
   }))));
 };
+
+/* Collapse the sidebar to icons, and reopen it, mirroring the desktop app's
+   left-hand panel control. */
+const SidebarToggle = ({
+  collapsed,
+  onToggle
+}) => /*#__PURE__*/React.createElement("div", {
+  className: "side-toggle"
+}, /*#__PURE__*/React.createElement("button", {
+  type: "button",
+  className: "side-btn",
+  "aria-label": collapsed ? "展开侧栏" : "收起侧栏",
+  title: collapsed ? "展开侧栏" : "收起侧栏",
+  "aria-pressed": collapsed,
+  onClick: onToggle
+}, /*#__PURE__*/React.createElement("svg", {
+  width: "16",
+  height: "16",
+  viewBox: "0 0 16 16",
+  "aria-hidden": "true"
+}, /*#__PURE__*/React.createElement("rect", {
+  x: "1.8",
+  y: "2.8",
+  width: "12.4",
+  height: "10.4",
+  rx: "2",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: "1.3"
+}), /*#__PURE__*/React.createElement("path", {
+  d: "M6.2 3.2v9.6",
+  stroke: "currentColor",
+  strokeWidth: "1.3"
+}), collapsed && /*#__PURE__*/React.createElement("path", {
+  d: "M9 6.4l1.8 1.6L9 9.6",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: "1.3",
+  strokeLinecap: "round",
+  strokeLinejoin: "round"
+}))));
 function App() {
   const [page, setPage] = useState("monitor");
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem("bilioshi.sidebar") === "collapsed";
+    } catch {
+      return false;
+    }
+  });
+  const toggleSidebar = useCallback(() => {
+    setCollapsed(value => {
+      const next = !value;
+      try {
+        window.localStorage.setItem("bilioshi.sidebar", next ? "collapsed" : "open");
+      } catch {}
+      return next;
+    });
+  }, []);
   const [snap, setSnap] = useState(EMPTY_SNAPSHOT);
   const [selectedId, setSelectedId] = useState(null);
   const [connected, setConnected] = useState(false);
@@ -288,6 +368,10 @@ function App() {
       onEvent: event => {
         if (!event || !alive.current) return;
         const payload = event.payload || {};
+        if (event.type === "window_state") {
+          if (typeof window.__onWindowState === "function") window.__onWindowState(event);
+          return;
+        }
         if (event.type === "qr_state") {
           if (!qrOpen.current) return;
           setQr(current => {
@@ -621,7 +705,7 @@ function App() {
     }
   };
   return /*#__PURE__*/React.createElement("div", {
-    className: "app"
+    className: `app ${collapsed ? "side-collapsed" : ""}`
   }, /*#__PURE__*/React.createElement(Sidebar, {
     page: page,
     onPage: setPage,
@@ -630,13 +714,17 @@ function App() {
     onQuit: () => setDialog({
       type: "quit"
     }),
-    brandHidden: true
+    brandHidden: true,
+    collapsed: collapsed
   }), /*#__PURE__*/React.createElement("main", {
     className: "main",
     "aria-busy": !connected
   }, /*#__PURE__*/React.createElement("header", {
     className: "chrome pywebview-drag-region"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(SidebarToggle, {
+    collapsed: collapsed,
+    onToggle: toggleSidebar
+  }), /*#__PURE__*/React.createElement("div", {
     className: "chrome-brand"
   }, /*#__PURE__*/React.createElement("span", {
     className: "logo"

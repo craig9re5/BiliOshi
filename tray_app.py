@@ -161,6 +161,8 @@ def main():
         from desktop.engine import Engine
 
         engine = Engine(root)
+        # First run opens the login screen; later launches stay in the tray so an
+        # update never steals focus from whatever the user is doing.
         show = args.show or args.login or not (root / "credentials.json").exists()
         from desktop.webui.window import available as web_available
 

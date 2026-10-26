@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bilioshi"
+version = "2026.10.18.3"
+description = "BiliOshi desktop and CLI for configurable Bilibili live rooms"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "XiaoYiWeio and BiliOshi contributors"}]
+dependencies = []
+
+[project.optional-dependencies]
+secure-store = ["keyring>=25,<26"]
+desktop = ["pystray==0.19.5", "Pillow==12.2.0", "qrcode==8.2", "pywebview==6.2.1; sys_platform == 'win32'", "pythonnet==3.2.1; sys_platform == 'win32'"]
+
+[project.scripts]
+bilioshi-heartbeat = "bilioshi.entrypoints:heartbeat"
+bilioshi-checkin = "bilioshi.entrypoints:checkin"
+bilioshi-videos = "bilioshi.entrypoints:videos"
+bilioshi-dynamics = "bilioshi.entrypoints:dynamics"
+bilioshi-summary = "bilioshi.daily_summary:main"
+bilioshi-mobile-summary = "bilioshi.notifications.__main__:main"
+# Legacy aliases from the previous package name.
+asoul-heartbeat = "bilioshi.entrypoints:heartbeat"
+asoul-checkin = "bilioshi.entrypoints:checkin"
+asoul-videos = "bilioshi.entrypoints:videos"
+asoul-dynamics = "bilioshi.entrypoints:dynamics"
+asoul-summary = "bilioshi.daily_summary:main"
+asoul-mobile-summary = "bilioshi.notifications.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/craig9re5/BiliOshi"
+
+[tool.setuptools.packages.find]
+include = ["bilioshi*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]

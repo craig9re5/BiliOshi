@@ -1,0 +1,194 @@
+"""BiliOshi desktop entry point. Worker modes reuse the existing protocol."""
+
+import argparse
+import logging
+from logging.handlers import RotatingFileHandler
+import os
+from pathlib import Path
+import sys
+
+from desktop.storage import data_dir, initialize, send_command
+from bilioshi.members import MEMBERS
+from bilioshi.runtime import APP_VERSION
+from bilioshi.redaction import SafeStream, SafeFormatter
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--worker", type=int)
+    parser.add_argument("--supervisor", action="store_true", help="独立守护桌面进程")
+    parser.add_argument("--start", action="store_true", help="守护进程记录启动意图")
+    parser.add_argument("--supervised", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--probe")
+    parser.add_argument("--skip-actions", action="store_true")
+    parser.add_argument("--watch-only", action="store_true")
+    parser.add_argument("--command", choices=["pause", "resume", "check", "show", "exit"])
+    parser.add_argument("--show", action="store_true")
+    parser.add_argument("--tk", action="store_true", help="使用兼容的 Tk 桌面界面")
+    parser.add_argument("--login", action="store_true", help="打开 B 站扫码登录")
+    parser.add_argument("--diagnostic", action="store_true")
+    parser.add_argument("--web-diagnostic", type=Path, metavar="REPORT", help="用隔离数据验收 WebView2 窗口")
+    parser.add_argument("--diagnostic-screenshot", type=Path, metavar="PNG")
+    parser.add_argument("--protect-credentials", action="store_true")
+    parser.add_argument("--legacy-credentials")
+    args = parser.parse_args()
+    if args.web_diagnostic:
+        from desktop.webui.diagnostics import run
+
+        return run(args.web_diagnostic, args.diagnostic_screenshot)
+    root = data_dir()
+    initialize(root, MEMBERS)
+    if args.protect_credentials:
+        from bilioshi.runtime import protect_credentials, write_json
+
+        write_json(
+            root / "credential-migration.json", protect_credentials(root, args.legacy_credentials)
+        )
+        return 0
+    if args.command:
+        from desktop.windows import Mutex, instance_name
+
+        if args.command == "exit":
+            from desktop.supervisor import request_stop
+
+            request_stop(root)
+        active = Mutex(instance_name(root))
+        if active.acquired:
+            active.close()
+            return 0 if args.command == "exit" else 2
+        send_command(root, args.command)
+        active.close()
+        return 0
+    # No-console executables have no usable standard streams, even with redirection.
+    log_path = (
+        root
+        / "logs"
+        / (
+            f"room-{args.worker}.log"
+            if args.worker
+            else "probe.log" if args.probe else "supervisor.log" if args.supervisor else "desktop.log"
+        )
+    )
+    if log_path.exists() and log_path.stat().st_size > 2_000_000:
+        try:
+            os.replace(log_path, log_path.with_suffix(".previous.log"))
+        except PermissionError:
+            pass  # A second launch may encounter the current instance's log.
+    stream = log_path.open("a", encoding="utf-8", buffering=1)
+    sys.stdout = sys.stderr = SafeStream(stream)
+    logging.basicConfig(
+        force=True,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        handlers=[
+            RotatingFileHandler(
+                root / "logs" / "errors.log", maxBytes=1_000_000, backupCount=2, encoding="utf-8"
+            )
+        ],
+    )
+    for handler in logging.getLogger().handlers:
+        handler.setFormatter(SafeFormatter("%(asctime)s %(levelname)s %(message)s"))
+    logging.info(
+        "Startup mode=%s root=%s cwd=%s credentials_present=%s",
+        "supervisor" if args.supervisor else "probe" if args.probe else "worker" if args.worker else "desktop",
+        root,
+        os.getcwd(),
+        (root / "credentials.json").exists(),
+    )
+    if args.supervisor:
+        from desktop.supervisor import run
+
+        return run(root, start=args.start)
+    if args.probe:
+        from desktop.worker import probe
+
+        return probe(root, Path(args.probe))
+    if args.worker:
+        from desktop.worker import watch
+
+        return watch(root, args.worker, args.skip_actions, watch_only=args.watch_only)
+    if args.diagnostic:
+        from desktop.ui import icon_image
+        from desktop.storage import write_json, load_config
+        from desktop.windows import Job
+        import tkinter as tk
+        import qrcode
+        from qrcode.image.pil import PilImage
+
+        qr = qrcode.make("https://www.bilibili.com/", image_factory=PilImage)
+
+        config, members = load_config(root)
+        window = tk.Tk()
+        window.withdraw()
+        window.update()
+        window.destroy()
+        job = Job()
+        job.close()
+        from desktop.webui.window import available as web_available
+        web_assets = Path(__file__).resolve().parent / "desktop" / "webui" / "assets"
+        frontend_ready = all((web_assets / name).is_file() for name in (
+            "index.html", "style.css", "vendor/react.js", "vendor/react-dom.js",
+            "js/app.js", "js/bridge.js", "js/overview.js", "js/settings.js", "js/dialogs.js",
+        ))
+        write_json(
+            root / "diagnostic.json",
+            {
+                "ok": frontend_ready,
+                "version": APP_VERSION,
+                "frozen": bool(getattr(sys, "frozen", False)),
+                "members": len(members),
+                "icon": icon_image().size,
+                "qr": qr.size,
+                "desktop": {"renderer": "webview2" if web_available() else "tk",
+                            "web_assets": frontend_ready},
+                "daily_notifications": {"available": False},
+            },
+        )
+        return 0
+    from desktop.windows import Mutex, instance_name
+
+    mutex = Mutex(instance_name(root))
+    if not mutex.acquired:
+        send_command(root, "login" if args.login else "show")
+        mutex.close()
+        return 0
+    try:
+        from desktop.supervisor import ensure_supervisor, register_desktop
+
+        if register_desktop(root, tk=args.tk, supervised=args.supervised) is None:
+            return 0
+        ensure_supervisor(root)
+        from desktop.engine import Engine
+
+        engine = Engine(root)
+        show = args.show or args.login or not (root / "credentials.json").exists()
+        from desktop.webui.window import available as web_available
+
+        if not args.tk and web_available():
+            from desktop.webui.window import WebHost
+
+            ui = WebHost(engine, show=show)
+            ui.run(show=show, login=args.login)
+        else:
+            from desktop.ui import TrayUI
+
+            ui = TrayUI(engine, show=show)
+            if args.login:
+                ui.root.after_idle(lambda: ui.open_settings(focus_auth=True, scan=True))
+            engine.start()
+            ui.run()
+    except Exception:
+        logging.exception("Desktop startup failed")
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(
+            None, f"启动失败，请查看 {root / 'logs' / 'errors.log'}", "BiliOshi", 0x10
+        )
+        return 1
+    finally:
+        mutex.close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

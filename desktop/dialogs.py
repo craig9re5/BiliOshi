@@ -1,0 +1,593 @@
+from .settings_layout import build_automation, build_system, build_auth
+import tkinter as tk
+from tkinter import ttk, messagebox
+import time
+
+try:
+    import pystray
+    from PIL import Image, ImageDraw
+except ImportError:
+    pystray = None
+    Image = ImageDraw = None
+from desktop.storage import load_config, read_json
+from desktop.windows import is_autostart_enabled, set_autostart
+from bilioshi.operating_mode import PROFILES, profile_for
+from bilioshi.runtime import update_json, save_login
+from .widgets import *
+
+
+def apply_saved_settings(panel):
+    """Keep settings application off Tk; report saved versus applied separately."""
+    dispatcher = getattr(panel.engine, "dispatcher", None)
+    if dispatcher is None:
+        panel.engine.reload_settings()
+        panel.on_saved()
+        return
+    panel.applying = True
+    if hasattr(panel, "save_button"):
+        panel.save_button.configure(state="disabled", text="正在应用…")
+        panel.save_status.set("已保存，正在应用，请等待结果。")
+    def apply():
+        try:
+            panel.engine.reload_settings()
+            message = "已保存并应用。"
+            ok = True
+        except Exception as exc:
+            message = f"已保存，但应用失败（{type(exc).__name__}），请重试保存或查看活动记录。"
+            ok = False
+        def finish():
+            panel.applying = False
+            if hasattr(panel, "winfo_exists") and not panel.winfo_exists():
+                return
+            if hasattr(panel, "save_button"):
+                panel.save_button.configure(state="normal", text="保存设置")
+                panel.save_status.set(message)
+            if ok:
+                panel.on_saved()
+        dispatcher.post(finish)
+    if dispatcher.submit_control(apply) is None:
+        panel.applying = False
+        if hasattr(panel, "save_button"):
+            panel.save_button.configure(state="normal")
+            panel.save_status.set("已保存，程序正在退出；下次启动应用设置。")
+
+
+class SettingsPanel(tk.Frame):
+    """Inline settings pages; automation and account writes are independently scoped."""
+
+    def __init__(self, parent, engine, px, on_saved, focus_auth=False, scope="all"):
+        super().__init__(parent, bg=BG_WINDOW)
+        self.engine, self.px, self.on_saved = engine, px, on_saved
+        self.scope = scope
+        self.applying = False
+        self.qr_panel = None
+        p = px
+        config, _ = load_config(engine.root)
+        bottom = tk.Frame(self, bg=BG_WINDOW, pady=p(8))
+        bottom.pack(side="bottom", fill="x")
+        # The account page saves nothing itself: QR login persists the session on success.
+        if scope != "account":
+            self.save_button = ModernButton(bottom, text="保存设置",
+                                            primary=True, command=self.do_save, px=p)
+            self.save_button.pack(side="right")
+        self.save_status = tk.StringVar(value="")
+        tk.Label(bottom, textvariable=self.save_status, bg=BG_WINDOW, fg=TEXT_MUTED,
+                 font=(FONT_FAMILY,9), anchor="w").pack(side="left", fill="x", expand=True)
+        scroll_area = tk.Frame(self, bg=BG_WINDOW)
+        scroll_area.pack(fill="both", expand=True)
+        self.canvas = tk.Canvas(scroll_area, bg=BG_WINDOW, highlightthickness=0, bd=0)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar = SlimScrollbar(scroll_area, self.canvas, p)
+        self.container = container = tk.Frame(self.canvas, bg=BG_WINDOW, padx=p(2), pady=p(10))
+        self.canvas_window = self.canvas.create_window(0, 0, window=container, anchor="nw")
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(self.canvas_window, width=e.width))
+        container.bind("<Configure>", lambda _: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        if scope in ("automation", "all"):
+            build_automation(self, container, config, p)
+            build_system(self, container, config, p)
+        if scope in ("account", "all"):
+            try:
+                cookies = read_json(engine.root / "credentials.json", {})
+            except RuntimeError:
+                cookies = {}
+            account = engine.account or "尚未确认账号"
+            tk.Label(container, text=account, bg=BG_WINDOW, fg=TEXT_MAIN,
+                     font=(FONT_FAMILY,13,"bold"), anchor="w").pack(fill="x", pady=(0,p(12)))
+            build_auth(self, container, cookies, p, False)
+            self.qr_host = tk.Frame(container, bg=BG_WINDOW)
+            self.qr_host.pack(fill="x")
+        self._bind_wheel(container)
+
+    def _bind_wheel(self, widget):
+        widget.bind("<MouseWheel>", self._wheel, add="+")
+        for child in widget.winfo_children():
+            self._bind_wheel(child)
+
+    def _wheel(self, event):
+        self.canvas.yview_scroll(-int(event.delta / 120), "units")
+        return "break"
+
+    def deactivate(self):
+        if self.qr_panel is not None and self.qr_panel.winfo_exists():
+            self.qr_panel.close()
+
+    def set_auth_status(self, text, color):
+        if hasattr(self, "status_label") and self.status_label.winfo_exists():
+            self.status_label.configure(text=text, fg=color)
+
+    def open_qr_login(self):
+        from .qr_dialog import QrLoginPanel
+
+        if self.applying:
+            self.save_status.set("正在应用已保存的登录信息，请等待结果。")
+            return
+        if self.qr_panel is not None and self.qr_panel.winfo_exists():
+            return
+        self.qr_panel = QrLoginPanel(self.qr_host, self.engine, self.px, self.on_qr_login)
+        self.qr_panel.pack(fill="x", pady=self.px(10))
+        self._bind_wheel(self.qr_panel)
+        self.after_idle(lambda: self.canvas.yview_moveto(1.0))
+
+    def on_qr_login(self, cookies, account, *, context=None):
+        if not self.winfo_exists():
+            return
+        options = {"context": context} if context is not None else {}
+        save_login(
+            cookies["SESSDATA"],
+            cookies["bili_jct"],
+            self.engine.root / "credentials.json",
+            **options,
+        )
+        self.set_auth_status(f"扫码登录成功：{account}，已保存。", "#059669")
+        apply_saved_settings(self)
+
+    def _scroll_to_auth(self):
+        self.update_idletasks()
+        self.canvas.yview_moveto(1.0)
+        if hasattr(self, "card_auth"):
+            self.card_auth.configure(highlightbackground=ACCENT_BLUE, highlightthickness=2)
+            self.after(
+                2500,
+                lambda: (
+                    self.card_auth.configure(highlightbackground=BORDER_CARD, highlightthickness=1)
+                    if self.card_auth.winfo_exists()
+                    else None
+                ),
+            )
+
+    def do_save(self):
+        if getattr(self, "applying", False):
+            return
+        scope = getattr(self, "scope", "all")
+        automation = scope in ("automation", "all")
+        account = scope in ("account", "all")
+        changes = {}
+        if automation:
+            run_mode = self.var_run_mode.get()
+            if not isinstance(run_mode, str) or run_mode not in PROFILES:
+                messagebox.showerror("错误", "运行模式必须为稳健或激进。", parent=self)
+                return
+            changes = {
+                "auto_revive": self.var_auto_revive.get(),
+                "auto_danmaku_intimacy": self.var_auto_danmu.get(),
+                "auto_like": self.var_auto_like.get(),
+                "notify_on_live": self.var_notify.get(),
+                "run_mode": run_mode,
+                "check_minutes": profile_for(run_mode).check_minutes,
+            }
+        def change(settings):
+            settings = {**settings, **changes}
+            settings.pop("danmaku", None)
+            settings.pop("live_likes", None)
+            return settings
+
+        try:
+            if automation and hasattr(self, "notification_panel"):
+                self.notification_panel.save_values()
+            if changes:
+                update_json(self.engine.root / "settings.json", change, {})
+        except (OSError, ValueError, RuntimeError):
+            messagebox.showerror(
+                "保存失败", "请检查本机文件权限和配置，设置尚未全部应用。", parent=self
+            )
+            return
+        if automation and not set_autostart(self.var_autostart.get()):
+            messagebox.showwarning(
+                "部分设置未应用", "设置已保存，但 Windows 自启动设置失败。", parent=self
+            )
+        apply_saved_settings(self)
+
+
+# Keep the historical import and business-method API for external callers.
+SettingsDialog = SettingsPanel
+
+
+class AddMemberDialog(tk.Toplevel):
+    """现代卡片化添加主播面板"""
+
+    def __init__(self, parent, engine, px, on_added):
+        super().__init__(parent)
+        self.engine = engine
+        self.px = px
+        self.on_added = on_added
+        self.resolved_info = None
+        p = self.px
+        self.title("添加监控主播")
+        w, h = (p(490), p(360))
+        self.geometry(f"{w}x{h}")
+        self.minsize(p(450), p(320))
+        self.configure(bg=BG_WINDOW)
+        self.transient(parent)
+        self.grab_set()
+        center_window(self, parent, w, h, p)
+        container = tk.Frame(self, bg=BG_WINDOW, padx=p(20), pady=p(18))
+        container.pack(fill="both", expand=True)
+        tk.Label(
+            container,
+            text="添加监控主播",
+            font=(FONT_FAMILY, 14, "bold"),
+            bg=BG_WINDOW,
+            fg=TEXT_MAIN,
+        ).pack(anchor="w")
+        tk.Label(
+            container,
+            text="房间号、主播 UID 或直播间链接",
+            font=(FONT_FAMILY, 9),
+            bg=BG_WINDOW,
+            fg=TEXT_MUTED,
+        ).pack(anchor="w", pady=(p(2), p(12)))
+        input_card = CardFrame(container, px=p, pady=10)
+        input_card.pack(fill="x", pady=(0, p(12)))
+        self.last_query = ""
+        self.query_var = tk.StringVar()
+        entry = tk.Entry(
+            input_card,
+            textvariable=self.query_var,
+            font=(FONT_FAMILY, 10),
+            bg=BG_WINDOW,
+            fg=TEXT_MAIN,
+            highlightthickness=1,
+            highlightbackground=BORDER_CARD,
+            bd=0,
+        )
+        entry.pack(side="left", fill="x", expand=True, ipady=p(4), padx=(0, p(8)))
+        entry.focus()
+
+        def on_enter(_):
+            q = self.query_var.get().strip()
+            if self.resolved_info and q == self.last_query:
+                self.do_add()
+            else:
+                self.do_search()
+
+        entry.bind("<Return>", on_enter)
+        self.query_var.trace_add("write", lambda *_: self.on_query_changed())
+        self.search_btn = ModernButton(
+            input_card,
+            text="识别查询",
+            primary=True,
+            accent=ACCENT_BLUE,
+            accent_hover=ACCENT_BLUE_HOVER,
+            command=self.do_search,
+            px=p,
+        )
+        self.search_btn.pack(side="right")
+        self.preview_card = CardFrame(container, px=p, pady=12)
+        self.preview_card.pack(fill="both", expand=True, pady=(0, p(12)))
+        self.preview_text = tk.StringVar(value="输入房间号或 UID，然后点「识别查询」")
+        self.preview_label = tk.Label(
+            self.preview_card,
+            textvariable=self.preview_text,
+            justify="left",
+            font=(FONT_FAMILY, 9),
+            bg=BG_CARD,
+            fg=TEXT_MUTED,
+        )
+        self.preview_label.pack(anchor="w")
+        btn_row = tk.Frame(container, bg=BG_WINDOW)
+        btn_row.pack(fill="x")
+        self.add_btn = ModernButton(
+            btn_row, text="确认添加", primary=True, command=self.do_add, px=p, state="disabled"
+        )
+        self.add_btn.pack(side="right")
+        ModernButton(btn_row, text="取消", primary=False, command=self.destroy, px=p).pack(
+            side="right", padx=(0, p(8))
+        )
+
+    def on_query_changed(self):
+        if self.resolved_info and self.query_var.get().strip() != self.last_query:
+            self.resolved_info = None
+            self.add_btn.configure(state="disabled")
+            self.preview_text.set("输入已修改，请重新查询")
+            self.preview_label.configure(fg=TEXT_MUTED)
+
+    def do_search(self):
+        if getattr(self, "searching", False):
+            return
+        query = self.query_var.get().strip()
+        if not query:
+            self.preview_text.set("请先输入房间号、UID 或直播间链接")
+            self.preview_label.configure(fg="#d97706")
+            return
+        self.last_query = query
+        self.searching = True
+        self.resolved_info = None
+        self.add_btn.configure(state="disabled")
+        self.search_btn.configure(state="disabled")
+        self.preview_text.set("正在查询…")
+        self.preview_label.configure(fg=TEXT_MUTED)
+
+        def query_thread():
+            try:
+                info, error = self.engine.application.resolve(query), ""
+            except Exception as exc:
+                info, error = None, f"查询失败（{type(exc).__name__}），请检查网络；登录失效可到账号管理重新扫码。"
+            self.engine.dispatcher.post(lambda: self.on_search_done(info, query=query, error=error))
+
+        self.engine.dispatcher.submit(query_thread)
+
+    def on_search_done(self, info, *, query=None, error=""):
+        if not self.winfo_exists():
+            return
+        self.searching = False
+        self.search_btn.configure(state="normal")
+        if query is not None and query != self.query_var.get().strip():
+            self.resolved_info = None
+            self.add_btn.configure(state="disabled")
+            self.preview_text.set("输入已修改，请重新查询")
+            return
+        if not info:
+            self.preview_text.set(error or "没有找到这个主播，请检查房间号或 UID。")
+            self.preview_label.configure(fg="#dc2626")
+            self.add_btn.configure(state="disabled")
+            self.resolved_info = None
+            return
+        members = read_json(self.engine.root / "members.json", [])
+        is_existing = any((m.get("room") == info["room"] for m in members))
+        medal = info.get("medal_name") or "暂无粉丝牌"
+        text = (f"昵称　　{info['name']}\n"
+                f"房间　　{info['room']}\n"
+                f"UID　　 {info['uid']}\n"
+                f"粉丝牌　{medal}")
+        if is_existing:
+            text += "\n\n该主播已在列表中。"
+            self.preview_text.set(text)
+            self.preview_label.configure(fg=TEXT_MAIN)
+            self.add_btn.configure(state="disabled")
+            self.resolved_info = None
+        else:
+            self.resolved_info = info
+            self.preview_text.set(text)
+            self.preview_label.configure(fg=TEXT_MAIN)
+            self.add_btn.configure(state="normal")
+
+    def do_add(self):
+        if not self.resolved_info:
+            return
+        members = read_json(self.engine.root / "members.json", [])
+        if any((m.get("room") == self.resolved_info["room"] for m in members)):
+            messagebox.showwarning("提示", "该主播已在列表中。", parent=self)
+            return
+        try:
+            self.engine.application.add_members([self.resolved_info])
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("添加失败", f"保存失败（{type(exc).__name__}），请检查文件权限。", parent=self)
+            return
+        self.on_added()
+        self.destroy()
+
+
+class SyncMedalsDialog(tk.Toplevel):
+    """现代卡片化一键同步粉丝牌面板"""
+
+    def __init__(self, parent, engine, px, on_synced):
+        super().__init__(parent)
+        self.parent = parent
+        self.engine = engine
+        self.px = px
+        self.on_synced = on_synced
+        self.items_data = []
+        p = self.px
+        self.title("一键同步我的所有粉丝牌")
+        w, h = (p(580), p(450))
+        self.geometry(f"{w}x{h}")
+        self.minsize(p(520), p(400))
+        self.configure(bg=BG_WINDOW)
+        self.transient(parent)
+        self.grab_set()
+        center_window(self, parent, w, h, p)
+        container = tk.Frame(self, bg=BG_WINDOW, padx=p(20), pady=p(18))
+        container.pack(fill="both", expand=True)
+        tk.Label(
+            container,
+            text="同步粉丝牌主播",
+            font=(FONT_FAMILY, 14, "bold"),
+            bg=BG_WINDOW,
+            fg=TEXT_MAIN,
+        ).pack(anchor="w")
+        self.status_var = tk.StringVar(value="正在拉取您的全部粉丝牌列表…")
+        tk.Label(
+            container,
+            textvariable=self.status_var,
+            font=(FONT_FAMILY, 9),
+            bg=BG_WINDOW,
+            fg=TEXT_MUTED,
+        ).pack(anchor="w", pady=(p(2), p(10)))
+        card = CardFrame(container, px=p, padx=1, pady=1)
+        card.pack(fill="both", expand=True, pady=(0, p(12)))
+        self.tree = ttk.Treeview(
+            card, columns=("sel", "name", "room", "medal"), show="headings", height=7
+        )
+        self.tree.heading("sel", text="选择")
+        self.tree.heading("name", text="主播名称")
+        self.tree.heading("room", text="直播间")
+        self.tree.heading("medal", text="粉丝牌")
+        self.tree.column("sel", width=p(50), minwidth=p(50), stretch=False, anchor="center")
+        self.tree.column("name", width=p(150), minwidth=p(120), stretch=True, anchor="w")
+        self.tree.column("room", width=p(110), minwidth=p(100), stretch=False, anchor="center")
+        self.tree.column("medal", width=p(150), minwidth=p(130), stretch=True, anchor="w")
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar = ttk.Scrollbar(card, orient="vertical", command=self.tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        self.tree.bind("<Button-1>", self.on_click_item)
+        self.tree.bind("<Double-1>", lambda e: self.on_click_item(e))
+        self.tree.bind("<space>", lambda _: self.on_space_key())
+        self.btn_row = tk.Frame(container, bg=BG_WINDOW)
+        self.btn_row.pack(fill="x")
+        self.btn_select_all = ModernButton(
+            self.btn_row, text="全选", command=self.toggle_all, px=p, state="disabled"
+        )
+        self.btn_select_all.pack(side="left")
+        self.btn_import = ModernButton(
+            self.btn_row,
+            text="导入选中主播",
+            primary=True,
+            command=self.do_import,
+            px=p,
+            state="disabled",
+        )
+        self.btn_import.pack(side="right")
+        self.btn_cancel = ModernButton(
+            self.btn_row, text="取消", primary=False, command=self.destroy, px=p
+        )
+        self.btn_cancel.pack(side="right", padx=(0, p(8)))
+        self.btn_retry = ModernButton(self.btn_row, text="重新查询", command=self.start_fetch, px=p)
+        self.btn_retry.pack(side="left", padx=(p(8), 0))
+        self.fetching = False
+        self.start_fetch()
+
+    def start_fetch(self):
+        if self.fetching:
+            return
+        self.fetching = True
+        self.status_var.set("正在查询粉丝牌，请稍候…")
+        self.btn_retry.configure(state="disabled")
+        self.btn_import.configure(state="disabled")
+        self.btn_select_all.configure(state="disabled")
+        self.tree.delete(*self.tree.get_children())
+        self.items_data = []
+        self.engine.dispatcher.submit(self.fetch_medals)
+
+    def on_space_key(self):
+        item_id = self.tree.focus()
+        if item_id:
+            self.toggle_item(item_id)
+
+    def toggle_item(self, item_id):
+        if not item_id:
+            return
+        entry = next((e for e in self.items_data if e["item_id"] == item_id), None)
+        if entry:
+            entry["checked"] = not entry["checked"]
+            new_sym = "☑" if entry["checked"] else "☐"
+            vals = list(self.tree.item(item_id, "values"))
+            vals[0] = new_sym
+            self.tree.item(item_id, values=vals)
+
+    def on_no_credentials(self):
+        if not self.winfo_exists():
+            return
+        self.fetching = False
+        self.btn_retry.configure(state="normal")
+        self.status_var.set("⚠️ 登录信息缺失或无法读取，请点击扫码登录。")
+        if hasattr(self, "btn_goto"):
+            return
+        self.btn_goto = ModernButton(
+            self.btn_row,
+            text="扫码登录",
+            primary=True,
+            command=self.open_settings_and_close,
+            px=self.px,
+        )
+        self.btn_goto.pack(side="left", padx=(self.px(8), 0))
+
+    def open_settings_and_close(self):
+        self.destroy()
+        if hasattr(self.parent, "open_settings"):
+            self.parent.open_settings(focus_auth=True)
+        else:
+            self.parent.event_generate("<<OpenAccountLogin>>")
+
+    def fetch_medals(self):
+        try:
+            cookies = read_json(self.engine.root / "credentials.json", {})
+        except (OSError, ValueError, RuntimeError):
+            self.engine.dispatcher.post(self.on_no_credentials)
+            return
+        if not cookies.get("SESSDATA") or not cookies.get("bili_jct"):
+            self.engine.dispatcher.post(self.on_no_credentials)
+            return
+        try:
+            all_medals = self.engine.application.medals()
+            current_members = read_json(self.engine.root / "members.json", [])
+            current_rooms = {m["room"] for m in current_members}
+            unmonitored = [m for m in all_medals if m["room"] not in current_rooms]
+        except Exception:
+            self.engine.dispatcher.post(self.show_fetch_error)
+            return
+        self.engine.dispatcher.post(lambda: self.display_medals(unmonitored, len(all_medals)))
+
+    def display_medals(self, unmonitored, total):
+        if not self.winfo_exists():
+            return
+        self.fetching = False
+        self.btn_retry.configure(state="normal")
+        if total == 0:
+            self.status_var.set(
+                "当前账号没有粉丝牌。请确认已登录且确实拥有粉丝牌。"
+            )
+            self.btn_cancel.configure(text="关闭")
+            return
+        if not unmonitored:
+            self.status_var.set(f"{total} 个粉丝牌主播都已在列表中。")
+            self.btn_cancel.configure(text="关闭")
+            return
+        self.status_var.set(
+            f"发现 {len(unmonitored)} 位未添加的主播，勾选后导入："
+        )
+        self.btn_select_all.configure(state="normal")
+        self.btn_import.configure(state="normal")
+        self.items_data = []
+        for m in unmonitored:
+            item_id = str(m["room"])
+            self.items_data.append({"item_id": item_id, "checked": True, "data": m})
+            medal_str = f"{m['medal_name']} Lv{m['level']}"
+            self.tree.insert("", "end", iid=item_id, values=("☑", m["name"], m["room"], medal_str))
+
+    def show_fetch_error(self):
+        if self.winfo_exists():
+            self.fetching = False
+            self.btn_retry.configure(state="normal")
+            self.status_var.set("查询失败，请检查登录和网络后重试。")
+            self.btn_cancel.configure(text="关闭")
+
+    def on_click_item(self, event):
+        item_id = self.tree.identify_row(event.y)
+        self.toggle_item(item_id)
+
+    def toggle_all(self):
+        if not self.items_data:
+            return
+        any_unchecked = any((not e["checked"] for e in self.items_data))
+        new_state = any_unchecked
+        new_sym = "☑" if new_state else "☐"
+        for e in self.items_data:
+            e["checked"] = new_state
+            vals = list(self.tree.item(e["item_id"], "values"))
+            vals[0] = new_sym
+            self.tree.item(e["item_id"], values=vals)
+
+    def do_import(self):
+        selected = [e["data"] for e in self.items_data if e["checked"]]
+        if not selected:
+            messagebox.showinfo("提示", "请先勾选主播。", parent=self)
+            return
+        try:
+            self.engine.application.add_members(selected)
+        except (OSError, ValueError, RuntimeError) as exc:
+            messagebox.showerror("导入失败", f"保存失败（{type(exc).__name__}），请检查文件权限。", parent=self)
+            return
+        messagebox.showinfo("导入成功", f"已添加 {len(selected)} 位主播。", parent=self)
+        self.on_synced()
+        self.destroy()

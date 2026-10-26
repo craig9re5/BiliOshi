@@ -1,0 +1,8 @@
+{
+  "name": "bilioshi",
+  "version": "2026.10.9-1",
+  "description": "BiliOshi Windows desktop and shared Python CLI",
+  "private": true,
+  "license": "MIT",
+  "repository": "https://github.com/craig9re5/BiliOshi"
+}

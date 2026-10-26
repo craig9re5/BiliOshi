@@ -1,0 +1,44 @@
+.cookies.json
+__pycache__/
+*.pyc
+pcheartbeat/
+
+# 运行时状态 / 日志
+.live_state.json
+logs/
+*.log
+
+# 个人内容 / 系统垃圾
+text2speech.md
+.DS_Store
+
+# 本地编辑器 / 工具配置
+.claude/
+
+# Desktop build outputs
+build/
+dist/
+*.spec
+
+# Private data, captures and packaging artifacts
+credentials.json
+pushplus.credentials.json
+notifications.sqlite3*
+*.credentials.json
+members.json
+settings.json
+status.json
+*.har
+*.pem
+*.pfx
+.env
+.venv/
+*.egg-info/
+.pytest_cache/
+*.bundle
+*.har.json
+captures/
+.asoul-support-data/
+private-history/
+credential-migration.json
+diagnostic.json

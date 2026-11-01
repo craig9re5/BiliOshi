@@ -1,7 +1,7 @@
 /* One state owner. Python snapshots remain authoritative after every action. */
 
 const { useState, useEffect, useRef, useCallback } = React;
-const { Icon, Pulse, call, bridgeReady, relativeTime, toRoom } = window;
+const { Icon, Pulse, call, bridgeReady, toRoom } = window;
 const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false,
   notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false };
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
@@ -29,11 +29,7 @@ const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, c
   </aside>
 );
 
-const pageTitles = {
-  monitor: { title: "直播总览", sub: "" },
-  automation: { title: "挂机设置", sub: "更改后自动保存" },
-  account: { title: "账号", sub: "" }
-};
+const pageTitles = { monitor: "直播总览", automation: "挂机设置", account: "账号" };
 
 const WindowButtons = () => {
   const [maximized, setMaximized] = useState(false);
@@ -247,10 +243,6 @@ function App() {
     return () => { live = false; window.clearTimeout(retry); };
   }, [connected, account.signed_in, account.name, avatarVersion]);
 
-  const chromeSub = page === "monitor"
-    ? (snap.checking ? "正在检查直播状态…" : snap.last_check ? `${relativeTime(snap.last_check)}检查` : "")
-    : pageTitles[page].sub;
-
   const invoke = async (method, args = [], success = "") => {
     try {
       const result = await call(method, ...args);
@@ -432,8 +424,7 @@ function App() {
           <div className="chrome-brand"><span className="logo"><Pulse size={15} /></span>
             <span className="chrome-name">ビリ推し</span></div>
           <span className="chrome-divider" aria-hidden="true" />
-          <h1 className="chrome-title">{pageTitles[page].title}</h1>
-          {chromeSub && <span className="chrome-sub">{chromeSub}</span>}
+          <h1 className="chrome-title">{pageTitles[page]}</h1>
           <span className="spacer" />
           <div className="chrome-actions">
             {page === "monitor" && <window.OverviewActions paused={snap.paused} onTogglePause={() => control("toggle_pause")}
@@ -448,7 +439,8 @@ function App() {
           onAction={roomAction} onOpen={(id) => invoke("open_room", [id])} onAddMember={openAdd} onSyncMedals={openMedals}
           onRemove={remove} onContextMenu={onContextMenu} busyRoom={busyRoom} controlBusy={controlBusy}
           error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
-          interval={snap.settings?.check_minutes || 5} images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected} />}
+          interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
+          images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected} />}
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
           pendingSettings={pendingSettings} />}
         {page === "account" && <window.AccountPage account={account} avatar={accountAvatar} onScan={openQr}

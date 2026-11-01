@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"5538b7abcb5d206479b6be299e0e6f849566394a9a7c8f68f1c90541c999d8b4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"9d750fb8f4ebcfd513b95021bccdff05a1b1f6d94e4c9cdfa142913773a2758a"} */
+/* BiliOshi JSX {"code_sha256":"98e22e65e429ab52e0b83981b52dec89ed259aa3a83d7d4fd05eaa546aaaad8b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"6265a55563f3d186e73b05e8f024495444e112efeadf385f9303cf989c39766a"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -259,6 +259,8 @@ const Overview = ({
   recovery,
   onRecovery,
   interval,
+  lastCheck,
+  checking,
   images,
   signedIn,
   closing,
@@ -268,6 +270,9 @@ const Overview = ({
   const healthy = rooms.filter(room => room.healthy).length;
   const unknown = rooms.filter(room => room.live_status == null).length;
   const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : paused ? "已暂停挂机" : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
+  // The cadence and the last check belong together: the title bar keeps only
+  // the page name, so the footer is the single place this is reported.
+  const cadence = `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
   return /*#__PURE__*/React.createElement(React.Fragment, null, (error || recovery?.action === "login") && /*#__PURE__*/React.createElement("div", {
     className: "banner",
     role: "status"
@@ -350,7 +355,7 @@ const Overview = ({
     className: "spacer"
   }), /*#__PURE__*/React.createElement("span", {
     className: "low-priority"
-  }, "\u6BCF ", interval, " \u5206\u949F\u68C0\u67E5\u4E00\u6B21")));
+  }, checking ? "正在检查直播状态…" : cadence)));
 };
 Object.assign(window, {
   Overview,

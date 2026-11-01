@@ -234,14 +234,6 @@ button:disabled, select:disabled { cursor: default; }
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
-.chrome-sub {
-  font-size: 12px;
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
 .chrome-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .chrome-actions .btn { height: 27px; font-size: 12px; }
 /* Page-level content starts under the chrome, without a second header. */

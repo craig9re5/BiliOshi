@@ -121,6 +121,11 @@ def run(output, screenshot=None):
                     "Boolean(document.querySelector('.chrome.pywebview-drag-region'))"))
                 check("window buttons rendered", host._window.evaluate_js(
                     "document.querySelectorAll('.win-btn').length === 3"))
+                check("title bar carries only the page title", host._window.evaluate_js(
+                    "!document.querySelector('.chrome-sub') && document.querySelector('.chrome-title')?.textContent === '直播总览'"))
+                check("status bar reports cadence and last check", host._window.evaluate_js(
+                    "/每 5 分钟检查一次/.test(document.querySelector('.statusbar').textContent)"
+                    " && /上次检查/.test(document.querySelector('.statusbar').textContent)"))
                 state = host._api.window("state")
                 check("window state readable", isinstance(state.get("maximized"), bool))
                 host._api.window("maximize")
@@ -152,8 +157,6 @@ def run(output, screenshot=None):
                 click('button[aria-label="账号"]')
                 wait("document.querySelector('.chrome-title')?.textContent === '账号'")
                 check("account rendered", "示例账号" in host._window.evaluate_js("document.body.innerText"))
-                check("account subtitle removed", host._window.evaluate_js(
-                    "!document.querySelector('.chrome-sub')"))
                 wait("Boolean(document.querySelector('.account-avatar img'))")
                 check("account avatar uses the public profile", host._window.evaluate_js(
                     "document.querySelector('.account-avatar img').src.startsWith('data:image/png;base64,')"))

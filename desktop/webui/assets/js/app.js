@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"75bc96f4c9b3513d6a3387118f0ecb02777c029cb3cf86b9895fd727ace368a5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"29cc3cfe2db0ba934b3323e63c4f3269a31179ab667a15a31d460a2591e7a1ac"} */
+/* BiliOshi JSX {"code_sha256":"2837ebd65131b91f34b66df1a1a5031f340bfdf2e185304c59261cd088754f83","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"8327e62d4cceb8beb5192222cd719eaf200d1ae61a06ecf3fe670ddf0b766e46"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -15,7 +15,6 @@ const {
   Pulse,
   call,
   bridgeReady,
-  relativeTime,
   toRoom
 } = window;
 const DEFAULT_SETTINGS = {
@@ -111,18 +110,9 @@ const Sidebar = ({
   className: "sidebar-account-text"
 }, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")))));
 const pageTitles = {
-  monitor: {
-    title: "直播总览",
-    sub: ""
-  },
-  automation: {
-    title: "挂机设置",
-    sub: "更改后自动保存"
-  },
-  account: {
-    title: "账号",
-    sub: ""
-  }
+  monitor: "直播总览",
+  automation: "挂机设置",
+  account: "账号"
 };
 const WindowButtons = () => {
   const [maximized, setMaximized] = useState(false);
@@ -464,7 +454,6 @@ function App() {
       window.clearTimeout(retry);
     };
   }, [connected, account.signed_in, account.name, avatarVersion]);
-  const chromeSub = page === "monitor" ? snap.checking ? "正在检查直播状态…" : snap.last_check ? `${relativeTime(snap.last_check)}检查` : "" : pageTitles[page].sub;
   const invoke = async (method, args = [], success = "") => {
     try {
       const result = await call(method, ...args);
@@ -774,9 +763,7 @@ function App() {
     "aria-hidden": "true"
   }), /*#__PURE__*/React.createElement("h1", {
     className: "chrome-title"
-  }, pageTitles[page].title), chromeSub && /*#__PURE__*/React.createElement("span", {
-    className: "chrome-sub"
-  }, chromeSub), /*#__PURE__*/React.createElement("span", {
+  }, pageTitles[page]), /*#__PURE__*/React.createElement("span", {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("div", {
     className: "chrome-actions"
@@ -808,6 +795,8 @@ function App() {
     recovery: snap.recovery,
     onRecovery: recover,
     interval: snap.settings?.check_minutes || 5,
+    lastCheck: snap.last_check,
+    checking: snap.checking,
     images: images,
     signedIn: account.signed_in,
     closing: closing,

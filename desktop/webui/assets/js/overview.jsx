@@ -144,13 +144,16 @@ const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy
 
 const Overview = ({ rooms, selectedId, onSelect, paused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, busyRoom, controlBusy,
-  error, recovery, onRecovery, interval, images, signedIn, closing, bridgeConnected }) => {
+  error, recovery, onRecovery, interval, lastCheck, checking, images, signedIn, closing, bridgeConnected }) => {
   const selected = rooms.find((room) => room.room === selectedId);
   const healthy = rooms.filter((room) => room.healthy).length;
   const unknown = rooms.filter((room) => room.live_status == null).length;
   const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : paused ? "已暂停挂机"
     : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中`
     : unknown ? "等待检查" : "等待开播";
+  // The cadence and the last check belong together: the title bar keeps only
+  // the page name, so the footer is the single place this is reported.
+  const cadence = `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
   return (<>
     {(error || recovery?.action === "login") && <div className="banner" role="status">
       <Icon name={recovery?.action === "login" ? "user" : "alert"} size={14} />
@@ -182,7 +185,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
     </div>
     <footer className="statusbar">
       <span className={healthy && !closing ? "dot-live" : "dot-paused"} aria-hidden="true" /><strong>{status}</strong>
-      <span className="spacer" /><span className="low-priority">每 {interval} 分钟检查一次</span>
+      <span className="spacer" /><span className="low-priority">{checking ? "正在检查直播状态…" : cadence}</span>
     </footer>
   </>);
 };

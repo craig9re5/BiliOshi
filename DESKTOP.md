@@ -74,7 +74,7 @@ Windows 需具备 Microsoft Edge WebView2 Runtime。无法使用时自动进入 
 - 直播查询失败、未查询和状态过期都不算“未开播”。过期的任务进度会显示“进度待更新”，心跳超时单独提示。
 - `status.json` 是快照；程序化读取请使用 `desktop.storage.read_status(root)`，它检查快照年龄、进程存活及退出标记。跨日或计数回退时，不报告负的亲密度增量。
 
-查看日报：`python scripts/daily_summary.py --hours 24`。没有运行记录时会提示无法判断，不会断言无人开播。旧日志可用 `--log-file <路径>` 显式读取。
+查看日报：`python scripts/daily_summary.py --hours 24`。没有运行记录时会提示无法判断，不会断言无人开播。旧日志可用 `--log-file <路径>` 显式读取。日志文件分工、轮转与脱敏见 [docs/LOGS.md](docs/LOGS.md)。
 
 ## 构建与安装
 

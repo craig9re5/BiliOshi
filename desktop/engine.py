@@ -79,6 +79,12 @@ class Engine:
         self.thread = threading.Thread(target=self.run, name="monitor", daemon=True)
 
     def start(self):
+        logging.info(
+            "Engine starting members=%s paused=%s check_minutes=%s",
+            len(self.members),
+            self.paused,
+            self.config.get("check_minutes"),
+        )
         if self.notifications is not None:
             self.notifications.start()
         self.thread.start()
@@ -88,6 +94,7 @@ class Engine:
         with self.lock:
             self.account = str(name or "")
             self.account_checked_at = time.time()
+            logging.info("Account confirmed via QR login user=%s", self.account)
 
     def _credentials_signature(self):
         path = self.root / "credentials.json"
@@ -163,6 +170,8 @@ class Engine:
 
     def stop_children(self, reason="stopped"):
         rooms = list(self.workers)
+        if rooms:
+            logging.info("Stopping room workers rooms=%s reason=%s", rooms, reason)
         processes = list(self.workers.values()) + ([self.probe] if self.probe else [])
         for proc in processes:
             if proc.poll() is None:
@@ -215,6 +224,7 @@ class Engine:
                 {},
             )
             self.paused = bool(paused)
+            logging.info("Monitoring %s", "paused" if paused else "resumed")
             if paused:
                 self.stop_children("paused")
                 self.error = ""
@@ -359,6 +369,7 @@ class Engine:
         clock = time.monotonic()
         for room, proc in list(self.workers.items()):
             if proc.poll() is not None:
+                logging.info("Room worker exited room=%s code=%s", room, proc.returncode)
                 self._record_interruption(room, "worker_exited")
                 del self.workers[room]
                 self.worker_health.pop(room, None)
@@ -386,6 +397,7 @@ class Engine:
             attempt = self.worker_retries.get(room, {}).get("attempt", 0) + 1
             profile = profile_for(self.config.get("run_mode", "stable"))
             delay = recovery_delay(attempt) * profile.recovery_base_seconds // 60
+            logging.warning("Room worker stalled room=%s attempt=%s retry_minutes=%s", room, attempt, delay)
             self.worker_retries[room] = {"attempt": attempt, "until": clock + delay}
             self._record_interruption(room, "worker_timeout", expected_pid=proc.pid)
             append_event(self.root / "logs/activity.jsonl", {
@@ -451,7 +463,10 @@ class Engine:
             self.stopping.wait(1)
 
     def _apply_probe(self, result, now):
-        self.error = result.get("error") or result.get("warning", "")
+        message = result.get("error") or result.get("warning", "")
+        if message and message != self.error:
+            logging.warning("Status check reported: %s", message)
+        self.error = message
         if "statuses" not in result:
             for request in self.manual_reconnects.values():
                 if request["state"] == "checking":
@@ -461,6 +476,7 @@ class Engine:
             self.error = self.error or "检查进程未返回结果，请查看日志。"
             self.status_errors = {str(m["room"]): self.error for m in self.members}
             if result.get("auth_invalid"):
+                logging.warning("Bilibili credentials were rejected; signing out")
                 self.account = ""
                 self.account_checked_at = 0
                 self.stop_children("auth_invalid")
@@ -504,12 +520,15 @@ class Engine:
             if status and status.get("live_status") == 1:
                 if member["room"] not in self.known_live:
                     self.known_live.add(member["room"])
+                    logging.info("Room went live room=%s name=%s", member["room"], member["name"])
                     if self.config.get("notify_on_live", True) and callable(self.notify_callback):
                         try:
                             self.notify_callback(member["name"], status.get("title", ""))
                         except Exception:
                             logging.exception("Desktop notification failed")
             elif status and status.get("live_status") in (0, 2):
+                if member["room"] in self.known_live:
+                    logging.info("Room went offline room=%s name=%s", member["room"], member["name"])
                 self.known_live.discard(member["room"])
             if (
                 not self.paused
@@ -532,6 +551,10 @@ class Engine:
                     logging.exception("Cannot start room worker room=%s", member["room"])
                     continue
                 self.workers[member["room"]] = proc
+                logging.info(
+                    "Room worker started room=%s name=%s pid=%s watch_only=%s",
+                    member["room"], member["name"], proc.pid, skip_actions,
+                )
                 self.worker_health[member["room"]] = {
                     "pid": proc.pid, "started": time.monotonic(), "progress": time.monotonic(),
                 }

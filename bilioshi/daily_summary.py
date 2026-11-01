@@ -10,24 +10,43 @@ from .runtime import data_dir
 _LOG_FILE = data_dir() / "logs" / "activity.jsonl"
 
 
+def log_sources(path):
+    """The current activity log plus the segments it was rotated into.
+
+    An explicit file is read on its own; the default log also reads its
+    timestamped archives, skipping any that finished before the cutoff.
+    """
+    from .runtime import activity_archives
+
+    return activity_archives(path) + [Path(path)]
+
+
 def load_recent(hours=24, log_file=None):
     path = Path(log_file) if log_file else _LOG_FILE
-    if not path.exists():
-        return []
     cutoff = time.time() - hours * 3600
+    sources = [path] if log_file else log_sources(path)
     records, starts = ([], {})
-    with path.open(encoding="utf-8-sig") as stream:
-        for line in stream:
+    for source in sources:
+        if not source.exists():
+            continue
+        if source != path:
             try:
-                row = json.loads(line)
-                if not isinstance(row, dict) or not isinstance(row.get("ts"), (int, float)):
-                    continue
-                if row.get("type") == "watch_start" and row.get("session_id"):
-                    starts[row["session_id"]] = row
-                if row["ts"] >= cutoff:
-                    records.append(row)
-            except ValueError:
+                if source.stat().st_mtime < cutoff:
+                    continue  # Everything in a finished segment predates the cutoff.
+            except OSError:
                 continue
+        with source.open(encoding="utf-8-sig") as stream:
+            for line in stream:
+                try:
+                    row = json.loads(line)
+                    if not isinstance(row, dict) or not isinstance(row.get("ts"), (int, float)):
+                        continue
+                    if row.get("type") == "watch_start" and row.get("session_id"):
+                        starts[row["session_id"]] = row
+                    if row["ts"] >= cutoff:
+                        records.append(row)
+                except ValueError:
+                    continue
     present = {r.get("session_id") for r in records if r.get("type") == "watch_start"}
     active_ids = {r.get("session_id") for r in records if r.get("session_id")}
     records.extend((starts[key] for key in active_ids - present if key in starts))
@@ -117,7 +136,8 @@ def main():
     if args.hours <= 0:
         parser.error("hours 必须大于 0")
     path = args.log_file or _LOG_FILE
-    print(f"日志来源：{path}")
+    segments = 0 if args.log_file else max(0, len(log_sources(path)) - 1)
+    print(f"日志来源：{path}" + (f"（另有 {segments} 个归档分段）" if segments else ""))
     print(build_summary(load_recent(args.hours, path), args.hours))
 
 

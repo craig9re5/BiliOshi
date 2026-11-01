@@ -23,7 +23,7 @@ BiliOshi 是独立维护的 B 站直播应援工具。早期实现以 asoul-supp
 
 桌面默认使用 WebView2 + React 界面，前端资源随程序离线打包。使用「账号 → 扫码登录」并在 B 站 App 确认即可。[扫码登录说明](docs/QR_LOGIN.md)。
 
-Windows 需安装 Microsoft Edge WebView2 Runtime；不可用时自动使用 Tk 兼容界面，也可用 `python tray_app.py --tk --show` 手动选择。界面开发与构建说明见 [Web 桌面说明](docs/WEB_UI.md)。
+Windows 需安装 Microsoft Edge WebView2 Runtime；不可用时自动使用 Tk 兼容界面，也可用 `python tray_app.py --tk --show` 手动选择。界面开发与构建说明见 [Web 桌面说明](docs/WEB_UI.md)，日志文件与排查方法见 [日志说明](docs/LOGS.md)。
 
 从源码运行（Web 桌面环境需 Python 3.11+）：
 

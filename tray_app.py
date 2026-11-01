@@ -2,7 +2,6 @@
 
 import argparse
 import logging
-from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
 import sys
@@ -10,7 +9,7 @@ import sys
 from desktop.storage import data_dir, initialize, send_command
 from bilioshi.members import MEMBERS
 from bilioshi.runtime import APP_VERSION
-from bilioshi.redaction import SafeStream, SafeFormatter
+from bilioshi import logging_setup
 
 
 def main():
@@ -31,6 +30,8 @@ def main():
     parser.add_argument("--diagnostic-screenshot", type=Path, metavar="PNG")
     parser.add_argument("--protect-credentials", action="store_true")
     parser.add_argument("--legacy-credentials")
+    parser.add_argument("--log-level", choices=sorted(logging_setup.LEVELS), metavar="LEVEL",
+                        help="日志详细程度，默认 INFO，也可用 BILIOSHI_LOG_LEVEL 设置")
     args = parser.parse_args()
     if args.web_diagnostic:
         from desktop.webui.diagnostics import run
@@ -60,37 +61,11 @@ def main():
         active.close()
         return 0
     # No-console executables have no usable standard streams, even with redirection.
-    log_path = (
-        root
-        / "logs"
-        / (
-            f"room-{args.worker}.log"
-            if args.worker
-            else "probe.log" if args.probe else "supervisor.log" if args.supervisor else "desktop.log"
-        )
-    )
-    if log_path.exists() and log_path.stat().st_size > 2_000_000:
-        try:
-            os.replace(log_path, log_path.with_suffix(".previous.log"))
-        except PermissionError:
-            pass  # A second launch may encounter the current instance's log.
-    stream = log_path.open("a", encoding="utf-8", buffering=1)
-    sys.stdout = sys.stderr = SafeStream(stream)
-    logging.basicConfig(
-        force=True,
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        handlers=[
-            RotatingFileHandler(
-                root / "logs" / "errors.log", maxBytes=1_000_000, backupCount=2, encoding="utf-8"
-            )
-        ],
-    )
-    for handler in logging.getLogger().handlers:
-        handler.setFormatter(SafeFormatter("%(asctime)s %(levelname)s %(message)s"))
+    role = "supervisor" if args.supervisor else "probe" if args.probe else "worker" if args.worker else "desktop"
+    logging_setup.setup(root, role, args.worker, level=args.log_level)
     logging.info(
         "Startup mode=%s root=%s cwd=%s credentials_present=%s",
-        "supervisor" if args.supervisor else "probe" if args.probe else "worker" if args.worker else "desktop",
+        role,
         root,
         os.getcwd(),
         (root / "credentials.json").exists(),

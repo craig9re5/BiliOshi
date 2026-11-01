@@ -259,13 +259,52 @@ def save_login(sessdata, bili_jct, path=None, *, context=None):
     return result
 
 
+ACTIVITY_ROTATE_BYTES = 8_000_000
+_activity_pruned = set()
+
+
+def activity_archives(path):
+    """Segments the activity log was rotated into, oldest first."""
+    path = Path(path)
+    return sorted(path.parent.glob(f"{path.stem}-*.jsonl"))
+
+
+def _rotate_activity(path):
+    """Roll a large activity log into a timestamped segment under the same lock."""
+    try:
+        if path.stat().st_size < ACTIVITY_ROTATE_BYTES:
+            return
+    except OSError:
+        return
+    archive = path.with_name(f"{path.stem}-{time.strftime('%Y%m%d-%H%M%S')}{path.suffix}")
+    try:
+        os.replace(path, archive)
+    except OSError:
+        return  # A reader still holds it open; retry on the next event.
+
+
+def _prune_activity_once(directory):
+    key = str(directory)
+    if key in _activity_pruned:
+        return
+    _activity_pruned.add(key)
+    try:
+        from .logging_setup import prune
+
+        prune(directory)
+    except OSError:
+        pass
+
+
 def append_event(path, event):
     record = redact({**EVENT_CONTEXT.get(), **event, "ts": int(time.time())})
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    _prune_activity_once(path.parent)
     with FileLock(str(path) + ".guard", timeout=5) as lock:
         if not lock.acquired:
             raise TimeoutError("等待活动日志锁超时")
+        _rotate_activity(path)
         with path.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record, ensure_ascii=False) + "\n")
     context = CURRENT.get()

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>ビリ推し · 浅色配色设计稿</title>
+  <link rel="stylesheet" href="assets/base.css" />
+  <link rel="stylesheet" href="assets/design.css" />
+</head>
+<body>
+  <header class="review-header">
+    <div class="review-intro">
+      <div class="review-kicker">ビリ推し / COLOR STUDY 01</div>
+      <h1>安静地陪着你。</h1>
+      <p>三套浅色背景，同一深青品牌色。布局、字号与交互保持现状，仅探索表面层级与组件状态。</p>
+    </div>
+    <div class="review-note"><span class="note-dot"></span>高保真 · 可交互 · 非生产代码</div>
+  </header>
+  <main class="review-shell">
+    <nav class="scheme-tabs" aria-label="配色方案">
+      <button class="scheme-tab active" data-theme-choice="paper" aria-pressed="true">
+        <span class="scheme-index">01</span><span class="scheme-swatch paper"></span>
+        <span class="scheme-copy"><strong>暖纸白</strong><small>安静自然 · 延续现有气质</small></span>
+      </button>
+      <button class="scheme-tab" data-theme-choice="mist" aria-pressed="false">
+        <span class="scheme-index">02</span><span class="scheme-swatch mist"></span>
+        <span class="scheme-copy"><strong>雾青灰</strong><small>清爽克制 · 品牌色更统一</small></span>
+      </button>
+      <button class="scheme-tab" data-theme-choice="apricot" aria-pressed="false">
+        <span class="scheme-index">03</span><span class="scheme-swatch apricot"></span>
+        <span class="scheme-copy"><strong>暖杏灰</strong><small>温和陪伴 · 降低屏幕冷感</small></span>
+      </button>
+      <div class="compare-actions">
+        <button class="text-button" id="spec-toggle" aria-expanded="false">颜色映射 <span>↗</span></button>
+        <button class="compare-button" id="compare-toggle" aria-pressed="false">并排比较 <span>3</span></button>
+      </div>
+    </nav>
+
+    <section class="design-summary" data-screen-label="设计说明">
+      <div class="summary-number" id="scheme-number">01</div>
+      <div class="summary-copy"><h2 id="scheme-name">暖纸白 / Quiet Paper</h2><p id="scheme-description">给最常用的界面一层轻微的暖意。纸白工作区与白色卡片之间只有很小的明度差，耐看、不打扰。</p></div>
+      <div class="palette" id="palette" aria-label="当前方案主要色板"></div>
+    </section>
+
+    <section class="prototype-toolbar">
+      <div class="page-tabs" aria-label="预览页面">
+        <button data-page-choice="monitor" class="active">直播总览</button>
+        <button data-page-choice="automation">挂机设置</button>
+        <button data-page-choice="account">账号</button>
+      </div>
+      <div class="preview-legend"><span class="legend-line"></span><span id="preview-caption">以真实窗口比例预览 · 1180 × 760</span></div>
+    </section>
+
+    <section id="comparison" class="comparison" aria-label="三套配色并排预览" hidden></section>
+    <section class="window-stage" data-screen-label="高保真界面预览">
+      <div class="desktop-window" id="preview-frame" data-theme="paper">
+        <div class="desktop-scale" id="preview-scale">
+          <div id="root"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mapping" id="mapping" data-screen-label="颜色映射" hidden>
+      <div class="mapping-heading"><span class="review-kicker">IMPLEMENTATION MAP</span><h2>每个部件，都有明确归属。</h2><p>以下颜色随方案切换。状态色不与品牌色混用；后续实施只需替换表面与中性色变量。</p></div>
+      <div class="token-grid" id="token-grid"></div>
+      <div class="mapping-table-wrap"><table class="mapping-table"><thead><tr><th>部件</th><th>设计取值</th><th>对应现有变量 / 规则</th></tr></thead><tbody id="mapping-body"></tbody></table></div>
+      <div class="design-principles">
+        <div><strong>保留品牌</strong><p>主按钮、开关、选中图标、进度条继续使用 #2d6763。</p></div>
+        <div><strong>减少噪声</strong><p>不用渐变、彩色光晕或大面积品牌底；用明度差建立层级。</p></div>
+        <div><strong>保持语义</strong><p>直播绿、警告琥珀、危险红只表达状态，不作为装饰。</p></div>
+      </div>
+    </section>
+  </main>
+  <footer class="review-footer"><span>来源：desktop/webui/assets/style.css · docs/BRAND.md</span><span>仅用于设计评审，未修改应用</span></footer>
+
+  <script src="assets/vendor/react.js"></script>
+  <script src="assets/vendor/react-dom.js"></script>
+  <script src="assets/js/demo.js"></script>
+  <script src="assets/js/bridge.js"></script>
+  <script src="assets/js/icons.js"></script>
+  <script src="assets/js/overview.js"></script>
+  <script src="assets/js/settings.js"></script>
+  <script src="assets/js/dialogs.js"></script>
+  <script src="assets/js/app.js"></script>
+  <script src="assets/design.js"></script>
+</body>
+</html>

@@ -1,8 +1,13 @@
-/* BiliOshi JSX {"code_sha256":"a1edc9004c26fd56a39b6fd886ca36262978a65883d181ef377c6d73f4ae0039","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"2b8ed4adf285a00562d222c0cea05be1d11b95c2f68750c558bb3a0480e51d1e"} */
+/* BiliOshi JSX {"code_sha256":"88fb2977998ade68d19481d820d76c62f5d36dda0fbb06cc74cf5ebe5c75cc14","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"39298b7f1c30b7a6013bde150e6c0198bf39ad7cdc81a5e9da109d1221d2f880"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
 
+const {
+  useState,
+  useEffect,
+  useRef
+} = React;
 const {
   Icon,
   relativeTime,
@@ -35,6 +40,96 @@ const SettingRow = ({
 }, name), desc && /*#__PURE__*/React.createElement("div", {
   className: "setting-desc"
 }, desc)), children);
+
+/* A compact trigger plus a themed menu. The native select rendered its own
+   system popup, which did not follow the card surfaces or spacing. */
+const Choice = ({
+  value,
+  options,
+  onChange,
+  label,
+  disabled
+}) => {
+  const [open, setOpen] = useState(false);
+  const root = useRef(null);
+  const trigger = useRef(null);
+  const menu = useRef(null);
+  const selected = Math.max(0, options.findIndex(option => option.value === value));
+  useEffect(() => {
+    if (!open) return undefined;
+    const dismiss = event => {
+      if (!root.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = event => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    const focus = window.setTimeout(() => {
+      menu.current?.querySelector('[aria-selected="true"]')?.focus();
+    }, 0);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+      window.clearTimeout(focus);
+    };
+  }, [open]);
+  const moveFocus = (event, index) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nodes = Array.from(menu.current?.querySelectorAll(".choice-option") || []);
+    if (!nodes.length) return;
+    const next = event.key === "Home" ? 0 : event.key === "End" ? nodes.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + nodes.length) % nodes.length;
+    nodes[next]?.focus();
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: `choice ${open ? "open" : ""}`,
+    ref: root
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "choice-button",
+    ref: trigger,
+    "aria-haspopup": "listbox",
+    "aria-expanded": open,
+    "aria-label": label,
+    disabled: disabled,
+    onClick: () => setOpen(current => !current),
+    onKeyDown: event => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        setOpen(true);
+      }
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "choice-label"
+  }, options[selected]?.label), /*#__PURE__*/React.createElement(Icon, {
+    name: "chevron",
+    size: 12
+  })), open && /*#__PURE__*/React.createElement("div", {
+    className: "choice-menu",
+    role: "listbox",
+    "aria-label": label,
+    ref: menu
+  }, options.map((option, index) => /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    key: option.value,
+    className: "choice-option",
+    role: "option",
+    "data-value": option.value,
+    "aria-selected": option.value === value,
+    onKeyDown: event => moveFocus(event, index),
+    onClick: () => {
+      setOpen(false);
+      if (option.value !== value) onChange(option.value);
+      trigger.current?.focus();
+    }
+  }, /*#__PURE__*/React.createElement("span", null, option.label), option.value === value && /*#__PURE__*/React.createElement(Icon, {
+    name: "check",
+    size: 12
+  })))));
+};
 const SettingsPage = ({
   settings,
   onSetting,
@@ -98,17 +193,19 @@ const SettingsPage = ({
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u6A21\u5F0F",
     desc: "\u7A33\u5065\uFF1A5 \u5206\u949F\u67E5\u5F00\u64AD\u300160 \u79D2\u7EED\u70B9\u8D5E\uFF1B\u6FC0\u8FDB\uFF1A1 \u5206\u949F\u67E5\u5F00\u64AD\u300120 \u79D2\u7EED\u70B9\u8D5E"
-  }, /*#__PURE__*/React.createElement("select", {
-    className: "select",
+  }, /*#__PURE__*/React.createElement(Choice, {
+    label: "\u8FD0\u884C\u6A21\u5F0F",
     value: runMode,
     disabled: disabled("run_mode"),
-    onChange: event => onSetting("run_mode", event.target.value),
-    "aria-label": "\u8FD0\u884C\u6A21\u5F0F"
-  }, /*#__PURE__*/React.createElement("option", {
-    value: "stable"
-  }, "\u7A33\u5065"), /*#__PURE__*/React.createElement("option", {
-    value: "aggressive"
-  }, "\u6FC0\u8FDB")))), /*#__PURE__*/React.createElement("p", {
+    options: [{
+      value: "stable",
+      label: "稳健"
+    }, {
+      value: "aggressive",
+      label: "激进"
+    }],
+    onChange: value => onSetting("run_mode", value)
+  }))), /*#__PURE__*/React.createElement("p", {
     className: "settings-note"
   }, "\u8FD0\u884C\u6A21\u5F0F\u4FDD\u5B58\u540E\u7ACB\u5373\u751F\u6548\u3002\u5F53\u5929\u7684\u5DF2\u5B8C\u6210\u8FDB\u5EA6\u4E0E\u53D1\u9001\u989D\u5EA6\u4F1A\u4FDD\u7559\u3002"))));
 };

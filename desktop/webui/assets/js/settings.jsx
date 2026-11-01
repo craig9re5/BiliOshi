@@ -1,5 +1,6 @@
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
 
+const { useState, useEffect, useRef } = React;
 const { Icon, relativeTime, absoluteTime } = window;
 
 const Switch = ({ checked, onChange, label, disabled }) => (
@@ -11,6 +12,80 @@ const SettingRow = ({ name, desc, children }) => (
   <div className="setting"><div className="setting-text"><div className="setting-name">{name}</div>
     {desc && <div className="setting-desc">{desc}</div>}</div>{children}</div>
 );
+
+/* A compact trigger plus a themed menu. The native select rendered its own
+   system popup, which did not follow the card surfaces or spacing. */
+const Choice = ({ value, options, onChange, label, disabled }) => {
+  const [open, setOpen] = useState(false);
+  const root = useRef(null);
+  const trigger = useRef(null);
+  const menu = useRef(null);
+  const selected = Math.max(0, options.findIndex((option) => option.value === value));
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const dismiss = (event) => {
+      if (!root.current?.contains(event.target)) setOpen(false);
+    };
+    const escape = (event) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    const focus = window.setTimeout(() => {
+      menu.current?.querySelector('[aria-selected="true"]')?.focus();
+    }, 0);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+      window.clearTimeout(focus);
+    };
+  }, [open]);
+
+  const moveFocus = (event, index) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nodes = Array.from(menu.current?.querySelectorAll(".choice-option") || []);
+    if (!nodes.length) return;
+    const next = event.key === "Home" ? 0 : event.key === "End" ? nodes.length - 1
+      : (index + (event.key === "ArrowDown" ? 1 : -1) + nodes.length) % nodes.length;
+    nodes[next]?.focus();
+  };
+
+  return (
+    <div className={`choice ${open ? "open" : ""}`} ref={root}>
+      <button type="button" className="choice-button" ref={trigger} aria-haspopup="listbox"
+        aria-expanded={open} aria-label={label} disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}>
+        <span className="choice-label">{options[selected]?.label}</span>
+        <Icon name="chevron" size={12} />
+      </button>
+      {open && <div className="choice-menu" role="listbox" aria-label={label} ref={menu}>
+        {options.map((option, index) => (
+          <button type="button" key={option.value} className="choice-option" role="option"
+            data-value={option.value} aria-selected={option.value === value}
+            onKeyDown={(event) => moveFocus(event, index)}
+            onClick={() => {
+              setOpen(false);
+              if (option.value !== value) onChange(option.value);
+              trigger.current?.focus();
+            }}>
+            <span>{option.label}</span>
+            {option.value === value && <Icon name="check" size={12} />}
+          </button>
+        ))}
+      </div>}
+    </div>
+  );
+};
 
 const SettingsPage = ({ settings, onSetting, pendingSettings }) => {
   const disabled = (key) => pendingSettings.has(key);
@@ -43,11 +118,9 @@ const SettingsPage = ({ settings, onSetting, pendingSettings }) => {
             onChange={(value) => onSetting("autostart", value)} />
         </SettingRow>
         <SettingRow name="运行模式" desc="稳健：5 分钟查开播、60 秒续点赞；激进：1 分钟查开播、20 秒续点赞">
-          <select className="select" value={runMode} disabled={disabled("run_mode")}
-            onChange={(event) => onSetting("run_mode", event.target.value)} aria-label="运行模式">
-            <option value="stable">稳健</option>
-            <option value="aggressive">激进</option>
-          </select>
+          <Choice label="运行模式" value={runMode} disabled={disabled("run_mode")}
+            options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
+            onChange={(value) => onSetting("run_mode", value)} />
         </SettingRow>
       </section>
       <p className="settings-note">运行模式保存后立即生效。当天的已完成进度与发送额度会保留。</p>

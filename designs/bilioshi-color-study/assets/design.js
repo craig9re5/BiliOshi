@@ -2,13 +2,41 @@
    synthetic bridge; this file only switches surface tokens and pages. */
 
 const THEMES = {
-  paper: {
+  white: {
     number: "01",
+    name: "纸白 / Soft White",
+    short: "纸白",
+    tagline: "中性安静 · Claude 式白",
+    description: "最接近 Claude 的暖中性白：主画布几乎是纸面，侧栏只比卡片深一点点。安静、克制，不与内容抢注意力。",
+    note: "推荐作为默认主题。它最接近 Claude Desktop 的阅读型表面，也最适合这个每天只被短暂打开一次、但会一直待在后台的应用。",
+    tokens: {
+      paper: "#fcfcfb",
+      surface: "#ffffff",
+      sunk: "#f5f5f2",
+      hover: "#efefec",
+      ink: "#1f1f1d",
+      ink2: "rgba(31,31,29,0.68)",
+      ink3: "rgba(31,31,29,0.64)",
+      line: "rgba(28,28,25,0.08)",
+      lineStrong: "rgba(28,28,25,0.14)",
+      accent: "#2d6763",
+      accentSoft: "#e8f1ee",
+      accentLine: "#cfe2dc",
+      live: "#1f8a5f",
+      liveSoft: "#e9f6ef",
+      warn: "#8a5a12",
+      warnSoft: "#fdf3e2",
+      danger: "#a4432f",
+      dangerSoft: "#fbede9"
+    }
+  },
+  paper: {
+    number: "02",
     name: "暖纸白 / Quiet Paper",
     short: "暖纸白",
-    tagline: "安静自然 · 延续现有气质",
+    tagline: "安静自然 · 温和纸感",
     description: "给最常用的界面一层轻微暖意。纸白工作区与白色卡片之间只有很小的明度差，耐看、不打扰。",
-    note: "推荐作为默认主题：它与当前版本最连续，但把过白的卡片收了一点，侧栏、状态条和卡片之间的层次更稳。",
+    note: "如果你觉得 Claude 白偏冷静，这套更柔和：背景比默认方案多一点米色，但仍在日用可接受的范围内。",
     tokens: {
       paper: "#f6f3ec",
       surface: "#fffdf9",
@@ -31,7 +59,7 @@ const THEMES = {
     }
   },
   mist: {
-    number: "02",
+    number: "03",
     name: "雾青灰 / Mist",
     short: "雾青灰",
     tagline: "清爽克制 · 品牌色更统一",
@@ -59,7 +87,7 @@ const THEMES = {
     }
   },
   apricot: {
-    number: "03",
+    number: "04",
     name: "暖杏灰 / Apricot",
     short: "暖杏灰",
     tagline: "温和陪伴 · 降低屏幕冷感",
@@ -119,7 +147,7 @@ const TOKEN_LABELS = {
 const params = new URLSearchParams(window.location.search);
 const embed = params.get("embed") === "1";
 let activeTheme = THEMES[params.get("theme")] ? params.get("theme")
-  : (THEMES[localStorage.getItem("bilioshi.colorStudy")] ? localStorage.getItem("bilioshi.colorStudy") : "paper");
+  : (THEMES[localStorage.getItem("bilioshi.colorStudy")] ? localStorage.getItem("bilioshi.colorStudy") : "white");
 let compareBuilt = false;
 
 if (embed) document.body.classList.add("embed");

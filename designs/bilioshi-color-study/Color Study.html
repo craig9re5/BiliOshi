@@ -13,33 +13,37 @@
     <div class="review-intro">
       <div class="review-kicker">ビリ推し / COLOR STUDY 01</div>
       <h1>安静地陪着你。</h1>
-      <p>三套浅色背景，同一深青品牌色。布局、字号与交互保持现状，仅探索表面层级与组件状态。</p>
+      <p>四套浅色背景，同一深青品牌色。布局、字号与交互保持现状，仅探索表面层级与组件状态。</p>
     </div>
     <div class="review-note"><span class="note-dot"></span>高保真 · 可交互 · 非生产代码</div>
   </header>
   <main class="review-shell">
     <nav class="scheme-tabs" aria-label="配色方案">
-      <button class="scheme-tab active" data-theme-choice="paper" aria-pressed="true">
-        <span class="scheme-index">01</span><span class="scheme-swatch paper"></span>
-        <span class="scheme-copy"><strong>暖纸白</strong><small>安静自然 · 延续现有气质</small></span>
+      <button class="scheme-tab active" data-theme-choice="white" aria-pressed="true">
+        <span class="scheme-index">01</span><span class="scheme-swatch white"></span>
+        <span class="scheme-copy"><strong>纸白</strong><small>中性安静 · Claude 式白</small></span>
+      </button>
+      <button class="scheme-tab" data-theme-choice="paper" aria-pressed="false">
+        <span class="scheme-index">02</span><span class="scheme-swatch paper"></span>
+        <span class="scheme-copy"><strong>暖纸白</strong><small>安静自然 · 温和纸感</small></span>
       </button>
       <button class="scheme-tab" data-theme-choice="mist" aria-pressed="false">
-        <span class="scheme-index">02</span><span class="scheme-swatch mist"></span>
+        <span class="scheme-index">03</span><span class="scheme-swatch mist"></span>
         <span class="scheme-copy"><strong>雾青灰</strong><small>清爽克制 · 品牌色更统一</small></span>
       </button>
       <button class="scheme-tab" data-theme-choice="apricot" aria-pressed="false">
-        <span class="scheme-index">03</span><span class="scheme-swatch apricot"></span>
+        <span class="scheme-index">04</span><span class="scheme-swatch apricot"></span>
         <span class="scheme-copy"><strong>暖杏灰</strong><small>温和陪伴 · 降低屏幕冷感</small></span>
       </button>
       <div class="compare-actions">
         <button class="text-button" id="spec-toggle" aria-expanded="false">颜色映射 <span>↗</span></button>
-        <button class="compare-button" id="compare-toggle" aria-pressed="false">并排比较 <span>3</span></button>
+        <button class="compare-button" id="compare-toggle" aria-pressed="false">并排比较 <span>4</span></button>
       </div>
     </nav>
 
     <section class="design-summary" data-screen-label="设计说明">
       <div class="summary-number" id="scheme-number">01</div>
-      <div class="summary-copy"><h2 id="scheme-name">暖纸白 / Quiet Paper</h2><p id="scheme-description">给最常用的界面一层轻微的暖意。纸白工作区与白色卡片之间只有很小的明度差，耐看、不打扰。</p></div>
+      <div class="summary-copy"><h2 id="scheme-name">纸白 / Soft White</h2><p id="scheme-description">最接近 Claude 的暖中性白：主画布几乎是纸面，侧栏只比卡片深一点点。安静、克制，不与内容抢注意力。</p></div>
       <div class="palette" id="palette" aria-label="当前方案主要色板"></div>
     </section>
 
@@ -52,9 +56,9 @@
       <div class="preview-legend"><span class="legend-line"></span><span id="preview-caption">以真实窗口比例预览 · 1180 × 760</span></div>
     </section>
 
-    <section id="comparison" class="comparison" aria-label="三套配色并排预览" hidden></section>
+    <section id="comparison" class="comparison" aria-label="四套配色并排预览" hidden></section>
     <section class="window-stage" data-screen-label="高保真界面预览">
-      <div class="desktop-window" id="preview-frame" data-theme="paper">
+      <div class="desktop-window" id="preview-frame" data-theme="white">
         <div class="desktop-scale" id="preview-scale">
           <div id="root"></div>
         </div>
@@ -62,7 +66,7 @@
     </section>
 
     <section class="mapping" id="mapping" data-screen-label="颜色映射" hidden>
-      <div class="mapping-heading"><span class="review-kicker">IMPLEMENTATION MAP</span><h2>每个部件，都有明确归属。</h2><p>以下颜色随方案切换。状态色不与品牌色混用；后续实施只需替换表面与中性色变量。</p></div>
+      <div class="mapping-heading"><span class="review-kicker">IMPLEMENTATION MAP</span><h2>每个部件，都有明确归属。</h2><p>以下颜色随方案切换。状态色不与品牌色混用；实施时只需替换表面与中性色变量。</p></div>
       <div class="token-grid" id="token-grid"></div>
       <div class="mapping-table-wrap"><table class="mapping-table"><thead><tr><th>部件</th><th>设计取值</th><th>对应现有变量 / 规则</th></tr></thead><tbody id="mapping-body"></tbody></table></div>
       <div class="design-principles">

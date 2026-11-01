@@ -112,6 +112,7 @@ const Icon = ({ name, size = 15, stroke = 1.6, className = "" }) => {
         <path d="M7.6 7.2a7 7 0 1 0 8.8 0" />
       </>
     ),
+    chevron: <path d="M6.5 9.2 12 14.6l5.5-5.4" />,
     more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
     medal: <><circle cx="12" cy="9" r="5.5" /><path d="M8 13.5 6.5 21l5.5-3 5.5 3-1.5-7.5" /></>
   };

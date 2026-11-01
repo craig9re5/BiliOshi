@@ -155,6 +155,18 @@ def run(output, screenshot=None):
                 wait("document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]')?.getAttribute('aria-checked') === 'true'")
                 wait("!document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]').disabled")
                 check("setting persisted", json.loads((root / "settings.json").read_text(encoding="utf-8"))["auto_like"] is True)
+                check("native select removed", host._window.evaluate_js("!document.querySelector('select')"))
+                click('.choice-button')
+                wait("Boolean(document.querySelector('.choice-menu'))")
+                click('.choice-option[data-value="aggressive"]')
+                wait("document.querySelector('.choice-label')?.textContent === '激进'")
+                wait("!document.querySelector('.choice-menu')")
+                deadline = time.monotonic() + 3
+                while (time.monotonic() < deadline
+                       and json.loads((root / "settings.json").read_text(encoding="utf-8"))["run_mode"] != "aggressive"):
+                    time.sleep(0.05)
+                check("run mode uses themed menu",
+                      json.loads((root / "settings.json").read_text(encoding="utf-8"))["run_mode"] == "aggressive")
                 click('button[aria-label="账号"]')
                 wait("document.querySelector('.chrome-title')?.textContent === '账号'")
                 check("account rendered", "示例账号" in host._window.evaluate_js("document.body.innerText"))

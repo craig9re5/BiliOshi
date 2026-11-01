@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"541fcaf4796cfd4beef22be1809bfd343ed084f53fa0d7a370dd78952d65a6fb","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"9355043d377765f3b2fdb9b7b796a40059acc89e5b72fd79bfeaf70fe39a8824"} */
+/* BiliOshi JSX {"code_sha256":"5538b7abcb5d206479b6be299e0e6f849566394a9a7c8f68f1c90541c999d8b4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"9d750fb8f4ebcfd513b95021bccdff05a1b1f6d94e4c9cdfa142913773a2758a"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -65,8 +65,7 @@ const DetailPanel = ({
   busy,
   onAction,
   onOpen,
-  onRemove,
-  image
+  onMore
 }) => {
   if (!room) return /*#__PURE__*/React.createElement("aside", {
     className: "detail card",
@@ -84,6 +83,8 @@ const DetailPanel = ({
   const knownExperience = !room.tasks_stale && room.next_intimacy > 0;
   const progress = knownExperience ? Math.min(100, Math.max(0, room.intimacy / room.next_intimacy * 100)) : 0;
   const note = room.watch_note || "";
+  const showStateRow = room.live || room.active || room.reconnecting || room.tone === "warn";
+  const showReason = reason && (room.live || room.tone === "warn");
   return /*#__PURE__*/React.createElement("aside", {
     className: "detail card",
     "aria-label": "\u76F4\u64AD\u95F4\u8BE6\u60C5",
@@ -100,23 +101,23 @@ const DetailPanel = ({
   }, room.name), /*#__PURE__*/React.createElement("div", {
     className: "detail-title",
     title: room.title
-  }, room.live ? room.title || "直播中" : "等待主播开播")), /*#__PURE__*/React.createElement("button", {
+  }, room.live ? room.title || "直播中" : room.state)), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn ghost icon-button",
     title: "\u66F4\u591A\u64CD\u4F5C",
     "aria-label": "\u66F4\u591A\u64CD\u4F5C",
-    onClick: onRemove
+    onClick: onMore
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "more",
     size: 17
-  }))), /*#__PURE__*/React.createElement("div", {
+  }))), showStateRow && /*#__PURE__*/React.createElement("div", {
     className: "state-row"
   }, /*#__PURE__*/React.createElement("span", {
     className: `state-label ${room.tone === "warn" ? "warn" : ""}`
   }, room.state, /*#__PURE__*/React.createElement("span", {
     className: "state-sub",
     title: absoluteTime(room.last_heartbeat)
-  }, room.healthy ? `已连接 ${durationLabel(room.minutes)}` : room.live ? "开播后自动建立连接" : "等待主播开播", room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : "")), /*#__PURE__*/React.createElement("button", {
+  }, room.healthy ? `已连接 ${durationLabel(room.minutes)}` : room.live ? "开播后自动建立连接" : "等待恢复正常", room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : "")), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm",
     onClick: () => onAction("reconnect", room.room),
@@ -187,25 +188,12 @@ const DetailPanel = ({
   }, task.done && /*#__PURE__*/React.createElement(Icon, {
     name: "check",
     size: 11
-  }), task.text || "待更新"))))), /*#__PURE__*/React.createElement("div", {
-    className: "detail-secondary-actions"
-  }, /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn ghost sm",
-    onClick: () => onAction("wear", room.room),
-    disabled: pending || Boolean(room.actions.wear),
-    title: room.actions.wear || "佩戴这个主播的粉丝牌"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "medal",
-    size: 12
-  }), "\u4F69\u6234\u7C89\u4E1D\u724C"), /*#__PURE__*/React.createElement("span", {
-    className: "block-note"
-  }, "\u4EE5 B \u7AD9\u7ED3\u7B97\u4E3A\u51C6"))), /*#__PURE__*/React.createElement("div", {
+  }), task.text || "待更新")))))), /*#__PURE__*/React.createElement("div", {
     className: "detail-action-area"
   }, operation.message && /*#__PURE__*/React.createElement("p", {
     className: "action-hint",
     role: "status"
-  }, operation.message), reason && /*#__PURE__*/React.createElement("p", {
+  }, operation.message), showReason && /*#__PURE__*/React.createElement("p", {
     className: "action-hint"
   }, reason), /*#__PURE__*/React.createElement("div", {
     className: "detail-foot"
@@ -221,7 +209,8 @@ const DetailPanel = ({
     type: "button",
     className: "btn primary",
     onClick: () => onAction("redo", room.room),
-    disabled: pending || Boolean(reason)
+    disabled: pending || Boolean(reason),
+    title: reason || "补齐今日未完成任务"
   }, /*#__PURE__*/React.createElement(Icon, {
     name: pending ? "refresh" : "check",
     size: 13,
@@ -343,8 +332,15 @@ const Overview = ({
     busy: busyRoom === selected?.room,
     onAction: onAction,
     onOpen: onOpen,
-    onRemove: () => selected && onRemove(selected),
-    image: selected && images[selected.uid]
+    onMore: event => {
+      if (!selected) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      onContextMenu({
+        preventDefault() {},
+        clientX: rect.right - 190,
+        clientY: rect.bottom + 6
+      }, selected.room);
+    }
   })), /*#__PURE__*/React.createElement("footer", {
     className: "statusbar"
   }, /*#__PURE__*/React.createElement("span", {

@@ -32,7 +32,7 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image }) => (
   </button>
 );
 
-const DetailPanel = ({ room, busy, onAction, onOpen, onRemove, image }) => {
+const DetailPanel = ({ room, busy, onAction, onOpen, onMore }) => {
   if (!room) return (
     <aside className="detail card" aria-label="直播间详情">
       <div className="empty">
@@ -49,23 +49,25 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onRemove, image }) => {
   const knownExperience = !room.tasks_stale && room.next_intimacy > 0;
   const progress = knownExperience ? Math.min(100, Math.max(0, room.intimacy / room.next_intimacy * 100)) : 0;
   const note = room.watch_note || "";
+  const showStateRow = room.live || room.active || room.reconnecting || room.tone === "warn";
+  const showReason = reason && (room.live || room.tone === "warn");
   return (
     <aside className="detail card" aria-label="直播间详情" data-screen-label={`详情 · ${room.name}`}>
       <div className="detail-scroll" key={room.room}>
         <div className="detail-heading">
           <div className="detail-identity">
             <div className="detail-name">{room.name}</div>
-            <div className="detail-title" title={room.title}>{room.live ? room.title || "直播中" : "等待主播开播"}</div>
+            <div className="detail-title" title={room.title}>{room.live ? room.title || "直播中" : room.state}</div>
           </div>
           <button type="button" className="btn ghost icon-button" title="更多操作"
-            aria-label="更多操作" onClick={onRemove}><Icon name="more" size={17} /></button>
+            aria-label="更多操作" onClick={onMore}><Icon name="more" size={17} /></button>
         </div>
-        <div className="state-row">
+        {showStateRow && <div className="state-row">
           <span className={`state-label ${room.tone === "warn" ? "warn" : ""}`}>
             {room.state}
             <span className="state-sub" title={absoluteTime(room.last_heartbeat)}>
               {room.healthy ? `已连接 ${durationLabel(room.minutes)}`
-                : room.live ? "开播后自动建立连接" : "等待主播开播"}
+                : room.live ? "开播后自动建立连接" : "等待恢复正常"}
               {room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : ""}
             </span>
           </span>
@@ -74,7 +76,7 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onRemove, image }) => {
             <Icon name="reconnect" size={12} className={room.reconnecting ? "spin" : ""} />
             {room.reconnecting ? "重连中…" : "重连"}
           </button>
-        </div>
+        </div>}
         <div className="gain-card">
           <div className="gain-head"><span className="gain-label">今日亲密度</span>
             {room.medal_name && <span className="gain-medal">{room.medal_name} Lv.{room.medal_level}</span>}
@@ -112,23 +114,16 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onRemove, image }) => {
             </div>)}
           </div>
         </section>
-        <div className="detail-secondary-actions">
-          <button type="button" className="btn ghost sm" onClick={() => onAction("wear", room.room)}
-            disabled={pending || Boolean(room.actions.wear)} title={room.actions.wear || "佩戴这个主播的粉丝牌"}>
-            <Icon name="medal" size={12} />佩戴粉丝牌
-          </button>
-          <span className="block-note">以 B 站结算为准</span>
-        </div>
       </div>
       <div className="detail-action-area">
         {operation.message && <p className="action-hint" role="status">{operation.message}</p>}
-        {reason && <p className="action-hint">{reason}</p>}
+        {showReason && <p className="action-hint">{reason}</p>}
         <div className="detail-foot">
           <button type="button" className="btn" onClick={() => onOpen(room.room)} disabled={Boolean(room.actions.open)}>
             <Icon name="external" size={13} />打开直播间
           </button>
           <button type="button" className="btn primary" onClick={() => onAction("redo", room.room)}
-            disabled={pending || Boolean(reason)}>
+            disabled={pending || Boolean(reason)} title={reason || "补齐今日未完成任务"}>
             <Icon name={pending ? "refresh" : "check"} size={13} className={pending ? "spin" : ""} />
             {pending ? "正在处理…" : "补齐任务"}
           </button>
@@ -179,7 +174,11 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
         </div>
       </section>
       <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen}
-        onRemove={() => selected && onRemove(selected)} image={selected && images[selected.uid]} />
+        onMore={(event) => {
+          if (!selected) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          onContextMenu({ preventDefault() {}, clientX: rect.right - 190, clientY: rect.bottom + 6 }, selected.room);
+        }} />
     </div>
     <footer className="statusbar">
       <span className={healthy && !closing ? "dot-live" : "dot-paused"} aria-hidden="true" /><strong>{status}</strong>

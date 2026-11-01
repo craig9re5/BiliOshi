@@ -73,6 +73,7 @@ def run(output, screenshot=None):
         engine = Engine(root, job=Mock())
         engine.account = "示例账号"
         engine.account_checked_at = time.time()
+        engine.last_check = time.time() - 90
         engine.statuses = {"7": {"live_status": 1, "title": "桌面窗口与桥接验收"}, "8": {"live_status": 0}}
         engine.status_times = {"7": time.time(), "8": time.time()}
         engine.medals = {9: {"medal_name": "同行者", "level": 9, "today_intimacy": 15, "day_limit": 1500, "is_lighted": 1}}

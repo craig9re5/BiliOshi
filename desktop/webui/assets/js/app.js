@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"2837ebd65131b91f34b66df1a1a5031f340bfdf2e185304c59261cd088754f83","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"8327e62d4cceb8beb5192222cd719eaf200d1ae61a06ecf3fe670ddf0b766e46"} */
+/* BiliOshi JSX {"code_sha256":"6b9e4bf95e5498e8e6ae6cdc3c10f744d3bdd20c76fc249489348e8692f755b8","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"21a032d358191cf408037958f96bde2489438d42851aed0602d0ac24aa3c5540"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = {
   check_minutes: 5,
   autostart: false
 };
+const THEME_KEYS = ["white", "paper", "mist", "apricot"];
 const EMPTY_SNAPSHOT = {
   rows: [],
   paused: false,
@@ -259,6 +260,18 @@ const SidebarToggle = ({
 }))));
 function App() {
   const [page, setPage] = useState("monitor");
+  const [theme, setTheme] = useState(() => {
+    const current = document.documentElement.dataset.theme;
+    return THEME_KEYS.includes(current) ? current : "white";
+  });
+  const chooseTheme = useCallback(value => {
+    if (!THEME_KEYS.includes(value)) return;
+    setTheme(value);
+    document.documentElement.dataset.theme = value;
+    try {
+      window.localStorage.setItem("bilioshi.theme", value);
+    } catch {}
+  }, []);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem("bilioshi.sidebar") === "collapsed";
@@ -804,7 +817,9 @@ function App() {
   }), page === "automation" && /*#__PURE__*/React.createElement(window.SettingsPage, {
     settings: snap.settings || DEFAULT_SETTINGS,
     onSetting: setSetting,
-    pendingSettings: pendingSettings
+    pendingSettings: pendingSettings,
+    theme: theme,
+    onTheme: chooseTheme
   }), page === "account" && /*#__PURE__*/React.createElement(window.AccountPage, {
     account: account,
     avatar: accountAvatar,

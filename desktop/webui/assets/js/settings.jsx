@@ -87,7 +87,29 @@ const Choice = ({ value, options, onChange, label, disabled }) => {
   );
 };
 
-const SettingsPage = ({ settings, onSetting, pendingSettings }) => {
+const THEME_CHOICES = [
+  { key: "white", name: "纸白", hint: "中性纸面" },
+  { key: "paper", name: "暖纸白", hint: "温和纸感" },
+  { key: "mist", name: "雾青灰", hint: "清爽青灰" },
+  { key: "apricot", name: "暖杏灰", hint: "温暖柔和" }
+];
+
+const ThemeOptions = ({ value, onChange }) => (
+  <div className="theme-options" role="group" aria-label="界面主题">
+    {THEME_CHOICES.map((theme) => {
+      const active = theme.key === value;
+      return <button type="button" key={theme.key} className="theme-option" data-theme={theme.key}
+        aria-pressed={active} title={`${theme.name} · ${theme.hint}`}
+        onClick={() => onChange(theme.key)}>
+        <span className={`theme-chip ${theme.key}`} aria-hidden="true" />
+        <span className="theme-name">{theme.name}</span>
+        {active && <Icon name="check" size={11} />}
+      </button>;
+    })}
+  </div>
+);
+
+const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", onTheme }) => {
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   return (<>
@@ -121,6 +143,12 @@ const SettingsPage = ({ settings, onSetting, pendingSettings }) => {
           <Choice label="运行模式" value={runMode} disabled={disabled("run_mode")}
             options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
             onChange={(value) => onSetting("run_mode", value)} />
+        </SettingRow>
+      </section>
+      <section className="group card">
+        <header className="group-head">外观</header>
+        <SettingRow name="界面主题" desc="选择界面表面颜色，切换后立即生效并记住选择">
+          <ThemeOptions value={theme} onChange={onTheme} />
         </SettingRow>
       </section>
       <p className="settings-note">运行模式保存后立即生效。当天的已完成进度与发送额度会保留。</p>

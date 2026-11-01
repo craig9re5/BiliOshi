@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"88fb2977998ade68d19481d820d76c62f5d36dda0fbb06cc74cf5ebe5c75cc14","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"39298b7f1c30b7a6013bde150e6c0198bf39ad7cdc81a5e9da109d1221d2f880"} */
+/* BiliOshi JSX {"code_sha256":"dd1647282a322a2f77460bc7c1db5c7b692f2d1beb74dc465a4390afe77a095f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"84ab3447f34833f32de905505fce80f61fcdb8f6aca6e7a5c34af16bd8ba7153"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -130,10 +130,56 @@ const Choice = ({
     size: 12
   })))));
 };
+const THEME_CHOICES = [{
+  key: "white",
+  name: "纸白",
+  hint: "中性纸面"
+}, {
+  key: "paper",
+  name: "暖纸白",
+  hint: "温和纸感"
+}, {
+  key: "mist",
+  name: "雾青灰",
+  hint: "清爽青灰"
+}, {
+  key: "apricot",
+  name: "暖杏灰",
+  hint: "温暖柔和"
+}];
+const ThemeOptions = ({
+  value,
+  onChange
+}) => /*#__PURE__*/React.createElement("div", {
+  className: "theme-options",
+  role: "group",
+  "aria-label": "\u754C\u9762\u4E3B\u9898"
+}, THEME_CHOICES.map(theme => {
+  const active = theme.key === value;
+  return /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    key: theme.key,
+    className: "theme-option",
+    "data-theme": theme.key,
+    "aria-pressed": active,
+    title: `${theme.name} · ${theme.hint}`,
+    onClick: () => onChange(theme.key)
+  }, /*#__PURE__*/React.createElement("span", {
+    className: `theme-chip ${theme.key}`,
+    "aria-hidden": "true"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "theme-name"
+  }, theme.name), active && /*#__PURE__*/React.createElement(Icon, {
+    name: "check",
+    size: 11
+  }));
+}));
 const SettingsPage = ({
   settings,
   onSetting,
-  pendingSettings
+  pendingSettings,
+  theme = "white",
+  onTheme
 }) => {
   const disabled = key => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
@@ -205,6 +251,16 @@ const SettingsPage = ({
       label: "激进"
     }],
     onChange: value => onSetting("run_mode", value)
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "group card"
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "group-head"
+  }, "\u5916\u89C2"), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u754C\u9762\u4E3B\u9898",
+    desc: "\u9009\u62E9\u754C\u9762\u8868\u9762\u989C\u8272\uFF0C\u5207\u6362\u540E\u7ACB\u5373\u751F\u6548\u5E76\u8BB0\u4F4F\u9009\u62E9"
+  }, /*#__PURE__*/React.createElement(ThemeOptions, {
+    value: theme,
+    onChange: onTheme
   }))), /*#__PURE__*/React.createElement("p", {
     className: "settings-note"
   }, "\u8FD0\u884C\u6A21\u5F0F\u4FDD\u5B58\u540E\u7ACB\u5373\u751F\u6548\u3002\u5F53\u5929\u7684\u5DF2\u5B8C\u6210\u8FDB\u5EA6\u4E0E\u53D1\u9001\u989D\u5EA6\u4F1A\u4FDD\u7559\u3002"))));

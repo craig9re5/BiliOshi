@@ -4,6 +4,7 @@ const { useState, useEffect, useRef, useCallback } = React;
 const { Icon, Pulse, call, bridgeReady, toRoom } = window;
 const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false,
   notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false };
+const THEME_KEYS = ["white", "paper", "mist", "apricot"];
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
@@ -85,6 +86,16 @@ const SidebarToggle = ({ collapsed, onToggle }) => (
 
 function App() {
   const [page, setPage] = useState("monitor");
+  const [theme, setTheme] = useState(() => {
+    const current = document.documentElement.dataset.theme;
+    return THEME_KEYS.includes(current) ? current : "white";
+  });
+  const chooseTheme = useCallback((value) => {
+    if (!THEME_KEYS.includes(value)) return;
+    setTheme(value);
+    document.documentElement.dataset.theme = value;
+    try { window.localStorage.setItem("bilioshi.theme", value); } catch {}
+  }, []);
   const [collapsed, setCollapsed] = useState(() => {
     try { return window.localStorage.getItem("bilioshi.sidebar") === "collapsed"; } catch { return false; }
   });
@@ -442,7 +453,7 @@ function App() {
           interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
           images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected} />}
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
-          pendingSettings={pendingSettings} />}
+          pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme} />}
         {page === "account" && <window.AccountPage account={account} avatar={accountAvatar} onScan={openQr}
           onLogout={() => setDialog({ type: "logout" })} onResumeSafety={() => setDialog({ type: "safety" })}
           onCheck={() => control("check_now")} busy={controlBusy || closing} version={snap.version} />}

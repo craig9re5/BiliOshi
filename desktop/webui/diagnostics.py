@@ -167,6 +167,17 @@ def run(output, screenshot=None):
                     time.sleep(0.05)
                 check("run mode uses themed menu",
                       json.loads((root / "settings.json").read_text(encoding="utf-8"))["run_mode"] == "aggressive")
+                original_theme = host._window.evaluate_js(
+                    "document.documentElement.dataset.theme || 'white'")
+                click('.theme-option[data-theme="mist"]')
+                wait("document.documentElement.dataset.theme === 'mist'")
+                check("theme switch updates surfaces", host._window.evaluate_js(
+                    "getComputedStyle(document.documentElement).getPropertyValue('--paper').trim() === '#f2f6f5'"
+                    " && document.querySelector('.theme-option[data-theme=\"mist\"]').getAttribute('aria-pressed') === 'true'"))
+                click(f'.theme-option[data-theme="{original_theme}"]')
+                wait(f"document.documentElement.dataset.theme === {json.dumps(original_theme)}")
+                check("theme preference persists", host._window.evaluate_js(
+                    f"localStorage.getItem('bilioshi.theme') === {json.dumps(original_theme)}"))
                 click('button[aria-label="账号"]')
                 wait("document.querySelector('.chrome-title')?.textContent === '账号'")
                 check("account rendered", "示例账号" in host._window.evaluate_js("document.body.innerText"))

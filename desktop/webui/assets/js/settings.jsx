@@ -55,7 +55,7 @@ const SettingsPage = ({ settings, onSetting, pendingSettings }) => {
   </>);
 };
 
-const AccountPage = ({ account, onScan, onLogout, onResumeSafety, onCheck, busy, version }) => {
+const AccountPage = ({ account, avatar, onScan, onLogout, onResumeSafety, onCheck, busy, version }) => {
   const hold = account.safety || {};
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
@@ -66,7 +66,7 @@ const AccountPage = ({ account, onScan, onLogout, onResumeSafety, onCheck, busy,
       <section className="group card">
         <header className="group-head">B 站账号</header>
         <div className="setting">
-          <span className="account-avatar">{Array.from(account.name || "?")[0]}</span>
+          <span className="account-avatar">{avatar ? <img src={avatar} alt="" /> : Array.from(account.name || "?")[0]}</span>
           <div className="setting-text">
             <div className="account-name">{account.name || (account.signed_in ? "登录状态待确认" : "尚未登录")}</div>
             <div className="account-meta" title={absoluteTime(account.checked_at)}>

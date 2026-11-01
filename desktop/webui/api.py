@@ -181,23 +181,26 @@ class Api:
                 self._settings_signature = signature
             return dict(self._settings_cache)
 
-    def _account_info(self, snap):
+    def _credentials_present(self):
         # Inspect only the protected envelope/presence. Refreshing a page must not
         # unseal a login, migrate it, or repeatedly register secrets.
+        with self._cache_lock:
+            path = self._root / "credentials.json"
+            signature = _signature(path)
+            if signature != self._credentials_signature:
+                saved = json.loads(path.read_text(encoding="utf-8-sig")) if signature else {}
+                if not isinstance(saved, dict):
+                    raise ValueError("Invalid credentials object")
+                present = (bool(saved.get("payload") or saved.get("reference")) if is_envelope(saved)
+                           else bool(saved.get("SESSDATA") and saved.get("bili_jct")))
+                self._credentials_cache = present, ""
+                self._credentials_signature = signature
+            return self._credentials_cache
+
+    def _account_info(self, snap):
         error = ""
         try:
-            with self._cache_lock:
-                path = self._root / "credentials.json"
-                signature = _signature(path)
-                if signature != self._credentials_signature:
-                    saved = json.loads(path.read_text(encoding="utf-8-sig")) if signature else {}
-                    if not isinstance(saved, dict):
-                        raise ValueError("Invalid credentials object")
-                    present = (bool(saved.get("payload") or saved.get("reference")) if is_envelope(saved)
-                               else bool(saved.get("SESSDATA") and saved.get("bili_jct")))
-                    self._credentials_cache = present, ""
-                    self._credentials_signature = signature
-                present, error = self._credentials_cache
+            present, error = self._credentials_present()
         except (OSError, ValueError):
             logging.exception("Cannot inspect saved login")
             present, error = False, "登录信息无法读取，请重新扫码登录。"
@@ -549,6 +552,46 @@ class Api:
 
         return self._run(f"avatar:{uid}", fetch, mutating=False)
 
+    def account_avatar(self):
+        """The signed-in account's public avatar; the renderer never supplies a UID."""
+        def fetch():
+            try:
+                present, _error = self._credentials_present()
+            except (OSError, ValueError):
+                return {"ok": False}
+            if not present:
+                return {"ok": False}
+            from desktop.avatars import file_token, load_avatar, read_account_profile, save_account_profile
+
+            binding = file_token(self._root / "credentials.json")
+            profile = read_account_profile(self._root, binding)
+            if not profile:
+                approved = self._engine.application.account_profile()
+                if approved and approved.get("uid"):
+                    profile = {"uid": approved["uid"], "face": approved.get("face", "")}
+                    save_account_profile(self._root, profile["uid"], profile["face"], binding)
+            if not profile:
+                return {"ok": False}
+            uid = profile["uid"]
+            key = ("account", uid)
+            with self._cache_lock:
+                cached = self._avatars.get(key)
+                if cached and time.monotonic() - cached[0] < 86400:
+                    self._avatars.move_to_end(key)
+                    return {"ok": True, "data_uri": cached[1]}
+            image = load_avatar(self._root, uid, profile["face"])
+            try:
+                data_uri = _png_uri(image)
+            finally:
+                image.close()
+            with self._cache_lock:
+                self._avatars[key] = (time.monotonic(), data_uri)
+                while len(self._avatars) > 64:
+                    self._avatars.popitem(last=False)
+            return {"ok": True, "data_uri": data_uri}
+
+        return self._run("account_avatar", fetch, mutating=False)
+
     # Cancellation invalidates a generation before waiting for any network IO.
     def _cancel_qr(self):
         with self._qr_lock:
@@ -635,7 +678,7 @@ class Api:
                         return
                 if result.state == "confirmed":
                     cookies = result.credentials
-                    valid, account = self._engine.application.validate_credentials(
+                    valid, account, profile = self._engine.application.validate_credentials_profile(
                         cookies["SESSDATA"], cookies["bili_jct"])
                     if not valid:
                         self._emit_qr(generation, session, cancel, {
@@ -650,7 +693,20 @@ class Api:
                             options = {"context": result.context} if result.context else {}
                             save_login(cookies["SESSDATA"], cookies["bili_jct"],
                                        self._root / "credentials.json", **options)
+                        # Applying settings notices the credential change and clears
+                        # any cached identity from the previous account first.
                         self._ui.apply_settings()
+                        if profile.get("uid"):
+                            try:
+                                from desktop.avatars import file_token, save_account_profile
+
+                                save_account_profile(
+                                    self._root, profile["uid"], profile.get("face", ""),
+                                    file_token(self._root / "credentials.json"))
+                            except OSError:
+                                logging.exception("Cannot cache the signed-in public profile")
+                        self._engine.confirm_account(account)
+                        self._ui.push_now()
                         self._emit_qr(generation, session, cancel,
                                       {"state": "confirmed", "account": account})
                     return
@@ -676,8 +732,13 @@ class Api:
         def logout():
             self._cancel_qr()
             from bilioshi.runtime import save_login
+            from desktop.avatars import clear_account_profile
 
             save_login("", "", self._root / "credentials.json")
+            clear_account_profile(self._root)
+            with self._cache_lock:
+                for key in [key for key in self._avatars if isinstance(key, tuple)]:
+                    self._avatars.pop(key, None)
             self._ui.apply_settings()
             return {"ok": True}
 

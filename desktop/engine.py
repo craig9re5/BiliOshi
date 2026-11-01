@@ -83,6 +83,12 @@ class Engine:
             self.notifications.start()
         self.thread.start()
 
+    def confirm_account(self, name):
+        """A freshly validated QR login is authoritative until the next probe."""
+        with self.lock:
+            self.account = str(name or "")
+            self.account_checked_at = time.time()
+
     def _credentials_signature(self):
         path = self.root / "credentials.json"
         if not path.exists():
@@ -116,6 +122,9 @@ class Engine:
             if credentials_changed:
                 self.account = ""
                 self.account_checked_at = 0
+                from desktop.avatars import clear_account_profile
+
+                clear_account_profile(self.root)
                 self.medals, self.tasks, self.statuses = ({}, {}, {})
                 self.status_times, self.status_errors, self.task_errors = ({}, {}, {})
             keep = {m["room"] for m in members}

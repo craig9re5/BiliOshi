@@ -56,6 +56,7 @@
     ready() { publish(); return { ok: true }; },
     snapshot() { return JSON.parse(JSON.stringify(state)); },
     avatar() { return { ok: false }; },
+    account_avatar() { return { ok: false }; },
     toggle_pause() { state.paused = !state.paused; publish(); return { ok: true, message: state.paused ? "已暂停挂机" : "已恢复挂机" }; },
     check_now() { state.checking = true; publish(); window.setTimeout(() => { state.checking = false; state.last_check = Date.now() / 1000; publish(); }, 650); return { ok: true }; },
     save_settings(changes) {

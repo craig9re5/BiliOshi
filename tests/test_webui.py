@@ -10,6 +10,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from desktop.avatars import file_token, save_account_profile
 from desktop.engine import Engine
 from desktop.storage import initialize, read_json, write_json, send_command
 from desktop.webui.api import Api
@@ -48,6 +49,20 @@ class WebUiTests(unittest.TestCase):
             cached = self.api.snapshot()
         self.assertTrue(cached["engine_busy"])
         self.assertEqual(cached["rows"][0]["name"], "测试主播")
+
+    def test_account_avatar_uses_only_the_server_side_public_profile(self):
+        from PIL import Image
+
+        write_json(self.root / "credentials.json", {"SESSDATA": "synthetic-session", "bili_jct": "synthetic-csrf"})
+        save_account_profile(self.root, 123, "https://i0.hdslb.com/bfs/face/example.jpg",
+                             file_token(self.root / "credentials.json"))
+        image = Image.new("RGB", (8, 8), "#2d6763")
+        with patch("desktop.avatars.load_avatar", return_value=image) as load:
+            result = self.api.account_avatar()
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["data_uri"].startswith("data:image/png;base64,"))
+        load.assert_called_once_with(self.root, 123, "https://i0.hdslb.com/bfs/face/example.jpg")
+        self.assertNotIn("synthetic-session", json.dumps(result))
 
     def test_settings_normalize_legacy_policy_and_apply_despite_autostart_failure(self):
         write_json(self.root / "settings.json", {"danmaku": False, "live_likes": True, "check_minutes": 15})
@@ -113,8 +128,8 @@ class WebUiTests(unittest.TestCase):
         def validate(*_):
             entered.set()
             release.wait(3)
-            return True, "测试账号"
-        self.engine.application.validate_credentials = validate
+            return True, "测试账号", {"name": "测试账号", "uid": 123, "face": ""}
+        self.engine.application.validate_credentials_profile = validate
         with patch("bilioshi.qr_login.POLL_INTERVAL", 0.001), \
              patch("bilioshi.runtime.save_login") as save:
             worker = threading.Thread(target=self.api._qr_poll, args=(generation, session, cancel))

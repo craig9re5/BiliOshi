@@ -67,6 +67,9 @@ def run(output, screenshot=None):
         members = [{"name": "测试主播", "room": 7, "uid": 9}, {"name": "示例主播", "room": 8, "uid": 10}]
         initialize(root, members)
         write_json(root / "credentials.json", {"SESSDATA": "diagnostic-session", "bili_jct": "diagnostic-csrf"})
+        from desktop.avatars import file_token, save_account_profile
+
+        save_account_profile(root, 123, "", file_token(root / "credentials.json"))
         engine = Engine(root, job=Mock())
         engine.account = "示例账号"
         engine.account_checked_at = time.time()
@@ -149,6 +152,13 @@ def run(output, screenshot=None):
                 click('button[aria-label="账号"]')
                 wait("document.querySelector('.chrome-title')?.textContent === '账号'")
                 check("account rendered", "示例账号" in host._window.evaluate_js("document.body.innerText"))
+                check("account subtitle removed", host._window.evaluate_js(
+                    "!document.querySelector('.chrome-sub')"))
+                wait("Boolean(document.querySelector('.account-avatar img'))")
+                check("account avatar uses the public profile", host._window.evaluate_js(
+                    "document.querySelector('.account-avatar img').src.startsWith('data:image/png;base64,')"))
+                wait("Boolean(document.querySelector('.sidebar-avatar img'))")
+                check("sidebar avatar matches the account", True)
                 click('.setting .btn.primary')
                 wait("Boolean(document.querySelector('.qr-wrap img'))")
                 check("QR has image", True)

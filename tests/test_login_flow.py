@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 from pathlib import Path
 
 from bilioshi.application import AppContext
+from bilioshi.check_auth import check_login_profile
 from bilioshi.credentials import parse_login_import
 from desktop.dialogs import SettingsDialog
 
@@ -88,6 +89,22 @@ class LoginImportTests(unittest.TestCase):
         )
         self.assertFalse(ok)
         self.assertNotIn("Injected", message)
+
+
+class LoginProfileTests(unittest.TestCase):
+    def test_nav_profile_keeps_only_public_identity_fields(self):
+        body = {"code": 0, "data": {
+            "isLogin": True, "uname": "测试账号", "mid": 123,
+            "face": "https://i0.hdslb.com/bfs/face/example.jpg", "token": "ignored",
+        }}
+        with patch("bilioshi.check_auth.request_json", return_value=body):
+            valid, message, profile = check_login_profile("synthetic", "synthetic")
+        self.assertTrue(valid)
+        self.assertEqual(message, "测试账号")
+        self.assertEqual(profile, {
+            "name": "测试账号", "uid": 123,
+            "face": "https://i0.hdslb.com/bfs/face/example.jpg",
+        })
 
 
 class QrCredentialSaveTests(unittest.TestCase):

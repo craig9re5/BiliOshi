@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, onLogs, onQuit, brandHidden, collapsed }) => (
+const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, collapsed }) => (
   <aside className="side">
     {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
       <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
@@ -23,7 +23,7 @@ const Sidebar = ({ page, onPage, account, onLogs, onQuit, brandHidden, collapsed
       <button type="button" className="nav-item" onClick={onQuit} aria-label="退出应用" title="退出应用"><Icon name="power" /><span>退出应用</span></button>
     </nav>
     <button type="button" className="sidebar-account" onClick={() => onPage("account")} title="账号管理">
-      <span className="sidebar-avatar">{Array.from(account.name || "?")[0]}</span>
+      <span className="sidebar-avatar">{avatar ? <img src={avatar} alt="" /> : Array.from(account.name || "?")[0]}</span>
       <span className="sidebar-account-text"><strong>{account.name || (account.signed_in ? "等待验证" : "尚未登录")}</strong></span>
     </button>
   </aside>
@@ -32,7 +32,7 @@ const Sidebar = ({ page, onPage, account, onLogs, onQuit, brandHidden, collapsed
 const pageTitles = {
   monitor: { title: "直播总览", sub: "" },
   automation: { title: "挂机设置", sub: "更改后自动保存" },
-  account: { title: "账号", sub: "登录与账号保护" }
+  account: { title: "账号", sub: "" }
 };
 
 const WindowButtons = () => {
@@ -115,6 +115,8 @@ function App() {
   const [qr, setQr] = useState(null);
   const [menu, setMenu] = useState(null);
   const [images, setImages] = useState({});
+  const [accountAvatar, setAccountAvatar] = useState("");
+  const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
   const latest = useRef(EMPTY_SNAPSHOT);
   const selectionInitialized = useRef(false);
@@ -169,6 +171,10 @@ function App() {
         }
         if (event.type === "qr_state") {
           if (!qrOpen.current) return;
+          if (payload.state === "confirmed") {
+            setAccountAvatar("");
+            setAvatarVersion((value) => value + 1);
+          }
           setQr((current) => {
             if (!current || current.generation !== payload.generation) return current;
             return { ...current, ...payload };
@@ -220,6 +226,30 @@ function App() {
   const selected = rooms.find((room) => room.room === selectedId);
   const account = snap.accountInfo || EMPTY_SNAPSHOT.accountInfo;
   const closing = Boolean(snap.closing);
+
+  // The account avatar is resolved by Python from the signed-in profile; a
+  // failure keeps the letter placeholder and retries once a minute for network
+  // hiccups. A confirmed QR login bumps avatarVersion so a new account reloads.
+  useEffect(() => {
+    if (!connected || !account.signed_in) { setAccountAvatar(""); return; }
+    let live = true;
+    let retry = 0;
+    const load = () => {
+      call("account_avatar").then((result) => {
+        if (!live) return;
+        if (result?.ok && result.data_uri) setAccountAvatar(result.data_uri);
+        else if (result?.error) retry = window.setTimeout(load, 60000);
+      }).catch(() => {
+        if (live) retry = window.setTimeout(load, 60000);
+      });
+    };
+    load();
+    return () => { live = false; window.clearTimeout(retry); };
+  }, [connected, account.signed_in, account.name, avatarVersion]);
+
+  const chromeSub = page === "monitor"
+    ? (snap.checking ? "正在检查直播状态…" : snap.last_check ? `${relativeTime(snap.last_check)}检查` : "")
+    : pageTitles[page].sub;
 
   const invoke = async (method, args = [], success = "") => {
     try {
@@ -393,7 +423,8 @@ function App() {
 
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
-      <Sidebar page={page} onPage={setPage} account={account} onLogs={() => invoke("open_logs")}
+      <Sidebar page={page} onPage={setPage} account={account} avatar={accountAvatar}
+        onLogs={() => invoke("open_logs")}
         onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} />
       <main className="main" aria-busy={!connected}>
         <header className="chrome pywebview-drag-region">
@@ -402,9 +433,7 @@ function App() {
             <span className="chrome-name">ビリ推し</span></div>
           <span className="chrome-divider" aria-hidden="true" />
           <h1 className="chrome-title">{pageTitles[page].title}</h1>
-          <span className="chrome-sub">{page === "monitor"
-            ? (snap.checking ? "正在检查直播状态…" : snap.last_check ? `${relativeTime(snap.last_check)}检查` : "")
-            : pageTitles[page].sub}</span>
+          {chromeSub && <span className="chrome-sub">{chromeSub}</span>}
           <span className="spacer" />
           <div className="chrome-actions">
             {page === "monitor" && <window.OverviewActions paused={snap.paused} onTogglePause={() => control("toggle_pause")}
@@ -422,7 +451,7 @@ function App() {
           interval={snap.settings?.check_minutes || 5} images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected} />}
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
           pendingSettings={pendingSettings} />}
-        {page === "account" && <window.AccountPage account={account} onScan={openQr}
+        {page === "account" && <window.AccountPage account={account} avatar={accountAvatar} onScan={openQr}
           onLogout={() => setDialog({ type: "logout" })} onResumeSafety={() => setDialog({ type: "safety" })}
           onCheck={() => control("check_now")} busy={controlBusy || closing} version={snap.version} />}
         </div>

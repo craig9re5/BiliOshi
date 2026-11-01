@@ -27,7 +27,16 @@ def _load_local_cookies() -> Tuple[Optional[str], Optional[str]]:
     return (data.get("SESSDATA"), data.get("bili_jct"))
 
 
-def check_login(sessdata: str, bili_jct: str) -> Tuple[bool, str]:
+def _public_uid(value) -> int:
+    if type(value) is int and value > 0:
+        return value
+    if isinstance(value, str) and value.isascii() and value.isdigit() and int(value) > 0:
+        return int(value)
+    return 0
+
+
+def check_login_profile(sessdata: str, bili_jct: str) -> Tuple[bool, str, dict]:
+    """Validate credentials and keep only the public identity fields the UI needs."""
     try:
         body = request_json(
             "https://api.bilibili.com/x/web-interface/nav",
@@ -36,13 +45,24 @@ def check_login(sessdata: str, bili_jct: str) -> Tuple[bool, str]:
             auth_probe=True,
         )
     except (OSError, ValueError, RuntimeError) as exc:
-        return (False, f"认证接口请求失败: {type(exc).__name__}")
+        return (False, f"认证接口请求失败: {type(exc).__name__}", {})
     if body.get("error_kind") == "network":
-        return (False, "认证接口请求失败: network")
+        return (False, "认证接口请求失败: network", {})
     data = body.get("data") or {}
     if body.get("code") == 0 and data.get("isLogin") is True:
-        return (True, data.get("uname") or "已登录账号")
-    return (False, f"{body.get('code', '?')} {body.get('message', '账号未登录')}")
+        name = data.get("uname") or "已登录账号"
+        face = data.get("face")
+        return (True, name, {
+            "name": name,
+            "uid": _public_uid(data.get("mid")),
+            "face": face if isinstance(face, str) else "",
+        })
+    return (False, f"{body.get('code', '?')} {body.get('message', '账号未登录')}", {})
+
+
+def check_login(sessdata: str, bili_jct: str) -> Tuple[bool, str]:
+    valid, message, _profile = check_login_profile(sessdata, bili_jct)
+    return (valid, message)
 
 
 def main() -> int:

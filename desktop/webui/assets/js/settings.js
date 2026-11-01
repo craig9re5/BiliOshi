@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"af013af6d2e5cf62a6b59f7aa499888f9529ac9ad388781df3b3dfdf06ad076b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"deba1a6d7cde24b3d15a2d505b3c276f6be937277dee2a36c85fb0b6ac7a4abb"} */
+/* BiliOshi JSX {"code_sha256":"a1edc9004c26fd56a39b6fd886ca36262978a65883d181ef377c6d73f4ae0039","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"2b8ed4adf285a00562d222c0cea05be1d11b95c2f68750c558bb3a0480e51d1e"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -114,6 +114,7 @@ const SettingsPage = ({
 };
 const AccountPage = ({
   account,
+  avatar,
   onScan,
   onLogout,
   onResumeSafety,
@@ -139,7 +140,10 @@ const AccountPage = ({
     className: "setting"
   }, /*#__PURE__*/React.createElement("span", {
     className: "account-avatar"
-  }, Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("div", {
+  }, avatar ? /*#__PURE__*/React.createElement("img", {
+    src: avatar,
+    alt: ""
+  }) : Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("div", {
     className: "setting-text"
   }, /*#__PURE__*/React.createElement("div", {
     className: "account-name"

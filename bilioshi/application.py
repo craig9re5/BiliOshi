@@ -3,7 +3,7 @@
 from pathlib import Path
 import time
 from . import heartbeat as live
-from .check_auth import check_login
+from .check_auth import check_login_profile
 from .context import RuntimeContext, use_context
 from .runtime import data_dir, read_json, task_day, update_json
 from .members import validate_members
@@ -40,16 +40,28 @@ class AppContext:
             "resolve_anchor_info", query, saved.get("SESSDATA", ""), saved.get("bili_jct", "")
         )
 
-    def validate_credentials(self, sessdata, bili_jct):
+    def validate_credentials_profile(self, sessdata, bili_jct):
         from .credentials import parse_login_import
         import json
 
         try:
             parse_login_import(json.dumps({"SESSDATA": sessdata, "bili_jct": bili_jct}))
         except ValueError:
-            return False, "凭证格式不正确，请重新扫码或检查输入"
+            return False, "凭证格式不正确，请重新扫码或检查输入", {}
         with use_context(self.runtime):
-            return check_login(sessdata, bili_jct)
+            return check_login_profile(sessdata, bili_jct)
+
+    def validate_credentials(self, sessdata, bili_jct):
+        valid, message, _profile = self.validate_credentials_profile(sessdata, bili_jct)
+        return valid, message
+
+    def account_profile(self):
+        """Resolve the public profile of the saved login without exposing credentials."""
+        try:
+            valid, _message, profile = self.validate_credentials_profile(*self.credentials())
+        except (OSError, ValueError, RuntimeError):
+            return {}
+        return profile if valid else {}
 
     def safety_status(self):
         try:

@@ -3,6 +3,7 @@
 import io
 import json
 import logging
+import threading
 import time
 import urllib.request
 from urllib.parse import urlsplit
@@ -74,6 +75,55 @@ def load_avatar(root, uid, url=""):
     thumbnail.save(temporary, format="PNG")
     temporary.replace(path)
     return thumbnail.convert("RGBA")
+
+
+ACCOUNT_PROFILE = "state/account-avatar.json"
+_PROFILE_LOCK = threading.Lock()
+
+
+def file_token(path):
+    """Opaque change token so cached identity cannot outlive its credential file."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return ""
+    return f"{stat.st_mtime_ns}:{stat.st_size}"
+
+
+def read_account_profile(root, binding=None):
+    """Public UID/face of the signed-in account; never any session material."""
+    try:
+        value = json.loads((root / ACCOUNT_PROFILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(value, dict) or (binding is not None and value.get("binding") != binding):
+        return {}
+    uid = value.get("uid")
+    if type(uid) is not int or uid <= 0:
+        return {}
+    return {"uid": uid, "face": avatar_url(value.get("face", ""))}
+
+
+def save_account_profile(root, uid, face="", binding=""):
+    if type(uid) is not int or uid <= 0:
+        return False
+    value = {"uid": uid, "face": avatar_url(face), "binding": binding}
+    with _PROFILE_LOCK:
+        if read_account_profile(root, binding) == {"uid": uid, "face": value["face"]}:
+            return True
+        path = root / ACCOUNT_PROFILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(value), encoding="utf-8")
+        temporary.replace(path)
+    return True
+
+
+def clear_account_profile(root):
+    try:
+        (root / ACCOUNT_PROFILE).unlink()
+    except OSError:
+        pass
 
 
 def round_avatar(image, size):

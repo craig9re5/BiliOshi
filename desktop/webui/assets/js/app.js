@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"78edc8023306e1b30ac7029ab1569b082181effa390dae380a1e13bba72336ed","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"70e8ae9d8ac499cd20fb81597750ff64b5a9e308ce46fbbacea748f6e7564552"} */
+/* BiliOshi JSX {"code_sha256":"75bc96f4c9b3513d6a3387118f0ecb02777c029cb3cf86b9895fd727ace368a5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"29cc3cfe2db0ba934b3323e63c4f3269a31179ab667a15a31d460a2591e7a1ac"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -46,6 +46,7 @@ const Sidebar = ({
   page,
   onPage,
   account,
+  avatar,
   onLogs,
   onQuit,
   brandHidden,
@@ -103,7 +104,10 @@ const Sidebar = ({
   title: "\u8D26\u53F7\u7BA1\u7406"
 }, /*#__PURE__*/React.createElement("span", {
   className: "sidebar-avatar"
-}, Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("span", {
+}, avatar ? /*#__PURE__*/React.createElement("img", {
+  src: avatar,
+  alt: ""
+}) : Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("span", {
   className: "sidebar-account-text"
 }, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")))));
 const pageTitles = {
@@ -117,7 +121,7 @@ const pageTitles = {
   },
   account: {
     title: "账号",
-    sub: "登录与账号保护"
+    sub: ""
   }
 };
 const WindowButtons = () => {
@@ -301,6 +305,8 @@ function App() {
   const [qr, setQr] = useState(null);
   const [menu, setMenu] = useState(null);
   const [images, setImages] = useState({});
+  const [accountAvatar, setAccountAvatar] = useState("");
+  const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
   const latest = useRef(EMPTY_SNAPSHOT);
   const selectionInitialized = useRef(false);
@@ -374,6 +380,10 @@ function App() {
         }
         if (event.type === "qr_state") {
           if (!qrOpen.current) return;
+          if (payload.state === "confirmed") {
+            setAccountAvatar("");
+            setAvatarVersion(value => value + 1);
+          }
           setQr(current => {
             if (!current || current.generation !== payload.generation) return current;
             return {
@@ -429,6 +439,32 @@ function App() {
   const selected = rooms.find(room => room.room === selectedId);
   const account = snap.accountInfo || EMPTY_SNAPSHOT.accountInfo;
   const closing = Boolean(snap.closing);
+
+  // The account avatar is resolved by Python from the signed-in profile; a
+  // failure keeps the letter placeholder and retries once a minute for network
+  // hiccups. A confirmed QR login bumps avatarVersion so a new account reloads.
+  useEffect(() => {
+    if (!connected || !account.signed_in) {
+      setAccountAvatar("");
+      return;
+    }
+    let live = true;
+    let retry = 0;
+    const load = () => {
+      call("account_avatar").then(result => {
+        if (!live) return;
+        if (result?.ok && result.data_uri) setAccountAvatar(result.data_uri);else if (result?.error) retry = window.setTimeout(load, 60000);
+      }).catch(() => {
+        if (live) retry = window.setTimeout(load, 60000);
+      });
+    };
+    load();
+    return () => {
+      live = false;
+      window.clearTimeout(retry);
+    };
+  }, [connected, account.signed_in, account.name, avatarVersion]);
+  const chromeSub = page === "monitor" ? snap.checking ? "正在检查直播状态…" : snap.last_check ? `${relativeTime(snap.last_check)}检查` : "" : pageTitles[page].sub;
   const invoke = async (method, args = [], success = "") => {
     try {
       const result = await call(method, ...args);
@@ -710,6 +746,7 @@ function App() {
     page: page,
     onPage: setPage,
     account: account,
+    avatar: accountAvatar,
     onLogs: () => invoke("open_logs"),
     onQuit: () => setDialog({
       type: "quit"
@@ -737,9 +774,9 @@ function App() {
     "aria-hidden": "true"
   }), /*#__PURE__*/React.createElement("h1", {
     className: "chrome-title"
-  }, pageTitles[page].title), /*#__PURE__*/React.createElement("span", {
+  }, pageTitles[page].title), chromeSub && /*#__PURE__*/React.createElement("span", {
     className: "chrome-sub"
-  }, page === "monitor" ? snap.checking ? "正在检查直播状态…" : snap.last_check ? `${relativeTime(snap.last_check)}检查` : "" : pageTitles[page].sub), /*#__PURE__*/React.createElement("span", {
+  }, chromeSub), /*#__PURE__*/React.createElement("span", {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("div", {
     className: "chrome-actions"
@@ -781,6 +818,7 @@ function App() {
     pendingSettings: pendingSettings
   }), page === "account" && /*#__PURE__*/React.createElement(window.AccountPage, {
     account: account,
+    avatar: accountAvatar,
     onScan: openQr,
     onLogout: () => setDialog({
       type: "logout"

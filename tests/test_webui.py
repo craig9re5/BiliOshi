@@ -50,6 +50,19 @@ class WebUiTests(unittest.TestCase):
         self.assertTrue(cached["engine_busy"])
         self.assertEqual(cached["rows"][0]["name"], "测试主播")
 
+    def test_avatar_refresh_failure_falls_back_to_the_cached_image(self):
+        from PIL import Image
+
+        path = self.root / "cache/avatars/9.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (8, 8), "#2d6763").save(path)
+        stale = time.time() - 2 * 86400
+        os.utime(path, (stale, stale))
+        with patch("desktop.avatars._read", side_effect=OSError("network down")):
+            result = self.api.avatar(9)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["data_uri"].startswith("data:image/png;base64,"))
+
     def test_account_avatar_uses_only_the_server_side_public_profile(self):
         from PIL import Image
 

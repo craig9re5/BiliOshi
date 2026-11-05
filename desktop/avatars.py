@@ -46,6 +46,13 @@ def _read(url, limit):
     return body
 
 
+def _cached_avatar(path):
+    from PIL import Image
+
+    with Image.open(path) as image:
+        return image.convert("RGBA")
+
+
 def load_avatar(root, uid, url=""):
     from PIL import Image, ImageOps
     uid = int(uid)
@@ -53,28 +60,38 @@ def load_avatar(root, uid, url=""):
         raise ValueError("Invalid avatar UID")
     path = root / "cache" / "avatars" / f"{uid}.png"
     if path.exists() and time.time() - path.stat().st_mtime < CACHE_SECONDS:
-        with Image.open(path) as image:
-            return image.convert("RGBA")
-    url = avatar_url(url)
-    if not url:
-        body = json.loads(_read(
-            f"https://api.live.bilibili.com/live_user/v1/Master/info?uid={uid}", MAX_BYTES
-        ))
-        url = avatar_url(((body.get("data") or {}).get("info") or {}).get("face"))
-    if not url:
-        raise ValueError("Public avatar unavailable")
+        try:
+            return _cached_avatar(path)
+        except (OSError, ValueError):
+            pass  # A damaged cache should be replaced by a fresh download.
     try:
-        with Image.open(io.BytesIO(_read(url, MAX_BYTES))) as image:
-            if image.width * image.height > 4096 * 4096:
-                raise ValueError("Avatar dimensions too large")
-            thumbnail = ImageOps.fit(image.convert("RGB"), (128, 128), Image.Resampling.LANCZOS)
-    except Image.DecompressionBombError as exc:
-        raise ValueError("Avatar dimensions too large") from exc
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    thumbnail.save(temporary, format="PNG")
-    temporary.replace(path)
-    return thumbnail.convert("RGBA")
+        url = avatar_url(url)
+        if not url:
+            body = json.loads(_read(
+                f"https://api.live.bilibili.com/live_user/v1/Master/info?uid={uid}", MAX_BYTES
+            ))
+            url = avatar_url(((body.get("data") or {}).get("info") or {}).get("face"))
+        if not url:
+            raise ValueError("Public avatar unavailable")
+        try:
+            with Image.open(io.BytesIO(_read(url, MAX_BYTES))) as image:
+                if image.width * image.height > 4096 * 4096:
+                    raise ValueError("Avatar dimensions too large")
+                thumbnail = ImageOps.fit(image.convert("RGB"), (128, 128), Image.Resampling.LANCZOS)
+        except Image.DecompressionBombError as exc:
+            raise ValueError("Avatar dimensions too large") from exc
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        thumbnail.save(temporary, format="PNG")
+        temporary.replace(path)
+        return thumbnail.convert("RGBA")
+    except (OSError, ValueError, KeyError, TypeError):
+        # A transient proxy/network outage must not erase a working avatar.
+        # Serve the last known image and refresh on a later request.
+        if path.exists():
+            logging.info("Avatar refresh failed for UID %s; using the cached copy", uid)
+            return _cached_avatar(path)
+        raise
 
 
 ACCOUNT_PROFILE = "state/account-avatar.json"

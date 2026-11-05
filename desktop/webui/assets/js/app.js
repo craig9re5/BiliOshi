@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"6b9e4bf95e5498e8e6ae6cdc3c10f744d3bdd20c76fc249489348e8692f755b8","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"21a032d358191cf408037958f96bde2489438d42851aed0602d0ac24aa3c5540"} */
+/* BiliOshi JSX {"code_sha256":"8c4c25ab1537fe6dc399141c1de495be603c85140e577b7cc8e5b1c4c3d67976","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"d7c2c892207f01f6d14a001c77234cc033096619b294c1c12dad06e0d3f4ec8c"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -323,6 +323,7 @@ function App() {
   const qrRequest = useRef(0);
   const qrOpen = useRef(false);
   const avatarPending = useRef(new Set());
+  const avatarRetry = useRef({});
   const toastTimers = useRef(new Set());
   const userSelected = useRef(null);
   const toast = useCallback((text, tone = "info") => {
@@ -427,15 +428,28 @@ function App() {
   }, [snap.rows, selectedId]);
   useEffect(() => {
     if (!connected || !snap.accountInfo?.signed_in) return;
+    const now = Date.now();
     for (const row of snap.rows || []) {
       if (!row.uid || images[row.uid] || avatarPending.current.has(row.uid)) continue;
+      if (now < (avatarRetry.current[row.uid] || 0)) continue;
       avatarPending.current.add(row.uid);
       call("avatar", row.uid).then(result => {
-        if (result?.ok && result.data_uri && alive.current) setImages(items => ({
-          ...items,
-          [row.uid]: result.data_uri
-        }));
-      }).catch(() => {});
+        avatarPending.current.delete(row.uid);
+        if (result?.ok && result.data_uri && alive.current) {
+          delete avatarRetry.current[row.uid];
+          setImages(items => ({
+            ...items,
+            [row.uid]: result.data_uri
+          }));
+        } else {
+          avatarRetry.current[row.uid] = Date.now() + 60000;
+        }
+      }).catch(() => {
+        // A failed request must release the slot or the room keeps its letter
+        // placeholder until the whole app restarts.
+        avatarPending.current.delete(row.uid);
+        avatarRetry.current[row.uid] = Date.now() + 60000;
+      });
     }
   }, [snap.rows, connected, images]);
   const rooms = (snap.rows || []).map(row => toRoom(row, snap));

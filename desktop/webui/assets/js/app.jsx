@@ -137,6 +137,7 @@ function App() {
   const qrRequest = useRef(0);
   const qrOpen = useRef(false);
   const avatarPending = useRef(new Set());
+  const avatarRetry = useRef({});
   const toastTimers = useRef(new Set());
   const userSelected = useRef(null);
 
@@ -220,12 +221,25 @@ function App() {
 
   useEffect(() => {
     if (!connected || !snap.accountInfo?.signed_in) return;
+    const now = Date.now();
     for (const row of snap.rows || []) {
       if (!row.uid || images[row.uid] || avatarPending.current.has(row.uid)) continue;
+      if (now < (avatarRetry.current[row.uid] || 0)) continue;
       avatarPending.current.add(row.uid);
       call("avatar", row.uid).then((result) => {
-        if (result?.ok && result.data_uri && alive.current) setImages((items) => ({ ...items, [row.uid]: result.data_uri }));
-      }).catch(() => {});
+        avatarPending.current.delete(row.uid);
+        if (result?.ok && result.data_uri && alive.current) {
+          delete avatarRetry.current[row.uid];
+          setImages((items) => ({ ...items, [row.uid]: result.data_uri }));
+        } else {
+          avatarRetry.current[row.uid] = Date.now() + 60000;
+        }
+      }).catch(() => {
+        // A failed request must release the slot or the room keeps its letter
+        // placeholder until the whole app restarts.
+        avatarPending.current.delete(row.uid);
+        avatarRetry.current[row.uid] = Date.now() + 60000;
+      });
     }
   }, [snap.rows, connected, images]);
 

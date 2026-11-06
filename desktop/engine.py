@@ -33,14 +33,21 @@ def command(*args):
 
 class Engine:
 
-    def __init__(self, root, *, job=None):
+    def __init__(self, root, *, job=None, account_id=""):
         self.root = root
+        self.account_id = str(account_id or "")
         self.application = AppContext(root)
         from bilioshi.notifications import AVAILABLE
         self.notifications = DailyNotifications(root) if AVAILABLE and DailyNotifications else None
         self.lock = threading.RLock()
         self.stopping = threading.Event()
         self.job = job if job is not None else Job()
+        self.suspended = False
+        self.generation = 0
+        self.probe_generation = 0
+        self.force_probe = False
+        self._started = False
+        self._notifications_started = False
         self.workers = {}
         self.worker_health = {}
         self.worker_retries = {}
@@ -79,15 +86,29 @@ class Engine:
         self.thread = threading.Thread(target=self.run, name="monitor", daemon=True)
 
     def start(self):
+        if self._started:
+            return
+        self._started = True
         logging.info(
-            "Engine starting members=%s paused=%s check_minutes=%s",
+            "Engine starting account=%s members=%s paused=%s check_minutes=%s",
+            self.account_id,
             len(self.members),
             self.paused,
             self.config.get("check_minutes"),
         )
-        if self.notifications is not None:
-            self.notifications.start()
+        if not self.suspended:
+            self._start_notifications()
         self.thread.start()
+
+    def _start_notifications(self):
+        if self.notifications is not None and not self._notifications_started:
+            self.notifications.start()
+            self._notifications_started = True
+
+    def _stop_notifications(self):
+        if self.notifications is not None and self._notifications_started:
+            self.notifications.stop()
+            self._notifications_started = False
 
     def confirm_account(self, name):
         """A freshly validated QR login is authoritative until the next probe."""
@@ -237,9 +258,61 @@ class Engine:
             self.next_check = 0
             self.force_probe = True
 
+    def suspend(self, reason="account_suspended"):
+        """Stop this account's IO but keep its Engine, thread and Job alive."""
+        with self.lock:
+            if self.suspended:
+                return
+            self.suspended = True
+            self.generation += 1
+            self.force_probe = False
+            self._stop_notifications()
+            self.stop_children(reason)
+            try:
+                self._write_last_snapshot()
+            except (OSError, ValueError):
+                logging.exception("Cannot write last account snapshot")
+            try:
+                self.persist()
+            except (OSError, ValueError):
+                logging.exception("Cannot persist suspended account status")
+            logging.info("Engine suspended account=%s reason=%s", self.account_id, reason)
+
+    def activate(self):
+        """Resume a suspended Engine without rebuilding it or reading a QR code."""
+        with self.lock:
+            if not self.suspended:
+                self.next_check = 0
+                self.force_probe = True
+                return
+            self.suspended = False
+            self.generation += 1
+            self.next_check = 0
+            self.force_probe = True
+            try:
+                self.reload_settings()
+            except (OSError, ValueError):
+                self.suspended = True
+                raise
+            self._start_notifications()
+            self.persist()
+            logging.info("Engine activated account=%s", self.account_id)
+
+    def _write_last_snapshot(self):
+        snapshot = self.snapshot()
+        snapshot.update({
+            "account_id": self.account_id,
+            "active": False,
+            "stale": True,
+            "suspended": True,
+        })
+        write_json(self.root / "state" / "last-snapshot.json", snapshot)
+
     def reconnect_room(self, room):
         """Replace only the selected worker, after a fresh live-status probe."""
         with self.lock:
+            if self.suspended:
+                return False, "账号当前未运行，请先切换到此账号。"
             if not any(member["room"] == room for member in self.members):
                 return False, "该直播间已不在关注列表中。"
             self.safety = self.application.safety_status()
@@ -284,9 +357,10 @@ class Engine:
 
     def close(self):
         self.stopping.set()
-        if self.notifications is not None:
-            self.notifications.stop()
+        self._stop_notifications()
         with self.lock:
+            self.suspended = True
+            self.generation += 1
             self.stop_children("exited")
             self.job.close()
             self.persist(exited=True)
@@ -294,7 +368,7 @@ class Engine:
             self.thread.join(timeout=5)
         # This runs in the control executor, not Tk. Finish any accepted IO before exit.
         if self.notifications is not None:
-            self.notifications.join()
+            self.notifications.join(timeout=5)
 
     def _read_room_state(self, room):
         try:
@@ -319,6 +393,11 @@ class Engine:
         try:
             states = {m["room"]: self._read_room_state(m["room"]) for m in self.members}
             result = project_snapshot(self, states, time.time())
+            result.update({
+                "account_id": self.account_id,
+                "suspended": self.suspended,
+                "generation": self.generation,
+            })
             if self.publish_error:
                 result["error"] = "运行快照发布失败：" + self.publish_error
             return result
@@ -410,6 +489,8 @@ class Engine:
                 self.next_check = min(self.next_check, now + max(0, retry["until"] - clock))
 
     def tick(self):
+        if self.suspended:
+            return
         self.reload_settings()
         now = time.time()
         self.safety = self.application.safety_status()
@@ -438,14 +519,17 @@ class Engine:
                 self.probe_path.unlink(missing_ok=True)
                 self.probe = None
                 self.last_check = now
-                self._apply_probe(result, now)
+                if self.probe_generation == self.generation:
+                    self._apply_probe(result, now)
         if (
-            not self.probe
+            not self.suspended
+            and not self.probe
             and now >= self.next_check
             and (not self.paused or getattr(self, "force_probe", False))
         ):
             self.force_probe = False
             self.probe_path = self.root / "state" / f"probe-{uuid.uuid4().hex}.json"
+            self.probe_generation = self.generation
             try:
                 self.probe = self.spawn("--probe", str(self.probe_path))
             except OSError:
@@ -463,6 +547,8 @@ class Engine:
             self.stopping.wait(1)
 
     def _apply_probe(self, result, now):
+        if self.suspended:
+            return
         message = result.get("error") or result.get("warning", "")
         if message and message != self.error:
             logging.warning("Status check reported: %s", message)
@@ -531,7 +617,8 @@ class Engine:
                     logging.info("Room went offline room=%s name=%s", member["room"], member["name"])
                 self.known_live.discard(member["room"])
             if (
-                not self.paused
+                not self.suspended
+                and not self.paused
                 and not self.safety.get("blocked")
                 and status
                 and (status.get("live_status") == 1)

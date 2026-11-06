@@ -28,7 +28,13 @@ class WebHost:
     def __init__(self, engine, *, show=True):
         from .api import Api
 
-        self._engine = engine
+        # The host owns the install root; an Engine may still be passed directly
+        # for the legacy single-root entry point.
+        self._host = (
+            engine if hasattr(engine, "active_engine") and hasattr(engine, "store") else None
+        )
+        self._engine = self._host.active_engine() if self._host is not None else engine
+        self._host_root = Path(engine.root) if self._host is not None else Path(engine.root)
         self._window = None
         self._tray = None
         self._show = show
@@ -69,8 +75,11 @@ class WebHost:
             self._window.events.closed += self._on_closed
             self._window.events.loaded += self._on_loaded
             self._start_tray()
-            self._engine.notify_callback = lambda name, title: self._commands.put(("notify", name, title))
-            self._engine.start()
+            self._bind_notify()
+            if self._engine is not None:
+                self._engine.start()
+            elif self._host is not None:
+                self._host.start()
             self._pump_thread = threading.Thread(target=self._pump, name="web-push", daemon=True)
             self._pump_thread.start()
             if login:
@@ -81,6 +90,13 @@ class WebHost:
             self._closed.wait()
             if self._pump_thread is not None and self._pump_thread is not threading.current_thread():
                 self._pump_thread.join(timeout=5)
+
+    def _bind_notify(self):
+        """Route live notifications from whichever account is currently active."""
+        engine = self._engine
+        if engine is None:
+            return
+        engine.notify_callback = lambda name, title: self._commands.put(("notify", name, title))
 
     def _on_loaded(self):
         # loaded/shown can fire before React has created window.LS. The pump
@@ -253,7 +269,7 @@ class WebHost:
             if explicit:
                 from desktop.supervisor import request_stop
 
-                request_stop(self._engine.root)
+                request_stop(self._host_root)
             if self._shutdown_thread is not None:
                 return True
             self._closing.set()
@@ -268,13 +284,17 @@ class WebHost:
             # Stop Engine/Job before waiting for potentially long manual IO.
             # The bridge already cancelled QR generations and rejects new work.
             try:
-                self._engine.close()
+                if self._host is not None:
+                    self._host.close()
+                elif self._engine is not None:
+                    self._engine.close()
             except Exception:
                 logging.exception("Engine shutdown failed")
-                try:
-                    self._engine.job.close()
-                except Exception:
-                    logging.exception("Worker job cleanup failed")
+                if self._engine is not None:
+                    try:
+                        self._engine.job.close()
+                    except Exception:
+                        logging.exception("Worker job cleanup failed")
             self._api._wait_for_io()
             self._control.shutdown(wait=True, cancel_futures=True)
         finally:
@@ -343,12 +363,14 @@ class WebHost:
         return self._window.evaluate_js(script)
 
     def apply_settings(self):
-        self._engine.reload_settings()
+        engine = self._engine
+        if engine is not None:
+            engine.reload_settings()
         self.emit("settings_changed", self._api.settings())
         self.push_now()
 
     def _read_commands(self):
-        for path in sorted((self._engine.root / "commands").glob("*.json")):
+        for path in sorted((self._host_root / "commands").glob("*.json")):
             try:
                 request = read_json(path, {})
                 if not isinstance(request, dict):
@@ -395,7 +417,8 @@ class WebHost:
             elif command in {"pause", "resume", "toggle", "check", "logs"}:
                 operation = {
                     "pause": lambda: self._api.set_paused(True), "resume": lambda: self._api.set_paused(False),
-                    "toggle": self._api.toggle_pause, "check": self._api.check_now, "logs": self._api.open_logs,
+                    "toggle": self._api.toggle_pause, "check": self._api.check_now,
+                    "logs": lambda: self._api.open_logs(),
                 }[command]
                 self._submit_control(command, operation)
 
@@ -424,6 +447,12 @@ class WebHost:
                 self._pending_controls.discard(key)
                 logging.exception("Desktop command was not submitted")
 
+    def _paused(self):
+        engine = self._engine
+        if engine is None:
+            return False
+        return bool(engine.paused)
+
     def _start_tray(self):
         try:
             import pystray
@@ -435,7 +464,7 @@ class WebHost:
 
             menu = pystray.Menu(
                 item("查看状态", "show", default=True),
-                item(lambda _: "恢复挂机" if self._engine.paused else "暂停挂机", "toggle"),
+                item(lambda _: "恢复挂机" if self._paused() else "暂停挂机", "toggle"),
                 item("立即检查", "check"), item("处理账号保护暂停", "safety"),
                 item("添加主播", "add_member"), item("同步粉丝牌", "sync_medals"),
                 item("系统设置", "settings"), item("账号登录", "login"), item("查看日志", "logs"),
@@ -494,7 +523,20 @@ class WebHost:
         active = sum(bool(row.get("heartbeat_healthy")) for row in rows)
         warnings = bool(snap.get("error") or snap.get("ui_error") or any(
             row.get("connection_warning") or row.get("watch_warning") for row in rows))
-        title = "需要处理" if warnings else "已暂停" if snap.get("paused") else f"{active} 个直播间挂机中" if active else "等待开播"
+        accounts = snap.get("accounts") or []
+        running = sum(1 for row in accounts if row.get("running"))
+        if snap.get("global_paused"):
+            title = "全部暂停"
+        elif warnings:
+            title = "需要处理"
+        elif snap.get("paused"):
+            title = "已暂停"
+        elif running > 1:
+            title = f"{running} 个账号挂机中"
+        elif active:
+            title = f"{active} 个直播间挂机中"
+        else:
+            title = "等待开播"
         self._tray.title = "BiliOshi · " + title
         color = "#f2ab55" if warnings else "#9ca9af" if snap.get("paused") else "#63d4b2"
         if color != self._last_tray_color:
@@ -512,13 +554,14 @@ class WebHost:
             self._watch_notice_day = day
             self._watch_notices.clear()
         # Match TrayUI: a neutral watch_note (rotation) is never a warning.
+        account_id = snap.get("active_account_id") or ""
         for row in snap.get("rows", []):
             connection = row.get("connection_warning")
             warning = connection or row.get("watch_warning")
             if not warning:
                 continue
             watch = row.get("watch_progress", {})
-            key = (row["room"], row.get("session_id") or row.get("started"),
+            key = (account_id, row["room"], row.get("session_id") or row.get("started"),
                    ("connection", row.get("last_heartbeat")) if connection else
                    (watch.get("status"), watch.get("warning_since")))
             if key in self._watch_notices:

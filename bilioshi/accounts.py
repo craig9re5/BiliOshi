@@ -32,6 +32,7 @@ REGISTRY_VERSION = 1
 ACCOUNT_MARKER = "account.json"
 ACCOUNT_ROOT = "accounts"
 RETAINED_ROOT = "accounts/.retained"
+ALL_ACCOUNTS = "all"
 VALID_STATUSES = {"ok", "needs_login", "blocked"}
 VALID_MODES = {"single", "concurrent"}
 _ID_PATTERN = re.compile(r"^uid-([1-9][0-9]*)$")
@@ -163,7 +164,7 @@ class AccountStore:
         view = value.get("view")
         if active is not None and active not in ids:
             raise AccountStoreError("当前账号不在注册表中")
-        if view is not None and view not in ids:
+        if view is not None and view != ALL_ACCOUNTS and view not in ids:
             raise AccountStoreError("查看账号不在注册表中")
         return {
             "version": REGISTRY_VERSION,
@@ -414,7 +415,7 @@ class AccountStore:
         self._mutate(change)
 
     def set_view(self, account_id):
-        if account_id is not None:
+        if account_id is not None and account_id != ALL_ACCOUNTS:
             self.get(account_id)
 
         def change(state):

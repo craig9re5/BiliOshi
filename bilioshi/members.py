@@ -27,8 +27,11 @@ def load_account_members(root):
     from pathlib import Path
     from .runtime import read_json
 
+    path = Path(root) / "members.json"
+    if not path.exists():
+        return []
     try:
-        members = read_json(Path(root) / "members.json", [])
+        members = read_json(path, [])
         return validate_members(members)
     except (OSError, ValueError, TypeError):
         logging.warning("Account members file is unreadable; refusing to seed defaults")

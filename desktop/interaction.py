@@ -10,6 +10,8 @@ def action_reason(snap, row, action, pending=False, now=None):
         return "请先选择主播。"
     if action == "open":
         return ""
+    if snap.get("inactive"):
+        return "此账号当前未运行，切换到该账号后才能执行操作。"
     if snap.get("closing"):
         return "正在退出，当前不接受新操作。"
     if pending:
@@ -51,6 +53,12 @@ def recovery_route(snap):
     hold = snap.get("safety", {})
     if snap.get("ui_error"):
         return {"action": "refresh", "label": "重试界面", "message": snap["ui_error"] + "；也可查看活动记录。"}
+    if snap.get("inactive"):
+        return {
+            "action": "switch",
+            "label": "切换到此账号",
+            "message": "此账号当前未运行，显示的是上次运行的数据。",
+        }
     if hold.get("blocked"):
         if hold.get("kind") in ("auth", "credentials"):
             return {"action": "login", "label": "重新扫码登录", "message": hold.get("reason", "登录失效，请扫码恢复。")}

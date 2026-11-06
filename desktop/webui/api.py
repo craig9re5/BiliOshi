@@ -95,7 +95,12 @@ class Api:
     """Exposed as window.pywebview.api; public members are endpoints only."""
 
     def __init__(self, engine, ui):
-        self._engine, self._ui, self._root = engine, ui, Path(engine.root)
+        self._host = engine if hasattr(engine, "active_engine") and hasattr(engine, "store") else None
+        self._host_root = Path(engine.root)
+        self._store = self._host.store if self._host is not None else None
+        self._engine = self._host.active_engine() if self._host is not None else engine
+        self._ui = ui
+        self._root = Path(self._engine.root) if self._engine is not None else self._host_root
         self._mutations = threading.RLock()
         self._control_mutations = threading.RLock()
         self._state = threading.Condition(threading.RLock())
@@ -116,9 +121,68 @@ class Api:
         self._qr_generation = 0
         self._qr_session = None
         self._qr_cancel_event = None
+        self._qr_target = None
+
+    def _sync_active(self):
+        if self._host is None:
+            return
+        engine = self._host.active_engine()
+        if engine is self._engine:
+            return
+        self._engine = engine
+        self._root = Path(engine.root) if engine is not None else self._host_root
+        with self._cache_lock:
+            self._last_snapshot = None
+            self._settings_signature = object()
+            self._settings_cache = {}
+            self._credentials_signature = object()
+            self._credentials_cache = (False, "")
+            self._medals_cache = None
+            self._avatars.clear()
+
+    def _active_account_id(self):
+        if self._host is not None:
+            return self._host.active_id
+        return getattr(self._engine, "account_id", "") or ""
+
+    def _view_account_id(self):
+        if self._host is not None:
+            return self._host.view_id
+        return self._active_account_id()
+
+    def _account_root(self, account_id=None):
+        account_id = account_id or self._view_account_id()
+        if self._store is not None and account_id:
+            try:
+                return self._store.account_root(account_id)
+            except Exception:
+                pass
+        return self._root
+
+    def _view_is_active(self):
+        if self._host is None:
+            return True
+        return self._host.view_id in (None, self._host.active_id)
+
+    def _empty_snapshot(self):
+        return {
+            "account": "",
+            "account_confirmed": False,
+            "account_checked_at": 0,
+            "paused": False,
+            "safety": {"blocked": False},
+            "rows": [],
+            "checking": False,
+            "error": "",
+            "active": False,
+            "inactive": True,
+        }
 
     # Snapshot construction never waits for the Engine's monitor/control lock.
     def snapshot(self):
+        self._sync_active()
+        if self._host is not None:
+            return self._multi_snapshot()
         busy, failed = True, False
         if self._snapshot_lock.acquire(blocking=False):
             try:
@@ -163,23 +227,175 @@ class Api:
         snap["notifications"] = {"available": False}
         return _public(snap)
 
-    def settings(self):
-        with self._cache_lock:
-            signature = (_signature(self._root / "settings.json"), _signature(self._root / "members.json"))
-            if signature != self._settings_signature:
-                config, _ = load_config(self._root)
-                value = {key: config.get(key, False) for key in _SETTING_FLAGS}
-                value["run_mode"] = config.get("run_mode", "stable")
-                value["check_minutes"] = profile_for(value["run_mode"]).check_minutes
-                try:
-                    from desktop.windows import is_autostart_enabled
+    def _read_settings(self, root):
+        config, _ = load_config(root)
+        value = {key: config.get(key, False) for key in _SETTING_FLAGS}
+        value["run_mode"] = config.get("run_mode", "stable")
+        value["check_minutes"] = profile_for(value["run_mode"]).check_minutes
+        try:
+            from desktop.windows import is_autostart_enabled
 
-                    value["autostart"] = bool(is_autostart_enabled())
-                except Exception:
-                    logging.exception("Cannot read Windows autostart status")
+            value["autostart"] = bool(is_autostart_enabled())
+        except Exception:
+            logging.exception("Cannot read Windows autostart status")
+        return value
+
+    def settings(self, account_id=None):
+        root = self._account_root(account_id) if account_id else self._root
+        if self._store is not None and not (root / "settings.json").exists():
+            from desktop.storage import initialize
+
+            initialize(root, [])
+        if account_id and self._store is not None and account_id != self._active_account_id():
+            return self._read_settings(root)
+        with self._cache_lock:
+            signature = (_signature(root / "settings.json"), _signature(root / "members.json"))
+            if signature != self._settings_signature:
+                value = self._read_settings(root)
                 self._settings_cache = value
                 self._settings_signature = signature
             return dict(self._settings_cache)
+
+    def _summary_public(self, summary):
+        value = {key: summary.get(key) for key in (
+            "id", "uid", "name", "face", "created_at", "last_used_at",
+            "last_checked_at", "status", "watch_enabled", "credential_token",
+            "signed_in", "running", "paused", "state", "room_count",
+            "live_room_count", "snapshot_at", "stale", "safety", "account",
+        )}
+        return _public(value)
+
+    def _multi_snapshot(self):
+        busy, failed = True, False
+        fresh = None
+        if self._engine is not None and self._snapshot_lock.acquire(blocking=False):
+            try:
+                try:
+                    fresh = self._engine.snapshot(blocking=False)
+                    if fresh is not None:
+                        with self._cache_lock:
+                            self._last_snapshot = copy.deepcopy(fresh)
+                        busy = False
+                except Exception:
+                    logging.exception("Web snapshot failed")
+                    failed = True
+            finally:
+                self._snapshot_lock.release()
+        with self._cache_lock:
+            snap = (copy.deepcopy(self._last_snapshot)
+                    if self._last_snapshot is not None else self._empty_snapshot())
+        with self._state:
+            controls = copy.deepcopy(self._controls)
+            rooms = copy.deepcopy(self._room_operations)
+            ui_error = self._ui_error
+        if failed:
+            ui_error = "界面刷新失败，正在自动重试。"
+        snap.update(
+            schema=2,
+            active_account_id=self._host.active_id,
+            view_account_id=self._host.view_id,
+            mode=self._store.mode,
+            global_paused=self._host.global_paused,
+            active=snap.get("active", bool(self._host.active_id)),
+            inactive=False,
+            engine_busy=busy,
+            closing=self._closing.is_set(),
+            ui_error=ui_error,
+        )
+        snap["accounts"] = [self._summary_public(item) for item in self._host.summaries()]
+        try:
+            snap["settings"] = self.settings()
+        except Exception:
+            logging.exception("Web settings read failed")
+            snap["settings"] = dict(self._settings_cache)
+            snap["ui_error"] = "设置无法读取，请检查本机配置后重试界面。"
+        snap["accountInfo"] = self._account_info(snap)
+        snap["operations"] = {
+            "controls": controls,
+            "rooms": {str(key): value for key, value in rooms.items()},
+        }
+        for row in snap.get("rows", []):
+            row["account_id"] = self._host.active_id or ""
+            operation = rooms.get(row.get("room"), {})
+            row["operation"] = operation
+            row["actions"] = {
+                action: self._room_reason(snap, row, action, operation.get("pending", False))
+                for action in ("open", "redo", "reconnect", "wear", "remove")
+            }
+        snap["recovery"] = recovery_route(snap)
+        snap["notifications"] = {"available": False}
+        if self._host.view_id and self._host.view_id != self._host.active_id:
+            snap["view"] = self._view_snapshot(self._host.view_id)
+        return _public(snap)
+
+    def _view_snapshot(self, account_id):
+        root = self._store.account_root(account_id)
+        try:
+            status = read_json(root / "state/last-snapshot.json", {})
+            if not isinstance(status, dict) or not status.get("rows"):
+                status = read_json(root / "status.json", {})
+        except (OSError, ValueError):
+            status = {}
+        if not isinstance(status, dict):
+            status = {}
+        summary = self._host.account_summary(account_id)
+        try:
+            settings = self._read_settings(root)
+        except (OSError, ValueError):
+            settings = {key: False for key in _SETTING_FLAGS}
+            settings["run_mode"] = "stable"
+            settings["check_minutes"] = 5
+        rows = copy.deepcopy(status.get("rows") or [])
+        for row in rows:
+            row.update(
+                account_id=account_id,
+                active=False,
+                live_status=None,
+                status_stale=True,
+                tasks_stale=True,
+                inactive=True,
+            )
+        hold = status.get("safety")
+        if not isinstance(hold, dict):
+            hold = {"blocked": False}
+        if summary.get("state") == "protection" and not hold.get("blocked"):
+            hold = {"blocked": True, "kind": "review", "reason": "账号保护暂停"}
+        view = {
+            **self._empty_snapshot(),
+            **status,
+            "schema": 2,
+            "account_id": account_id,
+            "account": status.get("account") or summary.get("name", ""),
+            "account_confirmed": bool(status.get("account_checked_at") or summary.get("account")),
+            "account_checked_at": status.get("account_checked_at", 0),
+            "paused": bool(settings.get("paused")),
+            "safety": hold,
+            "rows": rows,
+            "settings": _public(settings),
+            "accountInfo": {
+                "signed_in": summary.get("signed_in", False),
+                "name": summary.get("name", ""),
+                "confirmed": bool(status.get("account")),
+                "checked_at": status.get("account_checked_at", 0),
+                "safety": hold,
+                "credentials_error": "",
+            },
+            "operations": {"controls": {}, "rooms": {}},
+            "active": False,
+            "inactive": True,
+            "engine_busy": False,
+            "closing": self._closing.is_set(),
+            "ui_error": "",
+            "notifications": {"available": False},
+        }
+        for row in view["rows"]:
+            row["operation"] = {}
+            row["actions"] = {
+                action: self._room_reason(view, row, action, False)
+                for action in ("open", "redo", "reconnect", "wear", "remove")
+            }
+        view["recovery"] = recovery_route(view)
+        return _public(view)
 
     def _credentials_present(self):
         # Inspect only the protected envelope/presence. Refreshing a page must not
@@ -221,6 +437,64 @@ class Api:
             return self.snapshot()["accountInfo"]
         return _public(self._account_info(snap))
 
+    def set_view_account(self, account_id):
+        if self._host is None:
+            return {"ok": False, "error": "当前版本只支持单账号。"}
+        try:
+            self._host.view(account_id)
+        except Exception:
+            return {"ok": False, "error": "账号不存在或已被移除。"}
+        self._ui.push_now()
+        return {"ok": True, "view": self._host.view_id}
+
+    def switch_account(self, account_id):
+        if self._host is None:
+            return {"ok": False, "error": "当前版本只支持单账号。"}
+        try:
+            self._host.switch_to(account_id)
+        except Exception as exc:
+            message = str(exc) if str(exc) else "切换账号失败，请稍后重试。"
+            return {"ok": False, "error": message}
+        self._sync_active()
+        self._ui.push_now()
+        return {"ok": True, "active": self._host.active_id}
+
+    def set_account_paused(self, account_id, paused):
+        if self._host is None:
+            return {"ok": False, "error": "当前版本只支持单账号。"}
+        if type(paused) is not bool:
+            return {"ok": False, "error": "暂停状态必须为 true 或 false。"}
+        try:
+            self._host.set_account_paused(account_id, paused)
+        except Exception:
+            return {"ok": False, "error": "无法保存此账号的暂停状态。"}
+        self._ui.push_now()
+        return {"ok": True, "paused": paused}
+
+    def set_global_paused(self, paused):
+        if self._host is None:
+            return {"ok": False, "error": "当前版本只支持单账号。"}
+        if type(paused) is not bool:
+            return {"ok": False, "error": "暂停状态必须为 true 或 false。"}
+        try:
+            self._host.set_global_paused(paused)
+        except Exception:
+            return {"ok": False, "error": "无法切换全局暂停。"}
+        self._sync_active()
+        self._ui.push_now()
+        return {"ok": True, "global_paused": paused}
+
+    def remove_account(self, account_id):
+        if self._host is None:
+            return {"ok": False, "error": "当前版本只支持单账号。"}
+        try:
+            self._host.remove_account(account_id)
+        except Exception:
+            return {"ok": False, "error": "账号不存在或无法移除。"}
+        self._sync_active()
+        self._ui.push_now()
+        return {"ok": True}
+
     def ready(self):
         try:
             return {"ok": bool(self._ui.renderer_ready())}
@@ -236,7 +510,13 @@ class Api:
 
     # Room writes and controls have separate serial lanes. Reservations happen
     # first so duplicate room actions cannot queue behind a slow network call.
-    def _run(self, kind, operation, *, room=None, policy=None, mutating=True):
+    def _run(self, kind, operation, *, room=None, policy=None, mutating=True,
+             allow_without_engine=False):
+        self._sync_active()
+        if self._engine is None and not allow_without_engine:
+            return {"ok": False, "error": "当前没有正在运行的账号。"}
+        if room is not None and self._host is not None and not self._view_is_active():
+            return {"ok": False, "error": "此账号当前未运行，切换到该账号后才能执行操作。"}
         with self._state:
             if self._closing.is_set():
                 return {"ok": False, "error": "正在退出，当前不接受新操作。"}
@@ -300,13 +580,24 @@ class Api:
             return {"ok": False, "error": "直播间编号无效，请重新选择主播。"}
         return self._run(kind, operation, room=room)
 
-    def save_settings(self, changes):
+    def save_settings(self, changes, account_id=None):
         if not isinstance(changes, dict) or set(changes) - {*_SETTING_FLAGS, "run_mode", "check_minutes"}:
             return {"ok": False, "error": "设置格式无效，请重新打开设置。"}
         for key in _SETTING_FLAGS:
             if key in changes and type(changes[key]) is not bool:
                 return {"ok": False, "error": "设置开关必须为 true 或 false。"}
+        target_id = account_id or self._view_account_id() or self._active_account_id()
+        try:
+            target_root = self._account_root(target_id) if target_id else self._root
+            if target_id and self._store is not None:
+                self._store.get(target_id)
+        except Exception:
+            return {"ok": False, "error": "账号不存在或已被移除。"}
         payload = dict(changes)
+        app_autostart = payload.pop("autostart", None)
+        if self._store is None and app_autostart is not None:
+            # Legacy single-root settings historically stored this flag too.
+            payload["autostart"] = app_autostart
         if "run_mode" in payload and (
             not isinstance(payload["run_mode"], str) or payload["run_mode"] not in PROFILES
         ):
@@ -322,37 +613,48 @@ class Api:
             payload["check_minutes"] = profile_for(payload["run_mode"]).check_minutes
 
         def save():
+            if self._store is not None and not (target_root / "settings.json").exists():
+                from desktop.storage import initialize
+
+                initialize(target_root, [])
+
             def change(_):
                 # Normalize legacy danmaku/live_likes before removing their keys.
-                config, _members = load_config(self._root)
+                config, _members = load_config(target_root)
+                if self._store is not None:
+                    config.pop("autostart", None)
                 return {**config, **payload}
 
             try:
-                update_json(self._root / "settings.json", change, {})
+                update_json(target_root / "settings.json", change, {})
             except (OSError, ValueError, RuntimeError):
                 logging.exception("Saving web settings failed")
                 return {"ok": False, "error": "设置未能保存，请检查本机文件权限和配置。"}
             warning = ""
-            if "autostart" in payload:
+            if app_autostart is not None:
                 try:
                     from desktop.windows import set_autostart
 
-                    if not set_autostart(payload["autostart"]):
+                    if not set_autostart(app_autostart):
                         warning = "设置已保存并应用，但 Windows 自启动未能修改。"
                 except Exception:
                     logging.exception("Autostart change failed")
                     warning = "设置已保存并应用，但 Windows 自启动未能修改。"
-            try:
-                self._ui.apply_settings()
-            except Exception:
-                logging.exception("Applying saved web settings failed")
-                return {"ok": False, "saved": True, "error": "设置已保存，但应用失败，请重试保存或查看活动记录。"}
+            active_id = self._active_account_id()
+            if target_id == active_id:
+                try:
+                    self._ui.apply_settings()
+                except Exception:
+                    logging.exception("Applying saved web settings failed")
+                    return {"ok": False, "saved": True, "error": "设置已保存，但应用失败，请重试保存或查看活动记录。"}
+            else:
+                self._ui.push_now()
             result = {"ok": True}
             if warning:
                 result["warning"] = warning
             return result
 
-        return self._run("settings", save)
+        return self._run("settings", save, allow_without_engine=True)
 
     def set_paused(self, paused):
         if type(paused) is not bool:
@@ -436,9 +738,10 @@ class Api:
             ok = False
         return {"ok": bool(ok), **({} if ok else {"error": "无法打开直播间，请检查默认浏览器。"})}
 
-    def open_logs(self):
+    def open_logs(self, account_id=None):
+        root = self._account_root(account_id) if account_id else self._root
         try:
-            os.startfile(str(self._root / "logs"))
+            os.startfile(str(root / "logs"))
         except (OSError, AttributeError):
             logging.exception("Opening log directory failed")
             return {"ok": False, "error": "无法打开日志目录。"}
@@ -518,68 +821,80 @@ class Api:
 
         return self._run("import", import_selected)
 
-    def avatar(self, uid, url=""):
+    def avatar(self, uid, url="", account_id=None):
         try:
             uid = _positive_id(uid)
         except ValueError:
             return {"ok": False, "error": "主播编号无效。"}
+        target_id = account_id or self._view_account_id()
+        root = self._account_root(target_id)
 
         def fetch():
             # The renderer cannot turn this endpoint into arbitrary URL/UID IO.
-            _config, members = load_config(self._root)
+            try:
+                _config, members = load_config(root)
+            except (OSError, ValueError):
+                return {"ok": False, "error": "账号设置无法读取。"}
             if not any(member.get("uid") == uid for member in members):
                 return {"ok": False, "error": "该主播已不在关注列表中。"}
+            key = (target_id, uid)
             with self._cache_lock:
-                cached = self._avatars.get(uid)
+                cached = self._avatars.get(key)
                 snap = self._last_snapshot or {}
                 public_url = next((row.get("avatar_url", "") for row in snap.get("rows", [])
                                    if row.get("uid") == uid), "")
                 if cached and time.monotonic() - cached[0] < 86400:
-                    self._avatars.move_to_end(uid)
+                    self._avatars.move_to_end(key)
                     return {"ok": True, "data_uri": cached[1]}
             from desktop.avatars import load_avatar
 
-            image = load_avatar(self._root, uid, public_url)
+            image = load_avatar(root, uid, public_url or url)
             try:
                 data_uri = _png_uri(image)
             finally:
                 image.close()
             with self._cache_lock:
-                self._avatars[uid] = time.monotonic(), data_uri
+                self._avatars[key] = time.monotonic(), data_uri
                 while len(self._avatars) > 64:
                     self._avatars.popitem(last=False)
             return {"ok": True, "data_uri": data_uri}
 
-        return self._run(f"avatar:{uid}", fetch, mutating=False)
+        return self._run(f"avatar:{target_id}:{uid}", fetch, mutating=False)
 
-    def account_avatar(self):
-        """The signed-in account's public avatar; the renderer never supplies a UID."""
+    def account_avatar(self, account_id=None):
+        """The requested account's public avatar; the renderer never supplies a UID."""
+        target_id = account_id or self._view_account_id()
+        root = self._account_root(target_id)
+
         def fetch():
             try:
-                present, _error = self._credentials_present()
+                if self._store is not None and target_id:
+                    present = self._store.has_credentials(target_id)
+                else:
+                    present, _error = self._credentials_present()
             except (OSError, ValueError):
                 return {"ok": False}
             if not present:
                 return {"ok": False}
             from desktop.avatars import file_token, load_avatar, read_account_profile, save_account_profile
 
-            binding = file_token(self._root / "credentials.json")
-            profile = read_account_profile(self._root, binding)
-            if not profile:
+            binding = file_token(root / "credentials.json")
+            profile = read_account_profile(root, binding)
+            if not profile and self._engine is not None and target_id == self._active_account_id():
                 approved = self._engine.application.account_profile()
                 if approved and approved.get("uid"):
                     profile = {"uid": approved["uid"], "face": approved.get("face", "")}
-                    save_account_profile(self._root, profile["uid"], profile["face"], binding)
+                    save_account_profile(root, profile["uid"], profile["face"], binding)
             if not profile:
                 return {"ok": False}
             uid = profile["uid"]
-            key = ("account", uid)
+            key = (target_id, "account", uid)
             with self._cache_lock:
                 cached = self._avatars.get(key)
                 if cached and time.monotonic() - cached[0] < 86400:
                     self._avatars.move_to_end(key)
                     return {"ok": True, "data_uri": cached[1]}
-            image = load_avatar(self._root, uid, profile["face"])
+            image = load_avatar(root, uid, profile["face"])
             try:
                 data_uri = _png_uri(image)
             finally:
@@ -590,7 +905,7 @@ class Api:
                     self._avatars.popitem(last=False)
             return {"ok": True, "data_uri": data_uri}
 
-        return self._run("account_avatar", fetch, mutating=False)
+        return self._run(f"account_avatar:{target_id}", fetch, mutating=False)
 
     # Cancellation invalidates a generation before waiting for any network IO.
     def _cancel_qr(self):
@@ -600,6 +915,7 @@ class Api:
             if cancel is not None:
                 cancel.set()
             self._qr_session = self._qr_cancel_event = None
+            self._qr_target = None
             generation = self._qr_generation
         if session is not None:
             self._dispose_qr(session)
@@ -616,7 +932,15 @@ class Api:
         return (not self._closing.is_set() and not cancel.is_set()
                 and generation == self._qr_generation and session is self._qr_session)
 
-    def qr_start(self):
+    def qr_start(self, account_id=None):
+        if account_id is not None:
+            try:
+                if self._store is not None:
+                    self._store.get(account_id)
+                elif account_id != getattr(self._engine, "account_id", ""):
+                    raise ValueError("unknown account")
+            except Exception:
+                return {"ok": False, "error": "账号不存在或已被移除。"}
         with self._state:
             if self._closing.is_set():
                 return {"ok": False, "error": "正在退出，当前不接受新操作。"}
@@ -633,6 +957,7 @@ class Api:
                 if self._closing.is_set() or generation != self._qr_generation:
                     return {"ok": False, "cancelled": True, "generation": generation}
                 self._qr_session, self._qr_cancel_event = session, cancel
+                self._qr_target = account_id
             data_uri = _qr_data_uri(session.generate())
             with self._qr_lock:
                 if not self._qr_current(generation, session, cancel):
@@ -646,7 +971,12 @@ class Api:
                 except Exception:
                     self._io_finished()
                     raise
-            return {"ok": True, "data_uri": data_uri, "generation": generation}
+            return {
+                "ok": True,
+                "data_uri": data_uri,
+                "generation": generation,
+                "account_id": account_id,
+            }
         except Exception:
             logging.exception("QR session creation failed")
             return {"ok": False, "generation": generation,
@@ -659,13 +989,75 @@ class Api:
                 self._dispose_qr(session)
             self._io_finished()
 
-    def qr_refresh(self):
-        return self.qr_start()
+    def qr_refresh(self, account_id=None):
+        return self.qr_start(account_id)
 
     def _emit_qr(self, generation, session, cancel, payload):
         with self._qr_lock:
             if self._qr_current(generation, session, cancel):
-                self._ui.emit("qr_state", _public({"generation": generation, **payload}))
+                self._ui.emit("qr_state", _public({
+                    "generation": generation,
+                    "account_id": self._qr_target,
+                    **payload,
+                }))
+
+    def _complete_login(self, uid, account, profile, cookies, context, target_id):
+        sessdata, bili_jct = cookies["SESSDATA"], cookies["bili_jct"]
+        face = profile.get("face", "")
+        if self._store is None:
+            from bilioshi.runtime import save_login
+            from desktop.avatars import file_token, save_account_profile
+
+            options = {"context": context} if context else {}
+            save_login(sessdata, bili_jct, self._root / "credentials.json", **options)
+            save_account_profile(
+                self._root, uid, face,
+                file_token(self._root / "credentials.json"),
+            )
+            self._ui.apply_settings()
+            self._ui.push_now()
+            return getattr(self._engine, "account_id", "")
+
+        from bilioshi import safety
+        from bilioshi.accounts import UnknownAccount
+        from desktop.avatars import file_token, save_account_profile
+        from desktop.storage import initialize
+
+        try:
+            existing = self._store.by_uid(uid)
+        except UnknownAccount:
+            existing = None
+        if target_id is not None:
+            target = self._store.get(target_id)
+            if target["uid"] != uid:
+                raise ValueError("扫码账号与目标账号不一致")
+            account_id = target_id
+            existing = target
+        elif existing is not None:
+            account_id = existing["id"]
+        else:
+            account_id = f"uid-{uid}"
+            self._store.ensure_root(account_id, uid)
+            self._store.restore_retained(account_id)
+            initialize(self._store.path_for_id(account_id), [])
+
+        root = self._store.path_for_id(account_id)
+        options = {"context": context} if context else {}
+        self._store.save_credentials(account_id, sessdata, bili_jct, **options)
+        safety.bind_account(sessdata, uid, root)
+        save_account_profile(root, uid, face, file_token(root / "credentials.json"))
+        if existing is None:
+            self._store.upsert(uid, account, face)
+        else:
+            self._store.update(account_id, name=account or existing.get("name", ""), face=face)
+        if self._host is not None:
+            if account_id == self._active_account_id():
+                self._host.reload_account(account_id)
+            self._host.view(account_id)
+        else:
+            self._ui.apply_settings()
+        self._ui.push_now()
+        return account_id
 
     def _qr_poll(self, generation, session, cancel):
         from bilioshi.qr_login import POLL_INTERVAL
@@ -678,37 +1070,48 @@ class Api:
                         return
                 if result.state == "confirmed":
                     cookies = result.credentials
-                    valid, account, profile = self._engine.application.validate_credentials_profile(
-                        cookies["SESSDATA"], cookies["bili_jct"])
-                    if not valid:
+                    from bilioshi import safety
+
+                    if self._store is None and self._engine is not None:
+                        # Legacy single-root mode keeps the historical validation
+                        # seam; account mode validates in a throwaway root below.
+                        valid, account, profile = (
+                            self._engine.application.validate_credentials_profile(
+                                cookies["SESSDATA"], cookies["bili_jct"])
+                        )
+                    else:
+                        from bilioshi.account_migration import validate_credentials_readonly
+
+                        valid, account, profile = validate_credentials_readonly(
+                            cookies["SESSDATA"], cookies["bili_jct"])
+                    if not valid or not isinstance(profile, dict) or not profile.get("uid"):
                         self._emit_qr(generation, session, cancel, {
                             "state": "error", "message": "扫码已确认，但登录验证未通过，请重新扫码。"})
                         return
+                    uid = int(profile["uid"])
                     with self._mutations:
                         with self._qr_lock:
                             if not self._qr_current(generation, session, cancel):
                                 return
-                            from bilioshi.runtime import save_login
-
-                            options = {"context": result.context} if result.context else {}
-                            save_login(cookies["SESSDATA"], cookies["bili_jct"],
-                                       self._root / "credentials.json", **options)
-                        # Applying settings notices the credential change and clears
-                        # any cached identity from the previous account first.
-                        self._ui.apply_settings()
-                        if profile.get("uid"):
-                            try:
-                                from desktop.avatars import file_token, save_account_profile
-
-                                save_account_profile(
-                                    self._root, profile["uid"], profile.get("face", ""),
-                                    file_token(self._root / "credentials.json"))
-                            except OSError:
-                                logging.exception("Cannot cache the signed-in public profile")
-                        self._engine.confirm_account(account)
-                        self._ui.push_now()
-                        self._emit_qr(generation, session, cancel,
-                                      {"state": "confirmed", "account": account})
+                            target_id = self._qr_target
+                        try:
+                            account_id = self._complete_login(
+                                uid, account, profile, cookies, result.context, target_id)
+                        except Exception:
+                            logging.exception("Saving QR login failed")
+                            self._emit_qr(generation, session, cancel, {
+                                "state": "error",
+                                "message": "扫码成功，但账号保存失败，请检查本机权限后重试。",
+                            })
+                            return
+                        self._sync_active()
+                        if self._engine is not None and account_id == self._active_account_id():
+                            self._engine.confirm_account(account)
+                        self._emit_qr(generation, session, cancel, {
+                            "state": "confirmed",
+                            "account": account,
+                            "account_id": account_id,
+                        })
                     return
                 if result.state not in ("waiting", "scanned", "expired"):
                     raise ValueError("Unexpected QR state")
@@ -726,11 +1129,29 @@ class Api:
     def qr_cancel(self):
         return {"ok": True, "generation": self._cancel_qr()}
 
-    def logout(self):
+    def logout(self, account_id=None):
         self._cancel_qr()
 
         def logout():
             self._cancel_qr()
+            if self._store is not None:
+                target = account_id or self._active_account_id() or self._view_account_id()
+                if not target:
+                    return {"ok": False, "error": "当前没有可退出的账号。"}
+                try:
+                    self._store.clear_credentials(target)
+                except Exception:
+                    return {"ok": False, "error": "退出登录失败，请稍后重试。"}
+                from desktop.avatars import clear_account_profile
+
+                clear_account_profile(self._store.account_root(target))
+                if self._host is not None:
+                    self._host.reload_account(target)
+                    self._sync_active()
+                with self._cache_lock:
+                    self._avatars.clear()
+                self._ui.push_now()
+                return {"ok": True}
             from bilioshi.runtime import save_login
             from desktop.avatars import clear_account_profile
 
@@ -742,7 +1163,7 @@ class Api:
             self._ui.apply_settings()
             return {"ok": True}
 
-        return self._run("logout", logout)
+        return self._run("logout", logout, allow_without_engine=True)
 
     def _set_ui_error(self, message):
         with self._state:

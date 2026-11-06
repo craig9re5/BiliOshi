@@ -134,26 +134,40 @@ def main():
         if register_desktop(root, tk=args.tk, supervised=args.supervised) is None:
             return 0
         ensure_supervisor(root)
-        from desktop.engine import Engine
+        from desktop.host import AccountHost
+        from bilioshi.account_migration import ensure_account_store
 
-        engine = Engine(root)
+        migration = ensure_account_store(root)
+        if migration.legacy_mode:
+            logging.warning("Running in legacy single-account mode: %s", migration.reason)
+        host = AccountHost(root, migration.store)
         # First run opens the login screen; later launches stay in the tray so an
         # update never steals focus from whatever the user is doing.
-        show = args.show or args.login or not (root / "credentials.json").exists()
+        signed_in = bool(migration.store.accounts()) and any(
+            migration.store.has_credentials(row["id"]) for row in migration.store.accounts()
+        )
+        show = args.show or args.login or not signed_in
         from desktop.webui.window import available as web_available
 
         if not args.tk and web_available():
             from desktop.webui.window import WebHost
 
-            ui = WebHost(engine, show=show)
+            ui = WebHost(host, show=show)
             ui.run(show=show, login=args.login)
         else:
             from desktop.ui import TrayUI
 
+            # The compatibility Tk layer shows only the current account.
+            host.start()
+            engine = host.active_engine()
+            if engine is None:
+                from desktop.engine import Engine
+
+                engine = Engine(root)
+                engine.start()
             ui = TrayUI(engine, show=show)
             if args.login:
                 ui.root.after_idle(lambda: ui.open_settings(focus_auth=True, scan=True))
-            engine.start()
             ui.run()
     except Exception:
         logging.exception("Desktop startup failed")

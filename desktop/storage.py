@@ -38,19 +38,19 @@ def initialize(root, defaults):
     for sub in ("logs", "state", "locks", "commands"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     if not (root / "settings.json").exists():
-        write_json(
-            root / "settings.json",
-            {
-                "run_mode": "stable",
-                "check_minutes": 5,
-                "auto_revive": True,
-                "auto_danmaku_intimacy": True,
-                "auto_like": False,
-                "notify_on_live": True,
-                "autostart": False,
-                "paused": False,
-            },
-        )
+        settings = {
+            "run_mode": "stable",
+            "check_minutes": 5,
+            "auto_revive": True,
+            "auto_danmaku_intimacy": True,
+            "auto_like": False,
+            "notify_on_live": True,
+            "autostart": False,
+            "paused": False,
+        }
+        if (root / ACCOUNT_MARKER).exists():
+            settings.pop("autostart", None)
+        write_json(root / "settings.json", settings)
     if not (root / "members.json").exists():
         write_json(root / "members.json", defaults)
     if root == data_dir():

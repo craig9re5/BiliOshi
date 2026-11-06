@@ -1,6 +1,7 @@
 import time
+from bilioshi.accounts import ACCOUNT_MARKER
 from bilioshi.runtime import data_dir, read_json, write_json, migrate_credentials
-from bilioshi.members import load_members
+from bilioshi.members import load_account_members, load_members
 from bilioshi.operating_mode import profile_for
 
 
@@ -27,11 +28,13 @@ def load_config(root):
             raise ValueError(f"{key} 必须为 true 或 false")
     config.pop("danmaku", None)
     config.pop("live_likes", None)
-    members = load_members(root)
+    members = load_account_members(root) if (root / ACCOUNT_MARKER).exists() else load_members(root)
     return (config, members)
 
 
 def initialize(root, defaults):
+    if (root / ACCOUNT_MARKER).exists():
+        defaults = []
     for sub in ("logs", "state", "locks", "commands"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     if not (root / "settings.json").exists():

@@ -21,6 +21,20 @@ def load_members(root=None):
     return validate_members(members)
 
 
+def load_account_members(root):
+    """Account roots fail closed: a missing/corrupt list never seeds defaults."""
+    import logging
+    from pathlib import Path
+    from .runtime import read_json
+
+    try:
+        members = read_json(Path(root) / "members.json", [])
+        return validate_members(members)
+    except (OSError, ValueError, TypeError):
+        logging.warning("Account members file is unreadable; refusing to seed defaults")
+        return []
+
+
 def validate_members(members):
     if not isinstance(members, list):
         raise ValueError("成员配置必须是 JSON 列表")

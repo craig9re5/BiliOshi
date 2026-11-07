@@ -14,7 +14,7 @@ const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, c
       <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
     </div>}
     <nav className="nav" aria-label="主导航">
-      {[ ["monitor", "monitor", "直播总览"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
+      {[ ["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
         <button type="button" key={key} className="nav-item" aria-current={page === key ? "page" : undefined}
           aria-label={text} title={text} onClick={() => onPage(key)}><Icon name={icon} /><span>{text}</span></button>)}
     </nav>
@@ -32,7 +32,7 @@ const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, c
   </aside>
 );
 
-const pageTitles = { monitor: "直播总览", automation: "挂机设置", account: "账号" };
+const pageTitles = { monitor: "直播总览", growth: "成长记录", automation: "挂机设置", account: "账号" };
 
 const WindowButtons = () => {
   const [maximized, setMaximized] = useState(false);
@@ -192,7 +192,7 @@ function App() {
           });
         } else if (event.type === "open_login") handlers.current.openQr?.();
         else if (event.type === "show_page" || event.type === "navigate") {
-          if (["monitor", "automation", "account"].includes(payload.page)) setPage(payload.page);
+          if (["monitor", "growth", "automation", "account"].includes(payload.page)) setPage(payload.page);
         } else if (event.type === "add_member") handlers.current.openAdd?.();
         else if (event.type === "sync_medals") handlers.current.openMedals?.();
         else if (event.type === "toast") toast(payload.message, payload.tone);
@@ -547,6 +547,8 @@ function App() {
           accountName={accounts.find((item) => item.id === viewId)?.name || ""}
           inactive={Boolean(viewed.inactive)}
           onSwitch={() => requestSwitch(viewId)} />}
+        {page === "growth" && <window.GrowthPage viewId={viewId}
+          onOpenAccount={() => setPage("account")} onOpenMonitor={() => setPage("monitor")} />}
         {page === "automation" && <window.SettingsPage settings={viewed.settings || DEFAULT_SETTINGS} onSetting={setSetting}
           pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme}
           scope={accounts.find((item) => item.id === viewId) || null} scopeAll={isAllView} />}

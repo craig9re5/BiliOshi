@@ -600,6 +600,10 @@ class AccountStore:
             root / "state" / "account-bindings.json",
             target / "state" / "account-bindings.json",
         )
+        self._merge_move(
+            root / "state" / "growth.json",
+            target / "state" / "growth.json",
+        )
         for credit in (root / "state").glob("watch-credit-*.json"):
             self._merge_move(credit, target / "state" / credit.name)
 
@@ -617,6 +621,10 @@ class AccountStore:
         self._merge_move(
             source / "state" / "account-bindings.json",
             root / "state" / "account-bindings.json",
+        )
+        self._merge_move(
+            source / "state" / "growth.json",
+            root / "state" / "growth.json",
         )
         for credit in (source / "state").glob("watch-credit-*.json"):
             self._merge_move(credit, root / "state" / credit.name)

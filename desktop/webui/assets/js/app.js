@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"1d47aa20b6229eb92728e5c3a09c70a3b681137501521f47966b5ba8232a8663","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"36107caaf12be9a7d4d75a182486dd6683f88caf83bd744f54306756e83b38e9"} */
+/* BiliOshi JSX {"code_sha256":"3d158825eef599a7428655b637c4018dd58aa8627fa472d320e769decd94c86b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"776d3b289b8a6aadad6e5968b13bc13dfc799a24c4203999ebf17f7f9415d203"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -68,7 +68,7 @@ const Sidebar = ({
 }, "\u30D3\u30EA\u63A8\u3057"))), /*#__PURE__*/React.createElement("nav", {
   className: "nav",
   "aria-label": "\u4E3B\u5BFC\u822A"
-}, [["monitor", "monitor", "直播总览"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
+}, [["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
   type: "button",
   key: key,
   className: "nav-item",
@@ -116,6 +116,7 @@ const Sidebar = ({
 }, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")), /*#__PURE__*/React.createElement("small", null, account.subtitle || ""))));
 const pageTitles = {
   monitor: "直播总览",
+  growth: "成长记录",
   automation: "挂机设置",
   account: "账号"
 };
@@ -401,7 +402,7 @@ function App() {
             };
           });
         } else if (event.type === "open_login") handlers.current.openQr?.();else if (event.type === "show_page" || event.type === "navigate") {
-          if (["monitor", "automation", "account"].includes(payload.page)) setPage(payload.page);
+          if (["monitor", "growth", "automation", "account"].includes(payload.page)) setPage(payload.page);
         } else if (event.type === "add_member") handlers.current.openAdd?.();else if (event.type === "sync_medals") handlers.current.openMedals?.();else if (event.type === "toast") toast(payload.message, payload.tone);else if (event.type === "settings_changed") handlers.current.refresh?.();
       }
     };
@@ -983,6 +984,10 @@ function App() {
     accountName: accounts.find(item => item.id === viewId)?.name || "",
     inactive: Boolean(viewed.inactive),
     onSwitch: () => requestSwitch(viewId)
+  }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
+    viewId: viewId,
+    onOpenAccount: () => setPage("account"),
+    onOpenMonitor: () => setPage("monitor")
   }), page === "automation" && /*#__PURE__*/React.createElement(window.SettingsPage, {
     settings: viewed.settings || DEFAULT_SETTINGS,
     onSetting: setSetting,

@@ -9,6 +9,7 @@ import base64
 from collections import OrderedDict
 from contextlib import nullcontext
 import copy
+from datetime import datetime
 import io
 import json
 import logging
@@ -20,7 +21,9 @@ import time
 import webbrowser
 from pathlib import Path
 
-from bilioshi.accounts import ALL_ACCOUNTS
+from bilioshi.accounts import ALL_ACCOUNTS, AccountStoreError
+from bilioshi.growth import CHINA_TZ, load_history
+from bilioshi.members import load_account_members, load_members
 from bilioshi.operating_mode import PROFILES, profile_for
 from bilioshi.redaction import redact
 from bilioshi.runtime import read_json, update_json
@@ -120,6 +123,8 @@ class Api:
         self._credentials_signature = object()
         self._credentials_cache = (False, "")
         self._medals_cache = None
+        self._growth_signature = None
+        self._growth_cache = None
         self._avatars = OrderedDict()
         self._qr_lock = threading.RLock()
         self._qr_generation = 0
@@ -142,6 +147,8 @@ class Api:
             self._credentials_signature = object()
             self._credentials_cache = (False, "")
             self._medals_cache = None
+            self._growth_signature = None
+            self._growth_cache = None
             self._avatars.clear()
 
     def _active_account_id(self):
@@ -449,6 +456,101 @@ class Api:
         if snap is None:
             return self.snapshot()["accountInfo"]
         return _public(self._account_info(snap))
+
+    def growth(self, days=7, account_id=None):
+        """Daily fan-medal growth for one account; never merged across accounts."""
+        self._sync_active()
+        if isinstance(days, str) and days.isascii() and days.isdigit():
+            days = int(days)
+        if type(days) is not int or isinstance(days, bool) or not 1 <= days <= 90:
+            return {"available": False, "error": "时间范围需为 1 到 90 天。"}
+
+        target = account_id if isinstance(account_id, str) and account_id else None
+        if target in (None, "", ALL_ACCOUNTS):
+            target = self._view_account_id()
+        if target in (None, "", ALL_ACCOUNTS):
+            target = self._active_account_id()
+        if not target and self._store is not None:
+            try:
+                rows = self._store.accounts()
+                target = rows[0]["id"] if rows else ""
+            except AccountStoreError:
+                target = ""
+
+        root = self._root
+        account_name = ""
+        running = False
+        paused = False
+        status = ""
+        if self._store is not None:
+            if not target:
+                return {"available": False, "error": "没有可读取的账号，请先登录。"}
+            try:
+                row = self._store.get(target)
+                root = self._store.account_root(target)
+                account_name = row.get("name", "") if isinstance(row, dict) else ""
+            except (AccountStoreError, OSError, ValueError):
+                return {"available": False, "error": "账号不存在或已被移除。"}
+            if self._host is not None:
+                try:
+                    summary = self._host.account_summary(target)
+                    running = bool(summary.get("running"))
+                    paused = bool(summary.get("paused"))
+                    state = summary.get("state") or summary.get("status")
+                    status = state if isinstance(state, str) else ""
+                except Exception:
+                    logging.exception("Reading growth account summary failed")
+        else:
+            active = self._active_account_id() or ""
+            if target and active and target != active:
+                return {"available": False, "error": "账号不存在或已被移除。"}
+            target = active or target or ""
+            account_name = getattr(self._engine, "account", "") if self._engine is not None else ""
+            running = bool(
+                self._engine is not None
+                and not self._engine.paused
+                and not self._engine.suspended
+            )
+            paused = bool(self._engine.paused) if self._engine is not None else False
+
+        try:
+            if self._store is not None:
+                members = load_account_members(root)
+            else:
+                members = load_members(root)
+        except (OSError, ValueError, TypeError):
+            members = []
+
+        # Include the UTC+8 date so the window moves at midnight even when the
+        # account is not running and no new sample rewrites the file. Both the
+        # signature and the payload use one timestamp to avoid a midnight race.
+        now = time.time()
+        today = datetime.fromtimestamp(now, CHINA_TZ).date().isoformat()
+        signature = (
+            target, days, today,
+            _signature(root / "state" / "growth.json"),
+            _signature(root / "members.json"),
+        )
+        with self._cache_lock:
+            cached = copy.deepcopy(self._growth_cache) if signature == self._growth_signature else None
+        if cached is None:
+            try:
+                cached = load_history(root, target, days, members=members, now=now)
+            except (OSError, ValueError, TypeError) as exc:
+                logging.warning("Reading fan-medal growth failed: %s", exc)
+                return {"available": False, "error": "成长记录暂时无法读取，请查看日志。"}
+            with self._cache_lock:
+                self._growth_signature = signature
+                self._growth_cache = copy.deepcopy(cached)
+        cached.update({
+            "account_id": target or cached.get("account_id", ""),
+            "account_name": account_name if isinstance(account_name, str) else "",
+            "running": running,
+            "paused": paused,
+            "status": status,
+            "generated_at": time.time(),
+        })
+        return _public(cached)
 
     def set_view_account(self, account_id):
         if self._host is None:

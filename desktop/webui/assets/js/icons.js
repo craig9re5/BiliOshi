@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"ce90f380813a18e0aab8269d70639f496f1f1dffec0ad62ad0caf2e8a764cae2","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"717e00b8af163516cfcd4ef43119600fab588a44b694a8d5b3b1c1de401527c6"} */
+/* BiliOshi JSX {"code_sha256":"2a9094887e812477974744cdefaef1bc2ef427baa7022b2755b6273a124e9cff","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"86f7cf6b5985a2ed5320278b4214a98caccdb96efcf95327190dcc394cae1f36"} */
 (function () {
 "use strict";
 /* Hand-drawn 16px stroke icons — one weight, round caps, currentColor.
@@ -31,6 +31,11 @@ const Icon = ({
       rx: "2.2"
     }), /*#__PURE__*/React.createElement("path", {
       d: "M8.5 20.5h7M12 17v3.5"
+    })),
+    trend: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
+      d: "M4 16.5 9.2 11l3.3 3.3L20 7.2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M15.2 7.2H20v4.8"
     })),
     sliders: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
       d: "M4 7h9M17 7h3M4 17h3M11 17h9"

@@ -104,7 +104,7 @@ def main():
         frontend_ready = all((web_assets / name).is_file() for name in (
             "index.html", "style.css", "vendor/react.js", "vendor/react-dom.js",
             "js/app.js", "js/bridge.js", "js/overview.js", "js/settings.js", "js/dialogs.js",
-            "js/accounts.js", "js/theme.js",
+            "js/accounts.js", "js/growth.js", "js/theme.js",
         ))
         write_json(
             root / "diagnostic.json",

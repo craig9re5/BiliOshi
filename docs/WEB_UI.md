@@ -17,10 +17,10 @@ python tray_app.py --show
 
 ## 界面开发
 
-- 页面：`desktop/webui/assets/js/*.jsx`。
+- 页面：`desktop/webui/assets/js/*.jsx`。成长记录页为 `js/growth.jsx`，数据口径与接口见 `docs/GROWTH.md`。
 - 设计变量与组件样式：`desktop/webui/assets/style.css`。
 - 渲染数据适配：`js/bridge.jsx`；操作条件由 Python 桥接补充到快照。
-- Python 桥接：`desktop/webui/api.py`；窗口、托盘与生命周期：`window.py`。
+- Python 桥接：`desktop/webui/api.py`；窗口、托盘与生命周期：`window.py`。成长历史走独立的 `growth` 端点，不放进高频快照。
 
 更改 JSX 后使用 Node 22+ 和已固定版本的本地 Babel 编译器：
 
@@ -36,7 +36,7 @@ python tools/build_webui.py --check
 
 `tools/vendor_web_assets.py --check` 校验第三方库的固定 SHA-256；正常运行和构建不下载依赖。`--download` 是显式修复命令，只恢复已固定的版本。Git 对 vendor JavaScript 禁用换行转换，保持与上游字节一致。
 
-`preview.html` 和 `js/demo.js` 仅用于浏览器中查看合成数据界面，不访问真实账号，也不打入 EXE。可用项目的 `webui-preview` 预览配置打开 `http://localhost:4313/preview.html`。它复用生产组件，生产 `index.html` 不导入演示桥接。
+`preview.html` 和 `js/demo.js` 仅用于浏览器中查看合成数据界面，不访问真实账号，也不打入 EXE。可用项目的 `webui-preview` 预览配置打开 `http://127.0.0.1:4317/preview.html`。它复用生产组件，生产 `index.html` 不导入演示桥接。
 
 ## 构建
 

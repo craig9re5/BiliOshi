@@ -14,6 +14,7 @@ from pathlib import Path
 from desktop.storage import load_config, read_json, write_json, read_status
 from desktop.windows import Job
 from bilioshi.runtime import update_json, append_event
+from bilioshi.growth import record_samples
 from bilioshi.operating_mode import profile_for
 try:
     from bilioshi.notifications.service import DailyNotifications
@@ -591,6 +592,17 @@ class Engine:
                 self.status_errors[key] = "直播状态查询失败"
         if "medals" in result and isinstance(result["medals"], dict):
             self.medals = result["medals"]
+            try:
+                record_samples(
+                    self.root,
+                    self.account_id,
+                    self.members,
+                    self.medals,
+                    result.get("medals_at") or self.probe_started,
+                    now=now,
+                )
+            except Exception:
+                logging.exception("Recording fan-medal growth failed")
         if "tasks" in result and isinstance(result["tasks"], dict):
             self.tasks.update(result["tasks"])
         self.task_errors = result.get("task_errors", {})

@@ -131,12 +131,17 @@ class AppContext:
             }
         statuses = self.call("check_live_status", [m["room"] for m in members], *credentials)
         medals = self.call("get_my_medals", *credentials)
+        # Fan-medal counters were read here; task queries may take long enough
+        # to cross midnight, so growth samples use this timestamp, not the end
+        # of the whole probe.
+        medals_at = time.time()
         tasks, errors = self._query_tasks(members, credentials)
         missing = [m["name"] for m in members if m["room"] not in statuses]
         result = {
             "statuses": statuses,
             "account": message,
             "medals": medals,
+            "medals_at": medals_at,
             "tasks": tasks,
             "task_errors": errors,
             "observed": time.time(),

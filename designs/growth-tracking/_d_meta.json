@@ -1,0 +1,23 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "成长记录页设计稿": {
+      "versions": [
+        {
+          "path": "Growth.html",
+          "createdAt": "2026-11-06T16:51:19.689Z",
+          "status": "needs-review",
+          "subtitle": "今日 / 近 7 日 · 各直播间成长值涨幅 · 看板型（简化）与榜单型",
+          "viewport": {
+            "width": 1180,
+            "height": 760
+          }
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-11-06T16:51:19.694Z",
+  "updatedAt": "2026-11-06T17:05:28.952Z"
+}

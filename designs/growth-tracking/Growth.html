@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="white">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>ビリ推し · 成长记录页设计稿</title>
+<style>
+  /* ------------------------------------------------------------------
+     Tokens lifted from desktop/webui/assets/style.css (Paper White).
+     The prototype follows the production surface language: paper canvas,
+     white cards, one hairline border, deep-teal accent only for data and
+     actions. No new colour family is introduced for the growth page.
+     ------------------------------------------------------------------ */
+  :root {
+    --paper: #fcfcfb;
+    --surface: #ffffff;
+    --surface-sunk: #f5f5f2;
+    --surface-hover: #efefec;
+    --line: rgba(28, 28, 25, 0.08);
+    --line-strong: rgba(28, 28, 25, 0.14);
+    --ink: #1f1f1d;
+    --ink-2: rgba(31, 31, 29, 0.68);
+    --ink-3: rgba(31, 31, 29, 0.64);
+    --accent: #2d6763;
+    --accent-ink: #245550;
+    --accent-soft: #e8f1ee;
+    --accent-line: #cfe2dc;
+    --live: #1f8a5f;
+    --live-soft: #e9f6ef;
+    --warn: #8a5a12;
+    --warn-soft: #fdf3e2;
+    --danger: #a4432f;
+    --danger-soft: #fbede9;
+    --wash-soft: rgba(28, 28, 25, 0.032);
+    --wash-nav: rgba(28, 28, 25, 0.045);
+    --wash: rgba(28, 28, 25, 0.05);
+    --wash-strong: rgba(28, 28, 25, 0.07);
+    --wash-active: rgba(28, 28, 25, 0.11);
+    --border-hover: rgba(28, 28, 25, 0.20);
+    --track: rgba(28, 28, 25, 0.07);
+    --switch-off: rgba(28, 28, 25, 0.15);
+    --avatar-bg: #e9e7e2;
+    --scroll-thumb: rgba(28, 28, 25, 0.16);
+    --scroll-thumb-soft: rgba(28, 28, 25, 0.14);
+    --dot-paused: rgba(28, 28, 25, 0.28);
+    --dot-paused-ring: rgba(28, 28, 25, 0.06);
+    --r-sm: 7px;
+    --r-md: 10px;
+    --r-lg: 13px;
+    --r-xl: 16px;
+    --shadow-1: 0 1px 2px rgba(28, 28, 25, 0.05);
+    --shadow-2: 0 1px 2px rgba(28, 28, 25, 0.05), 0 6px 18px rgba(28, 28, 25, 0.055);
+    --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+            -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    --mono: "SF Mono", "Cascadia Mono", "Consolas", monospace;
+    --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+    --review-bg: #efeeea;
+    --review-ink: #2a2926;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--review-bg);
+    color: var(--review-ink);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  button { font: inherit; color: inherit; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::selection { background: rgba(45, 103, 99, 0.16); }
+
+  /* ---------- review page ---------- */
+  .review-header {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 42px 32px 26px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 32px;
+  }
+  .review-kicker {
+    font-size: 10.5px;
+    font-weight: 650;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(42, 41, 38, 0.48);
+  }
+  .review-header h1 {
+    margin: 10px 0 0;
+    font-size: clamp(28px, 4.4vw, 44px);
+    line-height: 1.15;
+    letter-spacing: -0.045em;
+    font-weight: 680;
+    color: var(--review-ink);
+  }
+  .review-header p {
+    max-width: 600px;
+    margin: 12px 0 0;
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: rgba(42, 41, 38, 0.68);
+  }
+  .review-note {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 11px;
+    border: 1px solid rgba(42, 41, 38, 0.12);
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.55);
+    font-size: 11.5px;
+    color: rgba(42, 41, 38, 0.64);
+    white-space: nowrap;
+  }
+  .note-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--live);
+    box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.12);
+  }
+  .review-shell { max-width: 1240px; margin: 0 auto; padding: 0 32px 56px; }
+
+  .review-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+    padding: 8px 10px;
+    border: 1px solid rgba(42, 41, 38, 0.10);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.62);
+    backdrop-filter: blur(8px);
+  }
+  .review-pages, .review-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .review-toolbar button {
+    height: 30px;
+    padding: 0 11px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(42, 41, 38, 0.66);
+    font-size: 12px;
+    white-space: nowrap;
+    transition: background 120ms var(--ease), color 120ms var(--ease), border-color 120ms var(--ease);
+  }
+  .review-toolbar button:hover { background: rgba(42, 41, 38, 0.055); color: var(--review-ink); }
+  .review-toolbar button.active {
+    border-color: rgba(42, 41, 38, 0.11);
+    background: #fff;
+    color: var(--review-ink);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(28, 28, 25, 0.05);
+  }
+  .review-toolbar .rec {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 9.5px;
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    vertical-align: 1px;
+  }
+  .review-tools { gap: 8px; }
+  .review-hint {
+    font-size: 11px;
+    color: rgba(42, 41, 38, 0.50);
+    white-space: nowrap;
+  }
+
+  .window-stage { display: flex; justify-content: center; }
+  .window-wrap { position: relative; width: 100%; max-width: 1180px; }
+  .app-window {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1180px;
+    height: 760px;
+    display: flex;
+    overflow: hidden;
+    transform-origin: top left;
+    border-radius: 14px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.55;
+    box-shadow: 0 2px 6px rgba(28, 28, 25, 0.08), 0 28px 70px rgba(28, 28, 25, 0.16);
+  }
+
+  /* ---------- app primitives ---------- */
+  .icon { flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .spacer { flex: 1; }
+  .app-window button { cursor: default; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-1); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 29px; padding: 0 11px; border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+    background: var(--surface); color: var(--ink); font-size: 12.5px; font-weight: 500;
+    white-space: nowrap; box-shadow: var(--shadow-1);
+    transition: background 110ms var(--ease), border-color 110ms var(--ease);
+  }
+  .btn:hover { background: var(--surface-hover); border-color: var(--border-hover); }
+  .btn.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--ink-2); }
+  .btn.ghost:hover { background: var(--wash); color: var(--ink); }
+  .btn.sm { height: 25px; padding: 0 9px; font-size: 12px; }
+  .link-btn {
+    border: 0; padding: 0; background: transparent; color: var(--accent);
+    font-size: 11.5px; font-weight: 600;
+  }
+  .link-btn:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ---------- app shell ---------- */
+  .side {
+    width: 224px; flex: 0 0 224px; display: flex; flex-direction: column;
+    padding: 8px 11px 12px; background: var(--surface-sunk); border-right: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 4px 8px 18px; }
+  .logo {
+    width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+    color: #8fe6c6; background: linear-gradient(160deg, #26474b 0%, #14262a 100%);
+    box-shadow: inset 0 0 0 1px rgba(143, 230, 198, 0.16), 0 1px 2px rgba(28, 28, 25, 0.12);
+  }
+  .brand-name { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+  .nav { display: flex; flex-direction: column; gap: 1px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 8px 10px; border: 0; border-radius: var(--r-sm);
+    background: transparent; color: var(--ink-2); font-size: 13px; text-align: left;
+    transition: background 120ms var(--ease), color 120ms var(--ease);
+  }
+  .nav-item:hover { background: var(--wash-nav); color: var(--ink); }
+  .nav-item[aria-current="page"] {
+    background: var(--surface); color: var(--ink); font-weight: 600;
+    box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+  }
+  .nav-item .icon { opacity: 0.72; }
+  .nav-item[aria-current="page"] .icon { opacity: 1; color: var(--accent); }
+  .nav-spacer { flex: 1; }
+  .nav-bottom { padding-bottom: 10px; }
+  .sidebar-account {
+    display: flex; gap: 9px; align-items: center; width: 100%;
+    padding: 11px 7px 6px; border: 0; border-top: 1px solid var(--line);
+    background: transparent; text-align: left; border-radius: 0;
+  }
+  .sidebar-account:hover { background: var(--wash-soft); }
+  .sidebar-avatar {
+    display: grid; place-items: center; width: 29px; height: 29px; flex: 0 0 29px;
+    border-radius: 50%; overflow: hidden; background: var(--avatar-bg);
+    color: #fff; font-size: 11px; font-weight: 650;
+  }
+  .sidebar-account-text { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+  .sidebar-account-text strong { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-account-text small { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-account > .icon { color: var(--ink-3); flex: 0 0 13px; }
+
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .chrome {
+    display: flex; align-items: center; gap: 9px; height: 46px; flex: 0 0 46px;
+    padding: 0 6px 0 14px; border-bottom: 1px solid var(--line); background: var(--surface-sunk);
+    user-select: none;
+  }
+  .side-btn {
+    width: 30px; height: 30px; display: grid; place-items: center;
+    border: 0; border-radius: 8px; background: transparent; color: var(--ink-2);
+  }
+  .side-btn:hover { background: var(--wash-strong); color: var(--ink); }
+  .chrome .logo { width: 22px; height: 22px; border-radius: 7px; box-shadow: none; }
+  .chrome-brand { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+  .chrome-name { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
+  .chrome-divider { width: 1px; height: 15px; background: var(--line-strong); flex: 0 0 1px; margin: 0 3px; }
+  .chrome-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+  .chrome-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  .win-buttons { display: flex; align-items: center; gap: 2px; margin-left: 8px; flex: 0 0 auto; }
+  .win-btn {
+    width: 40px; height: 32px; display: grid; place-items: center; border: 0;
+    border-radius: 8px; background: transparent; color: var(--ink-2);
+  }
+  .win-btn:hover { background: var(--wash-strong); color: var(--ink); }
+  .win-btn.close:hover { background: #c4453a; color: #fff; }
+  .page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* ---------- growth page ---------- */
+  .growth {
+    flex: 1; min-height: 0; overflow-y: auto;
+    padding: 14px 24px 7px;
+    scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent;
+  }
+  .growth::-webkit-scrollbar { width: 9px; }
+  .growth::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb-soft); border-radius: 6px; border: 3px solid var(--paper);
+  }
+  .growth-inner { max-width: 1120px; }
+
+  .growth-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin-bottom: 10px;
+  }
+  .growth-head .growth-meta { margin: 0; }
+  .growth-head h2 {
+    margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.3;
+  }
+  .growth-head p { margin: 2px 0 0; font-size: 11.5px; color: var(--ink-3); line-height: 1.4; }
+  .growth-head .head-side { display: flex; align-items: center; gap: 9px; }
+  .growth-head .head-note {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10.5px; color: var(--ink-3);
+  }
+  .scope-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 24px; padding: 0 8px 0 5px;
+    border: 1px solid var(--line); border-radius: 7px; background: var(--surface);
+    font-size: 11px; color: var(--ink-2); white-space: nowrap;
+    box-shadow: var(--shadow-1);
+  }
+  .scope-avatar {
+    width: 16px; height: 16px; flex: 0 0 16px; border-radius: 5px;
+    display: grid; place-items: center; color: #fff; font-size: 8.5px; font-weight: 650;
+    background: #3d7a6c;
+  }
+
+  /* A small two-state control, same grammar as the run-mode switch. */
+  .seg {
+    display: inline-flex; padding: 3px; border: 1px solid var(--line-strong);
+    border-radius: 8px; background: var(--surface-sunk);
+  }
+  .seg button {
+    height: 24px; padding: 0 12px; border: 0; border-radius: 5px;
+    background: transparent; color: var(--ink-2); font-size: 11.5px;
+    transition: background 120ms var(--ease), color 120ms var(--ease), box-shadow 120ms var(--ease);
+  }
+  .seg button:hover { color: var(--ink); }
+  .seg button[aria-selected="true"] {
+    background: var(--surface); color: var(--ink); font-weight: 600;
+    box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+  }
+
+  /* ---------- summary ---------- */
+  .summary {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px; margin-bottom: 10px;
+  }
+  .summary.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat { padding: 10px 16px 9px; min-width: 0; }
+  .stat-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10.5px; color: var(--ink-3);
+  }
+  .stat-label .dot {
+    width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%;
+    background: var(--accent); opacity: 0.55;
+  }
+  .stat-value {
+    display: flex; align-items: baseline; gap: 5px;
+    margin-top: 2px; font-size: 26px; font-weight: 660; letter-spacing: -0.04em;
+    line-height: 1.12; font-variant-numeric: tabular-nums; color: var(--accent);
+  }
+  .stat-value .plus { font-size: 15px; font-weight: 600; opacity: 0.72; }
+  .stat-value.ink { color: var(--ink); }
+  .stat-value.ink .plus { color: var(--accent); opacity: 0.72; }
+  .stat-value small { font-size: 11.5px; font-weight: 500; letter-spacing: 0; color: var(--ink-3); }
+  .stat-sub {
+    margin-top: 3px; font-size: 10.5px; color: var(--ink-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ---------- weekly chart ---------- */
+  .panel { min-width: 0; }
+  .panel-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; padding: 11px 16px 0;
+  }
+  .panel-title { font-size: 12px; font-weight: 650; }
+  .panel-title .room-name-inline { color: var(--ink); }
+  .panel-note { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
+  .panel-note .reset { margin-left: 8px; }
+  .chart {
+    display: flex; align-items: flex-end;
+    padding: 10px 16px 0;
+  }
+  .chart-col {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center;
+  }
+  .chart-value {
+    height: 15px; font-size: 10.5px; color: var(--ink-3);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+    transition: color 120ms var(--ease);
+  }
+  .chart-value.strong { color: var(--accent); font-weight: 650; }
+  .chart-value.missing { color: var(--ink-3); font-size: 9.5px; opacity: 0.8; }
+  .chart-area {
+    width: 100%; height: 92px; display: flex; align-items: flex-end; justify-content: center;
+    border-bottom: 1px solid var(--line-strong); position: relative;
+  }
+  .chart-bar {
+    width: 36px; max-width: 44%; border-radius: 4px 4px 0 0;
+    background: rgba(45, 103, 99, 0.34);
+    transition: height 320ms var(--ease), background 140ms var(--ease);
+  }
+  .chart-bar.today { background: var(--accent); }
+  .chart-bar.zero { height: 2px !important; border-radius: 2px; background: var(--line-strong); }
+  .chart-col:hover .chart-bar { background: rgba(45, 103, 99, 0.54); }
+  .chart-col:hover .chart-bar.today { background: var(--accent-ink); }
+  .chart-missing {
+    width: 36px; max-width: 44%; height: 100%;
+    border: 1px dashed var(--line-strong); border-bottom: 0; border-radius: 4px 4px 0 0;
+    background: repeating-linear-gradient(135deg, transparent 0 5px, var(--wash-soft) 5px 6px);
+  }
+  .chart-day {
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+    margin-top: 5px; font-size: 10px; color: var(--ink-3); line-height: 1.4;
+  }
+  .chart-day strong { color: var(--ink); font-weight: 600; }
+  .chart-day .cover { font-size: 9.5px; color: var(--ink-3); opacity: 0.9; }
+  .chart-day .ongoing { color: var(--accent); font-weight: 600; }
+  .chart-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 7px 16px 9px; font-size: 10px; color: var(--ink-3);
+  }
+  .chart-keys { display: flex; align-items: center; gap: 14px; }
+  .chart-key { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .chart-key .swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--accent); }
+  .chart-key .swatch.prev { background: rgba(45, 103, 99, 0.34); }
+  .chart-key .dash {
+    width: 10px; height: 10px; border: 1px dashed var(--line-strong); border-radius: 2px;
+  }
+
+  /* ---------- room list (direction A) ---------- */
+  .rooms-panel { margin-top: 10px; overflow: hidden; }
+  .rooms-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; padding: 10px 16px 6px;
+  }
+  .rooms-title { font-size: 12px; font-weight: 650; }
+  .rooms-note { font-size: 10.5px; color: var(--ink-3); }
+  .room-cols, .room-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 196px 70px 70px;
+    gap: 14px; align-items: center;
+  }
+  .room-cols {
+    padding: 0 16px 5px; border-bottom: 1px solid var(--line);
+    font-size: 9.5px; color: var(--ink-3);
+  }
+  .room-cols span:nth-child(2) { text-align: center; }
+  .room-cols span:nth-child(3), .room-cols span:nth-child(4) { text-align: right; }
+  .room-row {
+    width: 100%; padding: 5px 16px; border: 0; border-bottom: 1px solid var(--line);
+    background: transparent; text-align: left;
+    transition: background 120ms var(--ease);
+  }
+  .room-row:last-child { border-bottom: 0; }
+  .room-row:hover { background: var(--wash-soft); }
+  .room-row[aria-pressed="true"] { background: var(--accent-soft); }
+  .room-row:focus-visible { outline-offset: -2px; }
+  .room-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .avatar {
+    width: 28px; height: 28px; flex: 0 0 28px; border-radius: 8px;
+    display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 650;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  }
+  .room-name {
+    display: block; font-size: 12px; font-weight: 600; line-height: 1.35;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .room-sub { display: block; font-size: 9.5px; line-height: 1.35; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mini { display: flex; align-items: flex-end; gap: 3px; height: 27px; }
+  .mini i {
+    flex: 1; display: block; border-radius: 2px 2px 0 0;
+    background: rgba(45, 103, 99, 0.34); min-height: 1px;
+  }
+  .mini i.today { background: var(--accent); }
+  .mini i.zero { height: 1.5px !important; background: var(--line-strong); }
+  .mini i.missing {
+    height: 100%; border: 1px dashed var(--line-strong); border-bottom: 0;
+    border-radius: 2px 2px 0 0; background: transparent;
+  }
+  .room-today {
+    text-align: right; font-size: 12.5px; font-weight: 650; color: var(--accent);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .room-today.zero { color: var(--ink-2); }
+  .room-today.missing { color: var(--ink-3); font-weight: 500; font-size: 10.5px; }
+  .room-total {
+    text-align: right; font-size: 12px; color: var(--ink-2);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .room-total.missing { color: var(--ink-3); font-size: 10.5px; }
+  .room-group {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 16px 3px; border-top: 1px solid var(--line);
+    font-size: 9.5px; color: var(--ink-3);
+  }
+  .room-group::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  /* ---------- ranking (direction B) ---------- */
+  .rank-panel { overflow: hidden; }
+  .rank-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; padding: 12px 16px 8px;
+  }
+  .rank-cols {
+    display: grid; grid-template-columns: 24px 28px minmax(0, 1fr) 180px 66px;
+    gap: 12px; align-items: center;
+    padding: 0 16px 6px; border-bottom: 1px solid var(--line);
+    font-size: 9.5px; color: var(--ink-3);
+  }
+  .rank-cols span:nth-child(5) { text-align: right; }
+  .rank-row {
+    display: grid; grid-template-columns: 24px 28px minmax(0, 1fr) 180px 66px;
+    gap: 12px; align-items: center;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+    transition: background 120ms var(--ease);
+  }
+  .rank-row:last-child { border-bottom: 0; }
+  .rank-row:hover { background: var(--wash-soft); }
+  .rank-no {
+    font-size: 10px; color: var(--ink-3); font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+  .rank-no.top { color: var(--accent); font-weight: 650; }
+  .rank-track { display: block; height: 8px; border-radius: 99px; background: var(--track); overflow: hidden; }
+  .rank-track.missing { background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .rank-bar {
+    display: block; height: 100%; border-radius: 99px; background: var(--accent);
+    transition: width 320ms var(--ease);
+  }
+  .rank-bar.zero { width: 2px !important; background: var(--line-strong); }
+  .rank-value {
+    text-align: right; font-size: 13px; font-weight: 650; color: var(--accent);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .rank-value.zero { color: var(--ink-2); }
+  .rank-value.missing { color: var(--ink-3); font-weight: 500; font-size: 10.5px; }
+  .rank-foot {
+    padding: 9px 16px 11px; border-top: 1px solid var(--line);
+    font-size: 10px; color: var(--ink-3); line-height: 1.6;
+  }
+
+  /* ---------- weekly view (direction B, 7-day) ---------- */
+  .split { display: flex; flex-direction: column; gap: 10px; }
+  .split .panel { display: flex; flex-direction: column; }
+  .split .chart-area { height: 100px; }
+  .matrix-wrap { padding: 4px 16px 8px; }
+  .matrix-head, .matrix-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) repeat(7, 62px);
+    gap: 5px; align-items: center;
+  }
+  .matrix-head {
+    padding: 4px 0 6px; font-size: 9.5px; color: var(--ink-3); text-align: center;
+  }
+  .matrix-head .room-col { text-align: left; padding-left: 2px; }
+  .matrix-head .today { color: var(--accent); font-weight: 650; }
+  .matrix-row { padding: 3px 0; border-top: 1px solid var(--line); }
+  .matrix-name {
+    display: flex; align-items: center; gap: 7px; min-width: 0;
+    font-size: 10.5px; color: var(--ink-2);
+  }
+  .matrix-name span {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .matrix-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 2px; }
+  .matrix-cell {
+    height: 24px; display: grid; place-items: center;
+    border-radius: 5px; font-size: 11px; color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .matrix-cell.zero { color: var(--ink-3); }
+  .matrix-cell.missing {
+    border: 1px dashed var(--line-strong); background: transparent !important;
+    color: var(--ink-3);
+  }
+  .matrix-cell.today { box-shadow: inset 0 0 0 1px var(--accent-line); }
+  .matrix-legend {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 7px 16px 10px; font-size: 9.5px; color: var(--ink-3);
+  }
+  .heat-key { display: inline-flex; align-items: center; gap: 3px; }
+  .heat-key i { width: 10px; height: 10px; border-radius: 3px; display: block; }
+
+  /* ---------- empty / error ---------- */
+  .state-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; padding: 56px 24px; text-align: center; color: var(--ink-3); font-size: 12px;
+  }
+  .state-card strong { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+  .state-card .btn { margin-top: 8px; }
+
+  /* ---------- review notes ---------- */
+  .review-notes {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px; margin-top: 28px;
+  }
+  .note-card {
+    padding: 18px 18px 17px; border: 1px solid rgba(42, 41, 38, 0.10);
+    border-radius: 12px; background: rgba(255, 255, 255, 0.62);
+  }
+  .note-index {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--accent);
+  }
+  .note-card h3 { margin: 6px 0 5px; font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+  .note-card p { margin: 0; font-size: 11.5px; line-height: 1.7; color: rgba(42, 41, 38, 0.66); }
+  .review-footer {
+    max-width: 1240px; margin: 0 auto; padding: 0 32px 42px;
+    display: flex; justify-content: space-between; gap: 16px;
+    font-size: 10.5px; color: rgba(42, 41, 38, 0.46);
+  }
+
+  @media (max-width: 900px) {
+    .review-header { padding: 34px 18px 20px; flex-direction: column; align-items: flex-start; }
+    .review-shell { padding: 0 18px 40px; }
+    .review-notes { grid-template-columns: 1fr; }
+    .review-footer { padding: 0 18px 32px; flex-direction: column; }
+    .review-toolbar { align-items: flex-start; flex-direction: column; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12.5" rx="2.2"></rect><path d="M8.5 20.5h7M12 17v3.5"></path></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M4 16.5 9.2 11l3.3 3.3L20 7.2"></path><path d="M15.2 7.2H20v4.8"></path></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2.1"></circle><circle cx="9" cy="17" r="2.1"></circle></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"></circle><path d="M4.8 20c.7-3.6 3.6-5.6 7.2-5.6s6.5 2 7.2 5.6"></path></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.2c0-1 .8-1.8 1.8-1.8h3.4l1.8 2.2h8.2c1 0 1.8.8 1.8 1.8v8c0 1-.8 1.8-1.8 1.8H5.3c-1 0-1.8-.8-1.8-1.8V7.2Z"></path></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 4.6v7"></path><path d="M7.6 7.2a7 7 0 1 0 8.8 0"></path></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6.5 9.2 12 14.6l5.5-5.4"></path></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"></circle><path d="M12 11v5.2M12 7.9v.1"></path></symbol>
+</svg>
+
+<header class="review-header">
+  <div>
+    <div class="review-kicker">ビリ推し / GROWTH 01</div>
+    <h1>把每一次陪伴，都记下来。</h1>
+    <p>粉丝牌今日亲密度 · 今日与近 7 日</p>
+  </div>
+  <div class="review-note"><span class="note-dot"></span>高保真 · 可交互 · 非生产代码</div>
+</header>
+
+<main class="review-shell">
+  <div class="review-toolbar">
+    <div class="review-pages" role="tablist" aria-label="界面方向">
+      <button type="button" data-direction="a" class="active" role="tab" aria-selected="true">方向 A · 看板型<span class="rec">推荐</span></button>
+      <button type="button" data-direction="b" role="tab" aria-selected="false">方向 B · 榜单型</button>
+    </div>
+    <div class="review-tools">
+      <span class="review-hint">合成数据 · 今日截至 14:32</span>
+    </div>
+  </div>
+
+  <section class="window-stage" aria-label="高保真界面预览">
+    <div class="window-wrap" id="window-wrap">
+      <div class="app-window" id="app-window">
+
+        <aside class="side">
+          <div class="brand">
+            <div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z" fill="currentColor"></path><path d="M4.6 12h4.1l1.5-3.2 2.2 6.1 1.6-3.4 1.1 2.5h4.3" stroke="#16383a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+            <span class="brand-name">ビリ推し</span>
+          </div>
+          <nav class="nav" aria-label="主导航">
+            <button type="button" class="nav-item"><svg class="icon" width="15" height="15"><use href="#i-monitor"></use></svg><span>直播总览</span></button>
+            <button type="button" class="nav-item" aria-current="page"><svg class="icon" width="15" height="15"><use href="#i-trend"></use></svg><span>成长记录</span></button>
+            <button type="button" class="nav-item"><svg class="icon" width="15" height="15"><use href="#i-sliders"></use></svg><span>挂机设置</span></button>
+            <button type="button" class="nav-item"><svg class="icon" width="15" height="15"><use href="#i-user"></use></svg><span>账号</span></button>
+          </nav>
+          <div class="nav-spacer"></div>
+          <nav class="nav nav-bottom" aria-label="应用操作">
+            <button type="button" class="nav-item"><svg class="icon" width="15" height="15"><use href="#i-folder"></use></svg><span>查看日志</span></button>
+            <button type="button" class="nav-item"><svg class="icon" width="15" height="15"><use href="#i-power"></use></svg><span>退出应用</span></button>
+          </nav>
+          <button type="button" class="sidebar-account">
+            <span class="sidebar-avatar" style="background:#3d7a6c">夜</span>
+            <span class="sidebar-account-text"><strong>夜航星</strong><small>挂机中 · 6 个直播间</small></span>
+            <svg class="icon" width="13" height="13"><use href="#i-chevron"></use></svg>
+          </button>
+        </aside>
+
+        <main class="main">
+          <header class="chrome">
+            <button type="button" class="side-btn" aria-label="收起侧栏"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2"></rect><path d="M6.2 3.2v9.6"></path></svg></button>
+            <div class="chrome-brand">
+              <span class="logo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z" fill="currentColor"></path><path d="M4.6 12h4.1l1.5-3.2 2.2 6.1 1.6-3.4 1.1 2.5h4.3" stroke="#16383a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+              <span class="chrome-name">ビリ推し</span>
+            </div>
+            <span class="chrome-divider" aria-hidden="true"></span>
+            <h1 class="chrome-title" id="chrome-title">成长记录</h1>
+            <span class="spacer"></span>
+            <div class="chrome-actions" id="chrome-actions"></div>
+            <div class="win-buttons" aria-label="窗口控制">
+              <button type="button" class="win-btn" aria-label="最小化"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></path></svg></button>
+              <button type="button" class="win-btn" aria-label="最大化"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="2.6" y="2.6" width="6.8" height="6.8" rx="1.2" stroke="currentColor" stroke-width="1.2"></rect></svg></button>
+              <button type="button" class="win-btn close" aria-label="关闭"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></path></svg></button>
+            </div>
+          </header>
+          <div class="page">
+            <div class="growth" id="growth-page"></div>
+          </div>
+        </main>
+
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="review-footer">
+  <span>数据仅保存在本机 · 设计稿非生产代码</span>
+  <span>2026-11-07 · ビリ推し / GROWTH 01</span>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- synthetic data ----------------
+     Seven days, seven rooms. The third day has no samples at all
+     (the app was not running), which the chart renders as a gap,
+     never as a zero. The last day is today and is still growing. */
+  var DAYS = [
+    { md: "11/01", week: "周日" },
+    { md: "11/02", week: "周一" },
+    { md: "11/03", week: "周二" },
+    { md: "11/04", week: "周三" },
+    { md: "11/05", week: "周四" },
+    { md: "11/06", week: "周五" },
+    { md: "11/07", week: "周六" }
+  ];
+  var TODAY = 6;
+  var AS_OF = "14:32";
+
+  var ROOMS = [
+    { room: 22637261, name: "嘉然今天吃什么", medal: "小草莓", level: 9, color: "#3d7a6c", limit: 1500, synced: "14:12",
+      values: [310, 365, null, 402, 0, 388, 420] },
+    { room: 22625025, name: "贝拉kira", medal: "贝极星", level: 7, color: "#6a5f8f", limit: 1500, synced: "14:26",
+      values: [280, 0, null, 300, 265, 340, 315] },
+    { room: 22637255, name: "乃琳Queen", medal: "奶淇琳", level: 8, color: "#8a7b62", limit: 1500, synced: "14:18",
+      values: [255, 310, null, 240, null, 295, 286] },
+    { room: 22632424, name: "珈乐Carol", medal: "皇珈骑士", level: 6, color: "#7a6270", limit: 1500, synced: "14:24",
+      values: [180, 145, null, 0, 175, 150, 168] },
+    { room: 22625027, name: "向晚大魔王", medal: "顶碗人", level: 6, color: "#4f6f8a", limit: 1500, synced: "14:09",
+      values: [130, 118, null, 105, 122, 0, 95] },
+    { room: 21452505, name: "七海Nana7mi", medal: "海子姐", level: 5, color: "#7d6a4f", limit: 1500, synced: "13:58",
+      values: [0, 85, null, 0, 0, 64, 0] },
+    { room: 1909993, name: "阿梓从小就很可爱", medal: "阿梓", level: 4, color: "#5f7a6a", limit: 1500, synced: null,
+      values: [null, null, null, 90, 0, 110, null] }
+  ];
+
+  var state = {
+    direction: "a",
+    period: "today",
+    selectedRoom: null
+  };
+
+  /* ---------------- helpers ---------------- */
+  function fmt(value) {
+    return typeof value === "number" && isFinite(value) ? value.toLocaleString("zh-CN") : "—";
+  }
+  function sumRecorded(values) {
+    return values.reduce(function (total, value) {
+      return value === null || value === undefined ? total : total + value;
+    }, 0);
+  }
+  function recordedCount(values) {
+    return values.filter(function (value) { return value !== null && value !== undefined; }).length;
+  }
+  function todayTotal() {
+    return sumRecorded(ROOMS.map(function (room) { return room.values[TODAY]; }));
+  }
+  function weekTotal(room) {
+    return sumRecorded(room.values);
+  }
+  function weekGrandTotal() {
+    return ROOMS.reduce(function (total, room) { return total + weekTotal(room); }, 0);
+  }
+  function dayTotal(dayIndex) {
+    return sumRecorded(ROOMS.map(function (room) { return room.values[dayIndex]; }));
+  }
+  function dayCoverage(dayIndex) {
+    return recordedCount(ROOMS.map(function (room) { return room.values[dayIndex]; }));
+  }
+  function recordedDays() {
+    var count = 0;
+    for (var index = 0; index < DAYS.length; index += 1) {
+      if (dayCoverage(index) > 0) count += 1;
+    }
+    return count;
+  }
+  function topToday() {
+    var best = null;
+    ROOMS.forEach(function (room) {
+      var value = room.values[TODAY];
+      if (typeof value !== "number") return;
+      if (!best || value > best.value) best = { room: room, value: value };
+    });
+    return best;
+  }
+  function initial(name) {
+    return Array.from(String(name || "?").trim())[0];
+  }
+  function shortNumber(value) {
+    return value >= 10000 ? (value / 10000).toFixed(1).replace(/\.0$/, "") + "万" : fmt(value);
+  }
+
+  /* ---------------- shared pieces ---------------- */
+  function summaryCards(cards) {
+    return '<div class="summary' + (cards.length === 2 ? " two" : "") + '">' + cards.map(function (card) {
+      return '<section class="stat card">' +
+        '<div class="stat-label"' + (card.hint ? ' title="' + card.hint + '"' : '') + '><i class="dot"></i>' + card.label + '</div>' +
+        '<div class="stat-value' + (card.tone === "ink" ? " ink" : "") + '">' + (card.plus === false ? "" : '<span class="plus">+</span>') + fmt(card.value) +
+          (card.unit ? '<small>' + card.unit + '</small>' : "") + '</div>' +
+        '<div class="stat-sub">' + card.sub + '</div>' +
+        '</section>';
+    }).join("") + '</div>';
+  }
+
+  function chartMarkup(values, options) {
+    options = options || {};
+    var max = 1;
+    values.forEach(function (value) {
+      if (typeof value === "number" && value > max) max = value;
+    });
+    var columns = values.map(function (value, index) {
+      var isToday = index === TODAY;
+      var day = DAYS[index];
+      var missing = value === null || value === undefined;
+      var zero = value === 0;
+      var height = missing ? 0 : Math.max(zero ? 0 : 2, Math.round((value / max) * 100));
+      var coverage = dayCoverage(index);
+      var coverageText = !options.roomView && coverage > 0 && coverage < ROOMS.length
+        ? " · " + coverage + "/" + ROOMS.length
+        : "";
+      var label = missing
+        ? '<div class="chart-value missing">未记录</div>'
+        : '<div class="chart-value' + (isToday ? " strong" : "") + '">' + shortNumber(value) + '</div>';
+      var bar = missing
+        ? '<div class="chart-missing"></div>'
+        : '<div class="chart-bar' + (zero ? " zero" : "") + (isToday ? " today" : "") +
+          '" style="height:' + height + '%"></div>';
+      var tip = missing
+        ? DAYS[index].md + " 未记录"
+        : DAYS[index].md + (options.roomView
+          ? " · +" + fmt(value)
+          : " · 合计 " + fmt(value) + " · " + coverage + "/" + ROOMS.length + " 间有记录");
+      return '<div class="chart-col" title="' + tip + '">' +
+        label +
+        '<div class="chart-area" role="img" aria-label="' + tip + '">' + bar + '</div>' +
+        '<div class="chart-day">' + (isToday && !options.compact ? '<strong>今天</strong>' : day.md) +
+          '<span class="cover">' + (isToday ? '<span class="ongoing">进行中</span>' : day.week) + coverageText + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join("");
+    return '<div class="chart">' + columns + '</div>';
+  }
+
+  function chartFoot(note) {
+    return '<div class="chart-foot"><span class="chart-keys">' +
+      '<span class="chart-key"><i class="swatch prev"></i>已记录</span>' +
+      '<span class="chart-key"><i class="swatch"></i>今天</span>' +
+      '<span class="chart-key"><i class="dash"></i>未记录</span>' +
+      '</span><span>' + note + '</span></div>';
+  }
+
+  /* ---------------- direction A: dashboard ---------------- */
+  function renderA() {
+    var totalToday = todayTotal();
+    var grand = weekGrandTotal();
+    var daysRecorded = recordedDays();
+    var average = daysRecorded ? Math.round(grand / daysRecorded) : 0;
+    var selected = state.selectedRoom
+      ? ROOMS.filter(function (room) { return room.room === state.selectedRoom; })[0]
+      : null;
+
+    var chartValues;
+    var chartHead;
+    if (selected) {
+      chartValues = selected.values;
+      chartHead = '<div class="panel-title" title="该直播间每日观测峰值；未记录不补 0">' +
+        '<span class="room-name-inline">' + selected.name + '</span> · 近 7 日</div>' +
+        '<div class="panel-note"><button type="button" class="link-btn reset" data-clear-room>查看全部</button></div>';
+    } else {
+      chartValues = DAYS.map(function (_day, index) { return dayCoverage(index) ? dayTotal(index) : null; });
+      chartHead = '<div class="panel-title" title="柱高为当日有记录直播间的合计；未记录不补 0">每日总成长</div>';
+    }
+
+    var rows = ROOMS.slice().sort(function (a, b) {
+      var av = a.values[TODAY];
+      var bv = b.values[TODAY];
+      if (av === null && bv === null) return weekTotal(b) - weekTotal(a);
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return bv - av;
+    });
+
+    var maxMini = 1;
+    ROOMS.forEach(function (room) {
+      room.values.forEach(function (value) {
+        if (typeof value === "number" && value > maxMini) maxMini = value;
+      });
+    });
+
+    var roomCells = rows.map(function (room) {
+      var todayValue = room.values[TODAY];
+      var isSelected = room.room === state.selectedRoom;
+      var mini = room.values.map(function (value, index) {
+        var missing = value === null || value === undefined;
+        var zero = value === 0;
+        var height = missing ? 0 : Math.max(zero ? 0 : 2, Math.round((value / maxMini) * 100));
+        return '<i class="' + (missing ? "missing" : zero ? "zero" : "") +
+          (index === TODAY && !missing && !zero ? " today" : "") +
+          '" style="height:' + height + '%" title="' +
+          DAYS[index].md + (missing ? " 未记录" : " · +" + fmt(value)) + '"></i>';
+      }).join("");
+      var todayLabel = todayValue === null
+        ? '<span class="room-today missing">未记录</span>'
+        : '<span class="room-today' + (todayValue === 0 ? " zero" : "") + '">' +
+          (todayValue > 0 ? "+" : "") + fmt(todayValue) + '</span>';
+      var week = weekTotal(room);
+      var daysCount = recordedCount(room.values);
+      var weekLabel = daysCount
+        ? '<span class="room-total">+' + fmt(week) + '</span>'
+        : '<span class="room-total missing">—</span>';
+      return '<button type="button" class="room-row" data-room="' + room.room + '" aria-pressed="' + isSelected + '" ' +
+        'title="' + room.name + ' · 查看近 7 日">' +
+        '<span class="room-id"><span class="avatar" style="background:' + room.color + '">' + initial(room.name) + '</span>' +
+          '<span class="room-name" style="min-width:0">' + room.name + '</span></span>' +
+        '<span class="mini" aria-hidden="true">' + mini + '</span>' +
+        todayLabel + weekLabel +
+      '</button>';
+    });
+    var firstUnrecorded = -1;
+    for (var index = 0; index < rows.length; index += 1) {
+      if (rows[index].values[TODAY] === null) { firstUnrecorded = index; break; }
+    }
+    if (firstUnrecorded > 0) {
+      roomCells.splice(firstUnrecorded, 0,
+        '<div class="room-group">今日未记录 · ' + (rows.length - firstUnrecorded) + ' 间</div>');
+    }
+    var roomRows = roomCells.join("");
+
+    return '' +
+      '<div class="growth-head">' +
+        '<p class="growth-meta">粉丝牌今日亲密度 · 每日 00:00 重置</p>' +
+        '<div class="head-side">' +
+          '<span class="scope-chip"><span class="scope-avatar">夜</span>夜航星</span>' +
+        '</div>' +
+      '</div>' +
+      summaryCards([
+        { label: "今日成长", value: totalToday, sub: "截至 " + AS_OF,
+          hint: "账号当日累计，可能包含手机或网页端的收益" },
+        { label: "近 7 日", value: grand, sub: daysRecorded + " 天 · 日均 +" + fmt(average),
+          hint: "仅合计已记录的直播间；未记录不补 0" }
+      ]) +
+      '<section class="panel card">' +
+        '<div class="panel-head">' + chartHead + '</div>' +
+        chartMarkup(chartValues, { roomView: Boolean(selected) }) +
+      '</section>' +
+      '<section class="rooms-panel card">' +
+        '<div class="rooms-head"><span class="rooms-title">各直播间</span></div>' +
+        '<div class="room-cols"><span>直播间</span><span>近 7 日</span><span>今日</span><span>合计</span></div>' +
+        roomRows +
+      '</section>';
+  }
+
+  /* ---------------- direction B: ranking ---------------- */
+  function renderRankingToday() {
+    var total = todayTotal();
+    var best = topToday();
+    var coverage = dayCoverage(TODAY);
+    var max = best && best.value > 0 ? best.value : 1;
+    var rows = ROOMS.slice().sort(function (a, b) {
+      var av = a.values[TODAY];
+      var bv = b.values[TODAY];
+      if (av === null && bv === null) return weekTotal(b) - weekTotal(a);
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      return bv - av;
+    });
+    var rank = 0;
+    var body = rows.map(function (room) {
+      var value = room.values[TODAY];
+      var missing = value === null;
+      var zero = value === 0;
+      rank = missing ? rank : rank + 1;
+      var width = missing ? 0 : Math.max(zero ? 0 : 2, Math.round((value / max) * 100));
+      return '<div class="rank-row" title="' + room.name + ' · ' + room.medal + ' Lv.' + room.level +
+        (missing ? " · 今日未记录" : " · 今日 +" + fmt(value)) + '">' +
+        '<span class="rank-no' + (!missing && rank === 1 ? " top" : "") + '">' + (missing ? "—" : (rank < 10 ? "0" + rank : rank)) + '</span>' +
+        '<span class="avatar" style="background:' + room.color + '">' + initial(room.name) + '</span>' +
+        '<span style="min-width:0"><span class="room-name">' + room.name + '</span>' +
+          '<span class="room-sub">' + room.medal + ' Lv.' + room.level + ' · 合计 +' + fmt(weekTotal(room)) + '</span></span>' +
+        '<span class="rank-track' + (missing ? " missing" : "") + '" aria-hidden="true"><span class="rank-bar' + (zero ? " zero" : "") + '" style="width:' + width + '%"></span></span>' +
+        (missing
+          ? '<span class="rank-value missing">未记录</span>'
+          : '<span class="rank-value' + (zero ? " zero" : "") + '">' + (value > 0 ? "+" : "") + fmt(value) + '</span>') +
+      '</div>';
+    }).join("");
+
+    return '' +
+      '<div class="growth-head">' +
+        '<div><h2>今日成长</h2><p>11/07 周六 · 截至 ' + AS_OF + ' · ' + coverage + '/' + ROOMS.length + ' 间有记录</p></div>' +
+        '<div class="seg" role="tablist" aria-label="时间范围">' +
+          '<button type="button" role="tab" aria-selected="true" data-period="today">今日</button>' +
+          '<button type="button" role="tab" aria-selected="false" data-period="week">近 7 日</button>' +
+        '</div>' +
+      '</div>' +
+      summaryCards([
+        { label: "今日成长", value: total, sub: "截至 " + AS_OF + " · 仍会继续增长" },
+        { label: "今日最高", value: best ? best.value : 0, sub: best ? best.room.name : "暂无记录" },
+        { label: "记录覆盖", value: coverage, plus: false, tone: "ink", unit: "/ " + ROOMS.length + " 间", sub: "「未记录」不计入 0" }
+      ]) +
+      '<section class="rank-panel card">' +
+        '<div class="rank-head"><span class="rooms-title">直播间排行</span>' +
+          '<span class="rooms-note">按今日亲密度涨幅排序 · 条形相对今日最高</span></div>' +
+        '<div class="rank-cols"><span>#</span><span></span><span>直播间</span><span></span><span>今日涨幅</span></div>' +
+        body +
+        '<div class="rank-foot">0 表示已记录但没有新增；未记录表示当天没有采样，不等同于 0。今日数据仍在增长。</div>' +
+      '</section>';
+  }
+
+  function renderWeek() {
+    var grand = weekGrandTotal();
+    var daysRecorded = recordedDays();
+    var average = daysRecorded ? Math.round(grand / daysRecorded) : 0;
+    var dayValues = DAYS.map(function (_day, index) {
+      return dayCoverage(index) ? dayTotal(index) : null;
+    });
+    var bestDay = null;
+    dayValues.forEach(function (value, index) {
+      if (typeof value === "number" && (!bestDay || value > bestDay.value)) {
+        bestDay = { value: value, md: DAYS[index].md };
+      }
+    });
+
+    var totals = ROOMS.map(function (room) {
+      return { room: room, total: weekTotal(room) };
+    }).sort(function (a, b) { return b.total - a.total; });
+    var maxCell = 1;
+    ROOMS.forEach(function (room) {
+      room.values.forEach(function (value) {
+        if (typeof value === "number" && value > maxCell) maxCell = value;
+      });
+    });
+
+    var matrix = totals.map(function (item) {
+      var cells = item.room.values.map(function (value, index) {
+        var missing = value === null || value === undefined;
+        var zero = value === 0;
+        var alpha = missing || zero ? 0 : 0.08 + 0.22 * (value / maxCell);
+        var style = missing || zero ? "" : ' style="background:rgba(45,103,99,' + alpha.toFixed(3) + ')"';
+        var cls = "matrix-cell" + (missing ? " missing" : zero ? " zero" : "") + (index === TODAY ? " today" : "");
+        var text = missing ? "—" : zero ? "0" : fmt(value);
+        var title = DAYS[index].md + " · " + item.room.name + (missing ? " 未记录" : " +" + fmt(value));
+        return '<span class="' + cls + '"' + style + ' title="' + title + '">' + text + '</span>';
+      }).join("");
+      return '<div class="matrix-row">' +
+        '<span class="matrix-name"><i class="matrix-dot" style="background:' + item.room.color + '"></i>' +
+          '<span>' + item.room.name + '</span></span>' +
+        cells +
+      '</div>';
+    }).join("");
+
+    var heads = DAYS.map(function (day, index) {
+      return '<span class="' + (index === TODAY ? "today" : "") + '">' + (index === TODAY ? "今天" : day.md) + '</span>';
+    }).join("");
+
+    return '' +
+      '<div class="growth-head">' +
+        '<div><h2>近 7 日成长</h2><p>11/01 – 11/07 · 含今天 · 今日截至 ' + AS_OF + '</p></div>' +
+        '<div class="seg" role="tablist" aria-label="时间范围">' +
+          '<button type="button" role="tab" aria-selected="false" data-period="today">今日</button>' +
+          '<button type="button" role="tab" aria-selected="true" data-period="week">近 7 日</button>' +
+        '</div>' +
+      '</div>' +
+      summaryCards([
+        { label: "近 7 日", value: grand, sub: daysRecorded + " 天有记录 · 日均 +" + fmt(average) },
+        { label: "日均", value: average, sub: "按有记录的天数计算" },
+        { label: "最高单日", value: bestDay ? bestDay.value : 0, sub: bestDay ? bestDay.md + " · 有记录直播间合计" : "暂无记录" }
+      ]) +
+      '<div class="split">' +
+        '<section class="panel card">' +
+          '<div class="panel-head"><span class="panel-title">每日总成长</span>' +
+            '<span class="panel-note">有记录直播间合计</span></div>' +
+          chartMarkup(dayValues, { compact: true }) +
+          chartFoot("虚线为未记录；日期下为覆盖比例") +
+        '</section>' +
+        '<section class="panel card">' +
+          '<div class="panel-head"><span class="panel-title">各直播间 · 每日</span>' +
+            '<span class="panel-note">按 7 日合计排序</span></div>' +
+          '<div class="matrix-wrap">' +
+            '<div class="matrix-head"><span class="room-col">直播间</span>' + heads + '</div>' +
+            matrix +
+          '</div>' +
+          '<div class="matrix-legend"><span class="heat-key">少' +
+            '<i style="background:rgba(45,103,99,0.08)"></i>' +
+            '<i style="background:rgba(45,103,99,0.16)"></i>' +
+            '<i style="background:rgba(45,103,99,0.30)"></i>多</span>' +
+            '<span>— 未记录 · 今日标注描边</span></div>' +
+        '</section>' +
+      '</div>';
+  }
+
+  /* ---------------- render ---------------- */
+  var page = document.getElementById("growth-page");
+  function render() {
+    if (state.direction === "a") {
+      page.innerHTML = '<div class="growth-inner">' + renderA() + '</div>';
+    } else {
+      page.innerHTML = '<div class="growth-inner">' +
+        (state.period === "week" ? renderWeek() : renderRankingToday()) + '</div>';
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    var direction = event.target.closest("[data-direction]");
+    if (direction) {
+      state.direction = direction.getAttribute("data-direction");
+      state.selectedRoom = null;
+      document.querySelectorAll("[data-direction]").forEach(function (button) {
+        var active = button === direction;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", String(active));
+      });
+      render();
+      return;
+    }
+    var period = event.target.closest("[data-period]");
+    if (period) {
+      state.period = period.getAttribute("data-period");
+      render();
+      return;
+    }
+    var room = event.target.closest("[data-room]");
+    if (room) {
+      var id = Number(room.getAttribute("data-room"));
+      state.selectedRoom = state.selectedRoom === id ? null : id;
+      render();
+      return;
+    }
+    if (event.target.closest("[data-clear-room]")) {
+      state.selectedRoom = null;
+      render();
+    }
+  });
+
+  /* Fit the 1180 × 760 app window into the review column. */
+  function fit() {
+    var wrap = document.getElementById("window-wrap");
+    var app = document.getElementById("app-window");
+    var scale = Math.min(1, wrap.clientWidth / 1180);
+    app.style.transform = "scale(" + scale + ")";
+    wrap.style.height = (760 * scale) + "px";
+  }
+  window.addEventListener("resize", fit);
+
+  render();
+  fit();
+})();
+</script>
+</body>
+</html>

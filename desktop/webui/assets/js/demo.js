@@ -26,11 +26,71 @@
   const state = {
     rows, paused: false, checking: false, last_check: now - 120, version: "2026.10.18.3",
     account: "示例账号", account_confirmed: true, account_checked_at: now - 120,
+    active_account_id: "uid-demo", view_account_id: "all",
+    accounts: [{
+      id: "uid-demo", uid: 10001, name: "示例账号", status: "ok", state: "running",
+      signed_in: true, running: true, paused: false, global_paused: false,
+      room_count: rows.length, live_room_count: rows.filter((row) => row.live_status === 1).length,
+      gain: rows.reduce((total, row) => total + (row.intimacy_gain || 0), 0),
+      snapshot_at: now - 120
+    }],
     safety: { blocked: false }, error: "", running: true,
     settings: { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false, notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false },
     accountInfo: { signed_in: true, name: "示例账号", confirmed: true, checked_at: now - 120, safety: { blocked: false } },
     notifications: { available: false }
   };
+  /* Synthetic growth history: seven days, one gap, today still growing.
+     Mirrors Api.growth so the preview exercises the real page code. */
+  const growth = (() => {
+    const stamp = Date.now() / 1000;
+    const days = [];
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const date = new Date((stamp - offset * 86400 + 8 * 3600) * 1000);
+      days.push(date.toISOString().slice(0, 10));
+    }
+    const today = days[days.length - 1];
+    const source = [
+      { room: 22637261, uid: 101, name: "嘉然今天吃什么", medal_name: "小草莓", level: 9,
+        values: [310, 365, null, 402, 0, 388, 420] },
+      { room: 22625025, uid: 102, name: "贝拉kira", medal_name: "贝极星", level: 7,
+        values: [280, 0, null, 300, 265, 340, 315] },
+      { room: 22637255, uid: 104, name: "乃琳Queen", medal_name: "奶淇琳", level: 8,
+        values: [255, 310, null, 240, null, 295, 286] },
+      { room: 22632424, uid: 103, name: "向晚大魔王", medal_name: "顶碗人", level: 6,
+        values: [180, 145, null, 0, 175, 150, null] }
+    ];
+    const rooms = source.map((room) => {
+      const cells = room.values.map((value, index) => value === null
+        ? { day: days[index], recorded: false, value: null, samples: 0, last_at: null }
+        : { day: days[index], recorded: true, value, samples: 1,
+          last_at: stamp - (6 - index) * 86400 - 600 });
+      const recorded = cells.filter((cell) => cell.recorded);
+      return {
+        room: room.room, uid: room.uid, name: room.name, tracked: true,
+        medal_name: room.medal_name, level: room.level,
+        recorded_days: recorded.length,
+        recorded_total: recorded.reduce((total, cell) => total + cell.value, 0),
+        cells
+      };
+    });
+    const coverage = {};
+    days.forEach((day, index) => {
+      const cells = rooms.map((room) => room.cells[index]).filter((cell) => cell.recorded);
+      coverage[day] = {
+        samples: cells.length,
+        first_at: cells.length ? Math.min(...cells.map((cell) => cell.last_at)) : null,
+        last_at: cells.length ? Math.max(...cells.map((cell) => cell.last_at)) : null,
+        rooms_recorded: cells.length,
+        rooms_recordable: rooms.length,
+        partial: index === days.length - 1
+      };
+    });
+    return {
+      schema: 1, available: true, error: "", today, days, rooms, coverage,
+      account_id: "uid-demo", account_name: "示例账号",
+      running: true, paused: false, status: "running", generated_at: stamp
+    };
+  })();
   let qrGeneration = 0;
   function publish() {
     state.updated = Date.now() / 1000;
@@ -81,6 +141,8 @@
     logout() { state.account = ""; state.accountInfo = { signed_in: false, name: "", confirmed: false, safety: {} }; state.paused = true;
       state.recovery = { action: "login", label: "扫码登录" }; publish(); return { ok: true }; },
     resume_safety() { state.safety = { blocked: false }; publish(); return { ok: true }; },
+    growth(days, accountId) { return JSON.parse(JSON.stringify(growth)); },
+    set_view_account(accountId) { state.view_account_id = accountId || "all"; publish(); return { ok: true }; },
     refresh() { publish(); return { ok: true }; },
     window() { return { ok: true, message: "预览模式不控制窗口" }; },
     quit() { return { ok: false, error: "这是浏览器预览，关闭标签页即可" }; }

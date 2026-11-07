@@ -21,6 +21,12 @@ const Icon = ({ name, size = 15, stroke = 1.6, className = "" }) => {
         <path d="M8.5 20.5h7M12 17v3.5" />
       </>
     ),
+    trend: (
+      <>
+        <path d="M4 16.5 9.2 11l3.3 3.3L20 7.2" />
+        <path d="M15.2 7.2H20v4.8" />
+      </>
+    ),
     sliders: (
       <>
         <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />

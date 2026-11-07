@@ -8,19 +8,18 @@ const THEME_KEYS = ["white", "paper", "mist", "apricot"];
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, collapsed, onSwitcher, switcherOpen }) => (
+const Sidebar = ({ page, onPage, account, avatar, onQuit, brandHidden, collapsed, onSwitcher, switcherOpen }) => (
   <aside className="side">
     {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
       <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
     </div>}
     <nav className="nav" aria-label="主导航">
-      {[ ["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
+      {[ ["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
         <button type="button" key={key} className="nav-item" aria-current={page === key ? "page" : undefined}
           aria-label={text} title={text} onClick={() => onPage(key)}><Icon name={icon} /><span>{text}</span></button>)}
     </nav>
     <div className="nav-spacer" />
     <nav className="nav nav-bottom" aria-label="应用操作">
-      <button type="button" className="nav-item" onClick={onLogs} aria-label="查看日志" title="查看日志"><Icon name="folder" /><span>查看日志</span></button>
       <button type="button" className="nav-item" onClick={onQuit} aria-label="退出应用" title="退出应用"><Icon name="power" /><span>退出应用</span></button>
     </nav>
     <button type="button" className="sidebar-account" onClick={onSwitcher} title="切换账号"
@@ -32,7 +31,7 @@ const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, c
   </aside>
 );
 
-const pageTitles = { monitor: "直播总览", growth: "成长记录", automation: "挂机设置", account: "账号" };
+const pageTitles = { monitor: "直播总览", growth: "成长记录", automation: "设置", account: "账号" };
 
 const WindowButtons = () => {
   const [maximized, setMaximized] = useState(false);
@@ -216,11 +215,9 @@ function App() {
 
   const accounts = snap.accounts || [];
   const activeId = snap.active_account_id || "";
-  const viewId = snap.view_account_id || "all";
-  const isAllView = viewId === "all" || !viewId;
-  // The top level stays the running account; a different account carries its
-  // own snapshot so stale data is never shown as live.
-  const viewed = (!isAllView && viewId !== activeId && snap.view) ? snap.view : snap;
+  const viewId = activeId;
+  const isAllView = false;
+  const viewed = snap;
 
   useEffect(() => {
     const rows = viewed.rows || [];
@@ -230,29 +227,30 @@ function App() {
     } else if (selectedId !== null && !rows.some((row) => row.room === selectedId)) setSelectedId(null);
   }, [viewed.rows, selectedId]);
 
+  const fetchAvatar = useCallback((uid) => {
+    if (!uid || images[uid] || avatarPending.current.has(uid)) return;
+    if (Date.now() < (avatarRetry.current[uid] || 0)) return;
+    avatarPending.current.add(uid);
+    call("avatar", uid, "", activeId).then((result) => {
+      avatarPending.current.delete(uid);
+      if (result?.ok && result.data_uri && alive.current) {
+        delete avatarRetry.current[uid];
+        setImages((items) => ({ ...items, [uid]: result.data_uri }));
+      } else {
+        avatarRetry.current[uid] = Date.now() + 60000;
+      }
+    }).catch(() => {
+      avatarPending.current.delete(uid);
+      avatarRetry.current[uid] = Date.now() + 60000;
+    });
+  }, [images, activeId]);
+
   useEffect(() => {
     if (!connected || !viewed.accountInfo?.signed_in) return;
-    const now = Date.now();
     for (const row of viewed.rows || []) {
-      if (!row.uid || images[row.uid] || avatarPending.current.has(row.uid)) continue;
-      if (now < (avatarRetry.current[row.uid] || 0)) continue;
-      avatarPending.current.add(row.uid);
-      call("avatar", row.uid, "", viewId === "all" ? "" : viewId).then((result) => {
-        avatarPending.current.delete(row.uid);
-        if (result?.ok && result.data_uri && alive.current) {
-          delete avatarRetry.current[row.uid];
-          setImages((items) => ({ ...items, [row.uid]: result.data_uri }));
-        } else {
-          avatarRetry.current[row.uid] = Date.now() + 60000;
-        }
-      }).catch(() => {
-        // A failed request must release the slot or the room keeps its letter
-        // placeholder until the whole app restarts.
-        avatarPending.current.delete(row.uid);
-        avatarRetry.current[row.uid] = Date.now() + 60000;
-      });
+      fetchAvatar(row.uid);
     }
-  }, [viewed.rows, connected, images, viewId]);
+  }, [viewed.rows, connected, fetchAvatar]);
 
   const rooms = (viewed.rows || []).map((row) => toRoom(row, viewed));
   const selected = rooms.find((room) => room.room === selectedId);
@@ -267,7 +265,7 @@ function App() {
     let live = true;
     let retry = 0;
     const load = () => {
-      call("account_avatar", viewId === "all" ? "" : viewId).then((result) => {
+      call("account_avatar", activeId).then((result) => {
         if (!live) return;
         if (result?.ok && result.data_uri) setAccountAvatar(result.data_uri);
         else if (result?.error) retry = window.setTimeout(load, 60000);
@@ -277,7 +275,7 @@ function App() {
     };
     load();
     return () => { live = false; window.clearTimeout(retry); };
-  }, [connected, account.signed_in, account.name, avatarVersion, viewId]);
+  }, [connected, account.signed_in, account.name, avatarVersion, activeId]);
 
   const invoke = async (method, args = [], success = "") => {
     try {
@@ -315,7 +313,7 @@ function App() {
     setSnap((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
     settingsQueue.current = settingsQueue.current.catch(() => {}).then(async () => {
       try {
-        await invoke("save_settings", [{ [key]: value }, viewId === "all" ? "" : viewId]);
+        await invoke("save_settings", [{ [key]: value }, activeId]);
         delete settingOverrides.current[key];
         await refresh();
       } finally {
@@ -410,14 +408,26 @@ function App() {
     } finally { if (alive.current) setDialogBusy(false); }
   };
 
-  /* Changing the running account is explicit: the switcher only changes the
-     viewed account, so a second account never steals the running slot. */
-  const requestSwitch = (accountId) => {
+  const switchAccount = async (accountId) => {
+    setSwitcher(false);
+    if (!accountId || accountId === activeId) return;
     const target = accounts.find((item) => item.id === accountId);
     if (!target) return;
-    if (!target.signed_in || target.status === "needs_login") { openQr(accountId); return; }
-    if (target.status === "blocked") { setDialog({ type: "protection", account: target }); return; }
-    setDialog({ type: "switch", account: target });
+    if (!target.signed_in || target.status === "needs_login") {
+      openQr(accountId);
+      return;
+    }
+    if (target.status === "blocked") {
+      setDialog({ type: "protection", account: target });
+      return;
+    }
+    const result = await invoke("switch_account", [accountId]);
+    if (result?.ok) {
+      selectionInitialized.current = false;
+      setSelectedId(null);
+      toast(`已切换至「${target.name}」`);
+      await refresh();
+    }
   };
 
   const confirmAction = async () => {
@@ -444,16 +454,16 @@ function App() {
   };
 
   const recover = async () => {
-    const route = viewed.recovery || {};
-    if (route.action === "login") openQr(viewId === "all" ? "" : viewId);
+    const route = snap.recovery || {};
+    if (route.action === "login") openQr(activeId);
     else if (route.action === "resume") control("toggle_pause");
     else if (route.action === "switch") { setPage("monitor"); }
     else if (route.action === "safety") {
-      if (viewed.safety?.kind === "auth" || viewed.safety?.kind === "credentials") openQr(viewId === "all" ? "" : viewId);
-      else if (viewed.safety?.until > Date.now() / 1000) { setPage("account"); }
+      if (snap.safety?.kind === "auth" || snap.safety?.kind === "credentials") openQr(activeId);
+      else if (snap.safety?.until > Date.now() / 1000) { setPage("account"); }
       else setDialog({ type: "safety" });
     } else if (route.action === "room") { setPage("monitor"); setSelectedId(route.room); }
-    else if (route.action === "logs") invoke("open_logs", [viewId === "all" ? "" : viewId]);
+    else if (route.action === "logs") invoke("open_logs", [activeId]);
     else if (route.action === "refresh") control("refresh");
     else control("check_now");
   };
@@ -464,15 +474,6 @@ function App() {
   const remove = (room) => { setMenu(null); setDialog({ type: "remove", room }); };
   const onContextMenu = (event, id) => {
     event.preventDefault(); select(id); setMenu({ room: id, x: event.clientX, y: event.clientY });
-  };
-
-  const viewAccount = async (accountId) => {
-    setSwitcher(false);
-    if (accountId === "all") { await invoke("set_view_account", ["all"]); await refresh(); return; }
-    await invoke("set_view_account", [accountId]);
-    selectionInitialized.current = false;
-    setSelectedId(null);
-    await refresh();
   };
 
   const dialogCopy = {
@@ -487,21 +488,18 @@ function App() {
 
   const sidebarAccount = {
     ...account,
-    subtitle: isAllView
-      ? (snap.global_paused ? "挂机：全局暂停中" : accounts.filter((item) => item.running).length
-        ? `挂机：${accounts.filter((item) => item.running).map((item) => item.name).join("、")}`
-        : "挂机：无")
-      : (viewed.inactive ? "此账号未运行" : "当前挂机")
+    subtitle: account.signed_in
+      ? (snap.paused ? "已暂停挂机" : "当前挂机中")
+      : "未登录"
   };
 
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
       <Sidebar page={page} onPage={setPage} account={sidebarAccount} avatar={accountAvatar}
-        onLogs={() => invoke("open_logs", [viewId === "all" ? "" : viewId])}
         onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed}
         onSwitcher={() => setSwitcher((value) => !value)} switcherOpen={switcher} />
-      <window.AccountSwitcher open={switcher} accounts={accounts} viewId={viewId} activeId={activeId}
-        onSelect={viewAccount} onManage={() => { setSwitcher(false); setPage("account"); }}
+      <window.AccountSwitcher open={switcher} accounts={accounts} activeId={activeId}
+        onSelect={switchAccount} onManage={() => { setSwitcher(false); setPage("account"); }}
         onAdd={() => { setSwitcher(false); openQr(""); }} onClose={() => setSwitcher(false)} />
       <main className="main" aria-busy={!connected}>
         <header className="chrome pywebview-drag-region">
@@ -512,55 +510,39 @@ function App() {
           <h1 className="chrome-title">{pageTitles[page]}</h1>
           <span className="spacer" />
           <div className="chrome-actions">
-            {page === "monitor" && !isAllView && <window.OverviewActions paused={viewed.paused}
+            {page === "monitor" && <window.OverviewActions paused={snap.paused}
               onTogglePause={() => control("toggle_pause")}
-              onCheck={() => control("check_now")} checking={viewed.checking}
-              controlBusy={controlBusy} closing={closing} inactive={Boolean(viewed.inactive)} />}
-            {page === "monitor" && isAllView && accounts.length > 0 && <>
-              <button type="button" className="btn" onClick={() => control("check_now")} disabled={controlBusy || closing}>
-                <Icon name="refresh" size={13} />全部检查</button>
-              {snap.global_paused
-                ? <button type="button" className="btn primary" onClick={() => control("set_global_paused", [false])} disabled={controlBusy || closing}>
-                  <Icon name="play" size={13} />恢复全部</button>
-                : <button type="button" className="btn" onClick={() => control("set_global_paused", [true])} disabled={controlBusy || closing}>
-                  <Icon name="pause" size={13} />全部暂停</button>}
-            </>}
+              onCheck={() => control("check_now")} checking={snap.checking}
+              controlBusy={controlBusy} closing={closing} />}
           </div>
           <WindowButtons key={page} />
         </header>
-        {page === "monitor" && <window.AccountTabs accounts={accounts} viewId={viewId} activeId={activeId}
-          onView={viewAccount} onAdd={() => openQr("")} />}
+        {page === "monitor" && accounts.length > 0 && <window.AccountTabs accounts={accounts} activeId={activeId}
+          onSelect={switchAccount} onAdd={() => openQr("")} />}
         <div className="page" id="monitor-body">
-        {page === "monitor" && isAllView && <window.AccountDashboard accounts={accounts}
-          globalPaused={Boolean(snap.global_paused)} onView={viewAccount} onSwitch={requestSwitch}
-          onCheckAll={() => control("check_now")} onPauseAll={() => control("set_global_paused", [true])}
-          onResumeAll={() => control("set_global_paused", [false])}
-          onRelogin={(id) => openQr(id)} onProtection={(id) => setDialog({ type: "protection", account: accounts.find((item) => item.id === id) })}
-          busy={controlBusy || closing} />}
-        {page === "monitor" && !isAllView && <window.Overview rooms={rooms} selectedId={selectedId} onSelect={select}
-          paused={viewed.paused}
+        {page === "monitor" && <window.Overview rooms={rooms} selectedId={selectedId} onSelect={select}
+          paused={snap.paused}
           onAction={roomAction} onOpen={(id) => invoke("open_room", [id])} onAddMember={openAdd} onSyncMedals={openMedals}
           onRemove={remove} onContextMenu={onContextMenu} busyRoom={busyRoom} controlBusy={controlBusy}
-          error={viewed.error || viewed.ui_error} recovery={viewed.recovery} onRecovery={recover}
-          interval={viewed.settings?.check_minutes || 5} lastCheck={viewed.last_check} checking={viewed.checking}
+          error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
+          interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
           images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected}
-          accountName={accounts.find((item) => item.id === viewId)?.name || ""}
-          inactive={Boolean(viewed.inactive)}
-          onSwitch={() => requestSwitch(viewId)} />}
-        {page === "growth" && <window.GrowthPage viewId={viewId}
+          accountName={account.name || ""} />}
+        {page === "growth" && <window.GrowthPage viewId={activeId} images={images} onNeedAvatar={fetchAvatar}
           onOpenAccount={() => setPage("account")} onOpenMonitor={() => setPage("monitor")} />}
-        {page === "automation" && <window.SettingsPage settings={viewed.settings || DEFAULT_SETTINGS} onSetting={setSetting}
+        {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
           pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme}
-          scope={accounts.find((item) => item.id === viewId) || null} scopeAll={isAllView} />}
-        {page === "account" && <window.AccountPage accounts={accounts} activeId={activeId} viewId={viewId}
+          scope={accounts.find((item) => item.id === activeId) || null} scopeAll={false}
+          onLogs={() => invoke("open_logs", [activeId])} />}
+        {page === "account" && <window.AccountPage accounts={accounts} activeId={activeId} viewId={activeId}
           account={account} avatar={accountAvatar} onScan={openQr}
-          onView={viewAccount} onSwitch={requestSwitch}
+          onView={() => setPage("monitor")} onSwitch={switchAccount}
           onLogout={(id) => setDialog({ type: "logout", account: accounts.find((item) => item.id === id) })}
           onRemove={(id) => setDialog({ type: "removeAccount", account: accounts.find((item) => item.id === id) })}
           onProtection={(id) => setDialog({ type: "protection", account: accounts.find((item) => item.id === id) })}
           onResumeSafety={() => setDialog({ type: "safety" })}
           onCheck={() => control("check_now")} busy={controlBusy || closing}
-          inactive={Boolean(viewed.inactive)} version={snap.version} />}
+          version={snap.version} />}
         </div>
       </main>
       <div className="toasts" aria-live="polite">{toasts.map((item) => <div key={item.id} className={`toast ${item.tone}`}>

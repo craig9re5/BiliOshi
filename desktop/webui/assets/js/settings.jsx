@@ -109,20 +109,19 @@ const ThemeOptions = ({ value, onChange }) => (
   </div>
 );
 
-const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", onTheme, scope, scopeAll }) => {
+const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", onTheme, scope, scopeAll, onLogs }) => {
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   return (<>
-    <div className="settings" data-screen-label="挂机设置"><div className="settings-inner">
+    <div className="settings" data-screen-label="设置"><div className="settings-inner">
       <div className="scope-bar">
-        <span className="scope-label">应用对象</span>
+        <span className="scope-label">当前账号</span>
         <span className="scope-chip">
           {scope ? <window.AccountAvatar account={scope} size="sm" /> : null}
-          {scope ? scope.name : "全部账号"}
+          {scope ? scope.name : "未登录"}
         </span>
         <span className="scope-note">
-          {scope ? `正在编辑此账号；每个账号独立保存，切换账号后本页会跟随`
-            : "正在编辑当前挂机账号；从顶部账号标签选择可直接切换编辑对象"}
+          任务开关与运行模式按账号独立保存；界面主题与开机启动全应用生效
         </span>
       </div>
       <section className="group card">
@@ -155,6 +154,11 @@ const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", o
             options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
             onChange={(value) => onSetting("run_mode", value)} />
         </SettingRow>
+        <SettingRow name="运行日志" desc="在文件资源管理器中打开当前账号的日志目录，排查异常或查看运行记录">
+          <button type="button" className="btn sm" onClick={onLogs}>
+            <Icon name="folder" size={13} />查看日志
+          </button>
+        </SettingRow>
       </section>
       <section className="group card">
         <header className="group-head">外观</header>
@@ -167,7 +171,7 @@ const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", o
   </>);
 };
 
-const AccountRow = ({ account, isView, isActive, image, onView, onSwitch, onScan, onLogout, onRemove, onProtection, busy }) => {
+const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogout, onRemove, onProtection, busy }) => {
   const state = window.accountStateLabel(account);
   const needsLogin = !account.signed_in || account.status === "needs_login";
   const protection = account.status === "blocked";
@@ -177,30 +181,24 @@ const AccountRow = ({ account, isView, isActive, image, onView, onSwitch, onScan
   } else if (needsLogin) {
     action = <button type="button" className="btn sm primary" onClick={() => onScan(account.id)}>
       <Icon name="qr" size={12} />重新扫码</button>;
-  } else if (account.running) {
-    action = isView ? null : <button type="button" className="btn sm" onClick={() => onView(account.id)}>查看总览</button>;
-  } else if (account.paused) {
-    action = <button type="button" className="btn sm primary" onClick={() => onSwitch(account.id)}>
-      <Icon name="play" size={12} />恢复挂机</button>;
   } else if (isActive) {
-    action = <button type="button" className="btn sm primary" onClick={() => onSwitch(account.id)}>
-      <Icon name="play" size={12} />开始挂机</button>;
+    action = <button type="button" className="btn sm" onClick={() => onView(account.id)}>查看总览</button>;
   } else {
-    action = <button type="button" className="btn sm" onClick={() => onSwitch(account.id)}>切换并挂机</button>;
+    action = <button type="button" className="btn sm primary" onClick={() => onSwitch(account.id)}>
+      <Icon name="play" size={12} />切换账号</button>;
   }
   const note = protection ? (account.safety?.reason || "账号操作已暂停，重新扫码不会解除")
     : needsLogin ? "登录已失效，其他账号不受影响"
-      : account.paused ? "已暂停挂机，关注与今日额度已保留"
-        : account.running ? "上次检查 " + relativeTime(account.snapshot_at) + " · 登录正常"
-          : "上次检查 " + relativeTime(account.snapshot_at) + " · 未运行";
+      : isActive ? (account.paused ? "已暂停挂机，关注与今日额度已保留" : "当前使用中 · 上次检查 " + relativeTime(account.snapshot_at))
+        : "点击切换账号后即可使用此账号挂机";
   return (
-    <div className={`account-item ${isView ? "current" : ""}`}>
+    <div className={`account-item ${isActive ? "current" : ""}`}>
       <window.AccountAvatar account={account} size="lg" image={image} />
       <div className="account-item-main">
         <div className="account-item-title">
           <strong>{account.name}</strong>
-          {isView && <span className="mini-tag accent">当前查看</span>}
-          <span className={`mini-tag ${state.tone}`}>{state.label}</span>
+          {isActive && <span className="mini-tag live">当前使用</span>}
+          {!isActive && !needsLogin && !protection && <span className={`mini-tag ${state.tone}`}>{state.label}</span>}
           {needsLogin && <span className="mini-tag warn">需要重新扫码</span>}
           {protection && <span className="mini-tag warn">需在平台处理</span>}
         </div>
@@ -220,8 +218,8 @@ const AccountRow = ({ account, isView, isActive, image, onView, onSwitch, onScan
   );
 };
 
-const AccountPage = ({ accounts, activeId, viewId, account, avatar, onScan, onView, onSwitch,
-  onLogout, onRemove, onProtection, onResumeSafety, onCheck, busy, version, inactive }) => {
+const AccountPage = ({ accounts, activeId, account, avatar, onScan, onView, onSwitch,
+  onLogout, onRemove, onProtection, onResumeSafety, onCheck, busy, version }) => {
   const hold = account.safety || {};
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
@@ -236,8 +234,8 @@ const AccountPage = ({ accounts, activeId, viewId, account, avatar, onScan, onVi
             <Icon name="plus" size={13} />添加账号</button>
         </header>
         {accounts.length ? accounts.map((item) => <AccountRow key={item.id} account={item}
-          isView={item.id === viewId} isActive={item.id === activeId}
-          image={item.id === viewId ? avatar : undefined}
+          isActive={item.id === activeId}
+          image={item.id === activeId ? avatar : undefined}
           onView={onView} onSwitch={onSwitch} onScan={onScan} onLogout={onLogout} onRemove={onRemove} onProtection={onProtection}
           busy={busy} />)
           : <div className="empty list-empty"><Icon name="user" size={24} />
@@ -250,13 +248,13 @@ const AccountPage = ({ accounts, activeId, viewId, account, avatar, onScan, onVi
         <header className="group-head">账号保护</header>
         <SettingRow name={hold.blocked ? "操作已暂停" : account.signed_in ? "未触发保护" : "等待登录"}
           desc={hold.blocked ? hold.reason || "账号出现异常，已暂停互动操作" : "遇到账号异常或请求结果不确定时，自动暂停互动"}>
-          <button type="button" className="btn sm" onClick={() => action?.()} disabled={!action || busy || inactive}>
+          <button type="button" className="btn sm" onClick={() => action?.()} disabled={!action || busy}>
             <Icon name={needsLogin ? "qr" : "shield"} size={13} />{actionLabel}
           </button>
         </SettingRow>
         {cooldown && <p className="settings-note inside">最早恢复时间：{absoluteTime(hold.until)}。冷却结束后会自动检查。</p>}
       </section>
-      <p className="settings-note">ビリ推し {version || ""} · 关闭窗口后继续在托盘运行 · 切换账号不会重新扫码</p>
+      <p className="settings-note">ビリ推し {version || ""} · 关闭窗口后继续在托盘运行 · 切换账号无需重新扫码</p>
     </div></div>
   </>);
 };

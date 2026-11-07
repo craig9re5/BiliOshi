@@ -143,24 +143,15 @@ def run(output, screenshot=None):
             try:
                 wait("Boolean(window.LS && document.querySelectorAll('.room').length === 2)")
                 check("two rooms rendered", True)
-                wait("document.querySelectorAll('.account-tab[role=\"tab\"]').length === 3")
+                wait("document.querySelectorAll('.account-tab[role=\"tab\"]').length === 2")
                 check("account tabs rendered", True)
-                click("#account-tab-all")
-                wait("document.querySelectorAll('.account-card').length === 2")
-                check("all-account dashboard rendered", True)
-                click(".account-card:nth-of-type(2) .link-btn")
-                wait("Boolean(document.querySelector('.modal'))")
-                click(".modal .btn.primary")
+                click("#account-tab-" + second_id)
                 wait("document.querySelector('.account-tab.active')?.id === "
                      + json.dumps("account-tab-" + second_id))
                 wait("document.querySelectorAll('.room').length === 1")
                 wait("document.querySelector('.detail-name')?.textContent === '第二主播'")
                 check("switch to second account without QR", True)
-                click("#account-tab-all")
-                wait("document.querySelectorAll('.account-card').length === 2")
-                click(".account-card:nth-of-type(1) .link-btn")
-                wait("Boolean(document.querySelector('.modal'))")
-                click(".modal .btn.primary")
+                click("#account-tab-" + first_id)
                 wait("document.querySelector('.account-tab.active')?.id === "
                      + json.dumps("account-tab-" + first_id))
                 wait("document.querySelectorAll('.room').length === 2")
@@ -201,8 +192,8 @@ def run(output, screenshot=None):
                 if screenshot:
                     _capture(host._window, screenshot)
                     report["screenshot"] = Path(screenshot).name
-                click('button[aria-label="挂机设置"]')
-                wait("document.querySelector('.chrome-title')?.textContent === '挂机设置'")
+                click('button[aria-label="设置"]')
+                wait("document.querySelector('.chrome-title')?.textContent === '设置'")
                 click('[role="switch"][aria-label="直播点赞"]')
                 wait("document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]')?.getAttribute('aria-checked') === 'true'")
                 wait("!document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]').disabled")

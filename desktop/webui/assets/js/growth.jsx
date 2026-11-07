@@ -49,13 +49,20 @@ const GrowthState = ({ icon, title, text, action, onAction }) => (
   </section>
 );
 
-function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
+function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMonitor }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const request = useRef(0);
+
+  useEffect(() => {
+    if (!data?.rooms || typeof onNeedAvatar !== "function") return;
+    for (const room of data.rooms) {
+      if (room.uid && !images[room.uid]) onNeedAvatar(room.uid);
+    }
+  }, [data?.rooms, images, onNeedAvatar]);
 
   useEffect(() => {
     let live = true;
@@ -219,6 +226,7 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
     const todayCell = cellAt(room, todayIndex);
     const name = room.name || `直播间 ${room.room}`;
     const isSelected = selectedRoom === room.room;
+    const image = images?.[room.uid];
     const todayMissing = !todayCell.recorded;
     const todayLabel = todayMissing
       ? (room.tracked ? "尚未同步" : "未记录")
@@ -231,7 +239,7 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
         onClick={() => setSelectedRoom((current) => (current === room.room ? null : room.room))}>
         <span className="growth-room-id">
           <span className="growth-avatar" style={{ background: colorFor(room.room) }}>
-            {Array.from(name.trim())[0] || "?"}
+            {image ? <img src={image} alt="" /> : Array.from(name.trim())[0] || "?"}
           </span>
           <span className="growth-room-name">{name}</span>
         </span>
@@ -298,15 +306,6 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
             action={onOpenMonitor ? "去直播总览" : ""} onAction={onOpenMonitor} />
           : <>
             <div className="growth-summary">
-              <section className="growth-stat card">
-                <div className="growth-stat-label" title="账号当日累计，可能包含手机或网页端的收益">
-                  <i className="growth-dot" />今日成长
-                </div>
-                <div className={`growth-stat-value${todayHasRecords ? "" : " muted"}`}>
-                  {todayHasRecords ? <><span className="plus">+</span>{numberText(todayTotal)}</> : "—"}
-                </div>
-                <div className="growth-stat-sub">{todaySub}</div>
-              </section>
               <section className="growth-stat card">
                 <div className="growth-stat-label" title="仅合计已记录的直播间；未记录不补 0">
                   <i className="growth-dot" />近 7 日

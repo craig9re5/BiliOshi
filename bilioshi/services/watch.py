@@ -491,6 +491,8 @@ class TaskSchedule:
 
     def wait(self, chain):
         """Use idle time for due tasks, leaving the server heartbeat margin intact."""
+        if not (self.enabled and self.likes):
+            return
         while self.enabled:
             now = time.monotonic()
             end = _beat_due_at(chain) - HEARTBEAT_TASK_MARGIN - 1
@@ -498,7 +500,7 @@ class TaskSchedule:
                 end = min(end, self.limit)
             if now >= end or safety.status(chain.sessdata)["blocked"]:
                 return
-            due = min(self.next_check, self._like_due()) if self.likes else self.next_check
+            due = self._like_due()
             if due >= end:
                 return
             if now < due:
@@ -506,6 +508,8 @@ class TaskSchedule:
                 time.sleep(min(5, due - now, end - now))
             else:
                 self.check(chain, limit=self.limit)
+                if not self.continuing:
+                    return
 
     def _like_due(self):
         if self.continuing:

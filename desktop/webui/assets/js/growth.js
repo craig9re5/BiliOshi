@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"6472f9c34f6298c6c2b278631b71a3531e049eede1a7024265268ce6ef827be4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"88a39eb1bb64270e69d035611dd5ae0bc1fd3bedad0147ceff33d51e48648058"} */
+/* BiliOshi JSX {"code_sha256":"0240c5756e59a415d604a7b6ce15a05e55c8cd63def84630f285bb7ef0bcee21","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"9e5a0ec92ee4df74563e7ccdb4947704ccb7f698e1298cbacbded1245d9c55ec"} */
 (function () {
 "use strict";
 /* Growth page: daily fan-medal intimacy per room, from Api.growth.
@@ -72,6 +72,8 @@ const GrowthState = ({
 }, action) : null);
 function GrowthPage({
   viewId,
+  images = {},
+  onNeedAvatar,
   onOpenAccount,
   onOpenMonitor
 }) {
@@ -81,6 +83,12 @@ function GrowthPage({
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const request = useRef(0);
+  useEffect(() => {
+    if (!data?.rooms || typeof onNeedAvatar !== "function") return;
+    for (const room of data.rooms) {
+      if (room.uid && !images[room.uid]) onNeedAvatar(room.uid);
+    }
+  }, [data?.rooms, images, onNeedAvatar]);
   useEffect(() => {
     let live = true;
     const generation = ++request.current;
@@ -240,6 +248,7 @@ function GrowthPage({
     const todayCell = cellAt(room, todayIndex);
     const name = room.name || `直播间 ${room.room}`;
     const isSelected = selectedRoom === room.room;
+    const image = images?.[room.uid];
     const todayMissing = !todayCell.recorded;
     const todayLabel = todayMissing ? room.tracked ? "尚未同步" : "未记录" : `${todayCell.value > 0 ? "+" : ""}${numberText(todayCell.value)}`;
     const todayClass = `growth-room-today${todayMissing ? " missing" : todayCell.value === 0 ? " zero" : ""}`;
@@ -258,7 +267,10 @@ function GrowthPage({
       style: {
         background: colorFor(room.room)
       }
-    }, Array.from(name.trim())[0] || "?"), /*#__PURE__*/React.createElement("span", {
+    }, image ? /*#__PURE__*/React.createElement("img", {
+      src: image,
+      alt: ""
+    }) : Array.from(name.trim())[0] || "?"), /*#__PURE__*/React.createElement("span", {
       className: "growth-room-name"
     }, name)), /*#__PURE__*/React.createElement("span", {
       className: "growth-mini",
@@ -335,19 +347,6 @@ function GrowthPage({
   }) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "growth-summary"
   }, /*#__PURE__*/React.createElement("section", {
-    className: "growth-stat card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "growth-stat-label",
-    title: "\u8D26\u53F7\u5F53\u65E5\u7D2F\u8BA1\uFF0C\u53EF\u80FD\u5305\u542B\u624B\u673A\u6216\u7F51\u9875\u7AEF\u7684\u6536\u76CA"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "growth-dot"
-  }), "\u4ECA\u65E5\u6210\u957F"), /*#__PURE__*/React.createElement("div", {
-    className: `growth-stat-value${todayHasRecords ? "" : " muted"}`
-  }, todayHasRecords ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    className: "plus"
-  }, "+"), numberText(todayTotal)) : "—"), /*#__PURE__*/React.createElement("div", {
-    className: "growth-stat-sub"
-  }, todaySub)), /*#__PURE__*/React.createElement("section", {
     className: "growth-stat card"
   }, /*#__PURE__*/React.createElement("div", {
     className: "growth-stat-label",

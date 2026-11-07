@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"7b74bcf7a996259d19dfbb2583c537942a3c62a39a58c3b9a8dcdd9110049c24","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"a6427d936e1311faad794d79bad4c64160f15b3825b2caedcb09cac7b86aa04b"} */
+/* BiliOshi JSX {"code_sha256":"55595494b0c39d996370cf1000d82b90246dd868fe1cccda100412bd3d162453","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"5f43cdfff2fe3388beeec5af8f2275b9b1afb6159314e223c872560fbae68fcd"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -181,8 +181,6 @@ const SettingsPage = ({
   pendingSettings,
   theme = "white",
   onTheme,
-  scope,
-  scopeAll,
   onLogs
 }) => {
   const disabled = key => pendingSettings.has(key);
@@ -192,18 +190,7 @@ const SettingsPage = ({
     "data-screen-label": "\u8BBE\u7F6E"
   }, /*#__PURE__*/React.createElement("div", {
     className: "settings-inner"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "scope-bar"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "scope-label"
-  }, "\u5F53\u524D\u8D26\u53F7"), /*#__PURE__*/React.createElement("span", {
-    className: "scope-chip"
-  }, scope ? /*#__PURE__*/React.createElement(window.AccountAvatar, {
-    account: scope,
-    size: "sm"
-  }) : null, scope ? scope.name : "未登录"), /*#__PURE__*/React.createElement("span", {
-    className: "scope-note"
-  }, "\u4EFB\u52A1\u5F00\u5173\u4E0E\u8FD0\u884C\u6A21\u5F0F\u6309\u8D26\u53F7\u72EC\u7ACB\u4FDD\u5B58\uFF1B\u754C\u9762\u4E3B\u9898\u4E0E\u5F00\u673A\u542F\u52A8\u5168\u5E94\u7528\u751F\u6548")), /*#__PURE__*/React.createElement("section", {
+  }, /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head"

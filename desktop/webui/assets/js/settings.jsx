@@ -109,21 +109,11 @@ const ThemeOptions = ({ value, onChange }) => (
   </div>
 );
 
-const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", onTheme, scope, scopeAll, onLogs }) => {
+const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", onTheme, onLogs }) => {
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   return (<>
     <div className="settings" data-screen-label="设置"><div className="settings-inner">
-      <div className="scope-bar">
-        <span className="scope-label">当前账号</span>
-        <span className="scope-chip">
-          {scope ? <window.AccountAvatar account={scope} size="sm" /> : null}
-          {scope ? scope.name : "未登录"}
-        </span>
-        <span className="scope-note">
-          任务开关与运行模式按账号独立保存；界面主题与开机启动全应用生效
-        </span>
-      </div>
       <section className="group card">
         <header className="group-head">每日任务<small>开播后，按 B 站的任务进度自动完成</small></header>
         <SettingRow name="点亮粉丝牌" desc="粉丝牌熄灭时发送弹幕，点亮后停止">

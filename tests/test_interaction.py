@@ -114,7 +114,10 @@ class InteractionTests(unittest.TestCase):
             dispatcher.close()
 
     def test_qr_session_creation_failure_still_has_a_refresh_route(self):
-        from desktop.qr_dialog import QrSessionView
+        try:
+            from desktop.qr_dialog import QrSessionView
+        except ImportError:
+            self.skipTest("PIL / Tkinter not installed")
         view = SimpleNamespace(session_factory=Mock(side_effect=RuntimeError("synthetic-secret")),
                                post=Mock(), show_error=Mock())
         cancelled = threading.Event()

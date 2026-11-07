@@ -51,7 +51,10 @@ class WebUiTests(unittest.TestCase):
         self.assertEqual(cached["rows"][0]["name"], "测试主播")
 
     def test_avatar_refresh_failure_falls_back_to_the_cached_image(self):
-        from PIL import Image
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("PIL not installed")
 
         path = self.root / "cache/avatars/9.png"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,7 +67,10 @@ class WebUiTests(unittest.TestCase):
         self.assertTrue(result["data_uri"].startswith("data:image/png;base64,"))
 
     def test_account_avatar_uses_only_the_server_side_public_profile(self):
-        from PIL import Image
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("PIL not installed")
 
         write_json(self.root / "credentials.json", {"SESSDATA": "synthetic-session", "bili_jct": "synthetic-csrf"})
         save_account_profile(self.root, 123, "https://i0.hdslb.com/bfs/face/example.jpg",

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"6472f9c34f6298c6c2b278631b71a3531e049eede1a7024265268ce6ef827be4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"88a39eb1bb64270e69d035611dd5ae0bc1fd3bedad0147ceff33d51e48648058"} */
+/* BiliOshi JSX {"code_sha256":"24873860edc7ae7c48d71c4c42acc70ba3931df26a23643f2e6de9e12f19cbe2","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"5bd35d9b037a99733213503819ba5d58fb0e1f55470b764dc61fad6d396cf61b"} */
 (function () {
 "use strict";
 /* Growth page: daily fan-medal intimacy per room, from Api.growth.
@@ -72,6 +72,8 @@ const GrowthState = ({
 }, action) : null);
 function GrowthPage({
   viewId,
+  images = {},
+  onNeedAvatar,
   onOpenAccount,
   onOpenMonitor
 }) {
@@ -81,6 +83,12 @@ function GrowthPage({
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const request = useRef(0);
+  useEffect(() => {
+    if (!data?.rooms || typeof onNeedAvatar !== "function") return;
+    for (const room of data.rooms) {
+      if (room.uid && !images[room.uid]) onNeedAvatar(room.uid);
+    }
+  }, [data?.rooms, images, onNeedAvatar]);
   useEffect(() => {
     let live = true;
     const generation = ++request.current;
@@ -173,8 +181,9 @@ function GrowthPage({
       if (index === todayIndex) todayLast = Math.max(todayLast, cell.last_at);
     });
   }
-  const tracked = rooms.filter(room => room.tracked);
-  const untracked = rooms.filter(room => !room.tracked);
+  const recordedRooms = rooms.filter(room => (room.recorded_days || 0) > 0 || cellAt(room, todayIndex).recorded && cellAt(room, todayIndex).value > 0);
+  const tracked = recordedRooms.filter(room => room.tracked);
+  const untracked = recordedRooms.filter(room => !room.tracked);
   const compareRooms = (left, right) => {
     const a = cellAt(left, todayIndex);
     const b = cellAt(right, todayIndex);
@@ -186,13 +195,13 @@ function GrowthPage({
   const trackedRows = tracked.slice().sort(compareRooms);
   const untrackedRows = untracked.slice().sort(compareRooms);
   let maxMini = 1;
-  for (const room of rooms) {
+  for (const room of recordedRooms) {
     for (const cell of room.cells) {
       if (cell.recorded && cell.value > maxMini) maxMini = cell.value;
     }
   }
-  const selected = selectedRoom !== null ? rooms.find(room => room.room === selectedRoom) || null : null;
-  const chartValues = selected ? days.map((_day, index) => cellAt(selected, index).recorded ? cellAt(selected, index).value : null) : days.map((_day, index) => rooms.some(room => cellAt(room, index).recorded) ? dayValue(index) : null);
+  const selected = selectedRoom !== null ? recordedRooms.find(room => room.room === selectedRoom) || null : null;
+  const chartValues = selected ? days.map((_day, index) => cellAt(selected, index).recorded ? cellAt(selected, index).value : null) : days.map((_day, index) => recordedRooms.some(room => cellAt(room, index).recorded) ? dayValue(index) : null);
   const chartTitle = selected ? `${selected.name || `直播间 ${selected.room}`} · 近 7 日` : "每日总成长";
   let maxChart = 1;
   for (const value of chartValues) {
@@ -201,7 +210,7 @@ function GrowthPage({
   const chartLabel = `近 7 日${selected ? selected.name || `直播间 ${selected.room}` : "每日总成长"}：` + days.map((day, index) => {
     const value = chartValues[index];
     const missing = !Number.isFinite(value);
-    return `${index === todayIndex ? "今天" : dayParts(day).md} ${missing ? index === todayIndex ? "尚未同步" : "未记录" : `+${numberText(value)}`}`;
+    return `${index === todayIndex ? "今天" : dayParts(day).md} ${missing ? "" : `+${numberText(value)}`}`;
   }).join("，");
   let banner = null;
   if (data.status === "needs_login") {
@@ -240,6 +249,7 @@ function GrowthPage({
     const todayCell = cellAt(room, todayIndex);
     const name = room.name || `直播间 ${room.room}`;
     const isSelected = selectedRoom === room.room;
+    const image = images?.[room.uid];
     const todayMissing = !todayCell.recorded;
     const todayLabel = todayMissing ? room.tracked ? "尚未同步" : "未记录" : `${todayCell.value > 0 ? "+" : ""}${numberText(todayCell.value)}`;
     const todayClass = `growth-room-today${todayMissing ? " missing" : todayCell.value === 0 ? " zero" : ""}`;
@@ -258,7 +268,10 @@ function GrowthPage({
       style: {
         background: colorFor(room.room)
       }
-    }, Array.from(name.trim())[0] || "?"), /*#__PURE__*/React.createElement("span", {
+    }, image ? /*#__PURE__*/React.createElement("img", {
+      src: image,
+      alt: ""
+    }) : Array.from(name.trim())[0] || "?"), /*#__PURE__*/React.createElement("span", {
       className: "growth-room-name"
     }, name)), /*#__PURE__*/React.createElement("span", {
       className: "growth-mini",
@@ -306,18 +319,7 @@ function GrowthPage({
   }, /*#__PURE__*/React.createElement("span", {
     className: "growth-sr",
     "aria-live": "polite"
-  }, announcement), /*#__PURE__*/React.createElement("div", {
-    className: "growth-head"
-  }, /*#__PURE__*/React.createElement("p", {
-    className: "growth-meta"
-  }, "\u7C89\u4E1D\u724C\u4ECA\u65E5\u4EB2\u5BC6\u5EA6 \xB7 \u6BCF\u65E5 00:00 \u91CD\u7F6E"), accountName ? /*#__PURE__*/React.createElement("div", {
-    className: "growth-head-side"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "growth-scope",
-    title: `当前账号：${accountName}`
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "growth-scope-avatar"
-  }, Array.from(accountName.trim())[0] || "?"), accountName)) : null), banner ? /*#__PURE__*/React.createElement("div", {
+  }, announcement), banner ? /*#__PURE__*/React.createElement("div", {
     className: `growth-banner${data.status === "needs_login" || data.status === "protection" ? " warn" : ""}`
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "info",
@@ -326,41 +328,13 @@ function GrowthPage({
     type: "button",
     className: "growth-link",
     onClick: banner.run
-  }, banner.action) : null) : null, rooms.length === 0 ? /*#__PURE__*/React.createElement(GrowthState, {
+  }, banner.action) : null) : null, recordedRooms.length === 0 ? /*#__PURE__*/React.createElement(GrowthState, {
     icon: "trend",
     title: "\u8FD8\u6CA1\u6709\u53EF\u8BB0\u5F55\u7684\u76F4\u64AD\u95F4",
     text: "\u5173\u6CE8\u4E3B\u64AD\u5E76\u5F00\u59CB\u6302\u673A\u540E\uFF0C\u8FD9\u91CC\u4F1A\u81EA\u52A8\u8BB0\u5F55\u6BCF\u5929\u7684\u7C89\u4E1D\u724C\u4EB2\u5BC6\u5EA6\u3002",
     action: onOpenMonitor ? "去直播总览" : "",
     onAction: onOpenMonitor
-  }) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "growth-summary"
-  }, /*#__PURE__*/React.createElement("section", {
-    className: "growth-stat card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "growth-stat-label",
-    title: "\u8D26\u53F7\u5F53\u65E5\u7D2F\u8BA1\uFF0C\u53EF\u80FD\u5305\u542B\u624B\u673A\u6216\u7F51\u9875\u7AEF\u7684\u6536\u76CA"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "growth-dot"
-  }), "\u4ECA\u65E5\u6210\u957F"), /*#__PURE__*/React.createElement("div", {
-    className: `growth-stat-value${todayHasRecords ? "" : " muted"}`
-  }, todayHasRecords ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    className: "plus"
-  }, "+"), numberText(todayTotal)) : "—"), /*#__PURE__*/React.createElement("div", {
-    className: "growth-stat-sub"
-  }, todaySub)), /*#__PURE__*/React.createElement("section", {
-    className: "growth-stat card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "growth-stat-label",
-    title: "\u4EC5\u5408\u8BA1\u5DF2\u8BB0\u5F55\u7684\u76F4\u64AD\u95F4\uFF1B\u672A\u8BB0\u5F55\u4E0D\u8865 0"
-  }, /*#__PURE__*/React.createElement("i", {
-    className: "growth-dot"
-  }), "\u8FD1 7 \u65E5"), /*#__PURE__*/React.createElement("div", {
-    className: `growth-stat-value${recordedDays ? "" : " muted"}`
-  }, recordedDays ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    className: "plus"
-  }, "+"), numberText(grandTotal)) : "—"), /*#__PURE__*/React.createElement("div", {
-    className: "growth-stat-sub"
-  }, recordedDays ? `${recordedDays} 天 · 日均 +${numberText(average)}` : "暂无记录"))), /*#__PURE__*/React.createElement("section", {
+  }) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("section", {
     className: "growth-panel card"
   }, /*#__PURE__*/React.createElement("div", {
     className: "growth-panel-head"
@@ -385,18 +359,16 @@ function GrowthPage({
     const height = missing ? 0 : Math.max(zero ? 0 : 2, Math.round(value / maxChart * 100));
     const coverage = data.coverage?.[day] || {};
     const coverageText = !selected && coverage.rooms_recorded > 0 && coverage.rooms_recorded < coverage.rooms_recordable ? ` · ${coverage.rooms_recorded}/${coverage.rooms_recordable}` : "";
-    const tip = missing ? `${dayParts(day).md} ${isToday ? "尚未同步" : "未记录"}` : selected ? `${dayParts(day).md} · +${numberText(value)}` : `${dayParts(day).md} · 合计 ${numberText(value)} · 当前 ${coverage.rooms_recorded}/${coverage.rooms_recordable} 间有记录`;
+    const tip = missing ? `${dayParts(day).md}` : selected ? `${dayParts(day).md} · +${numberText(value)}` : `${dayParts(day).md} · 合计 ${numberText(value)} · 当前 ${coverage.rooms_recorded}/${coverage.rooms_recordable} 间有记录`;
     return /*#__PURE__*/React.createElement("div", {
       className: "growth-chart-col",
       key: day,
       title: tip
     }, /*#__PURE__*/React.createElement("div", {
       className: `growth-chart-value${missing ? " missing" : isToday ? " strong" : ""}`
-    }, missing ? isToday ? "—" : "未记录" : shortNumber(value)), /*#__PURE__*/React.createElement("div", {
+    }, missing ? "" : shortNumber(value)), /*#__PURE__*/React.createElement("div", {
       className: "growth-chart-area"
-    }, missing ? /*#__PURE__*/React.createElement("div", {
-      className: "growth-chart-missing"
-    }) : /*#__PURE__*/React.createElement("div", {
+    }, missing ? null : /*#__PURE__*/React.createElement("div", {
       className: `growth-chart-bar${zero ? " zero" : ""}${isToday ? " today" : ""}`,
       style: {
         height: `${height}%`
@@ -405,16 +377,12 @@ function GrowthPage({
       className: "growth-chart-day"
     }, isToday ? /*#__PURE__*/React.createElement("strong", null, "\u4ECA\u5929") : dayParts(day).md, /*#__PURE__*/React.createElement("span", {
       className: "cover"
-    }, isToday ? missing ? "尚未同步" : data.running ? /*#__PURE__*/React.createElement("span", {
+    }, isToday ? missing ? "" : data.running ? /*#__PURE__*/React.createElement("span", {
       className: "ongoing"
     }, "\u8FDB\u884C\u4E2D") : "未挂机" : dayParts(day).week, coverageText)));
   }))), /*#__PURE__*/React.createElement("section", {
     className: "growth-rooms card"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "growth-rooms-head"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "growth-rooms-title"
-  }, "\u5404\u76F4\u64AD\u95F4")), /*#__PURE__*/React.createElement("div", {
     className: "growth-cols"
   }, /*#__PURE__*/React.createElement("span", null, "\u76F4\u64AD\u95F4"), /*#__PURE__*/React.createElement("span", null, "\u8FD1 7 \u65E5"), /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5"), /*#__PURE__*/React.createElement("span", null, "\u5408\u8BA1")), rowNodes))));
 }

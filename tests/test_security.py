@@ -203,7 +203,10 @@ class SecurityTests(unittest.TestCase):
         ):
             http.get_json("https://api.bilibili.com/read", HEADERS)
         self.assertEqual(read.call_count, 3)
-        self.assertEqual([c.args[0] for c in sleep.call_args_list], [1, 2])
+        self.assertEqual(
+            [c.args[0] for c in sleep.call_args_list],
+            list(http.current_profile().read_retry_delays),
+        )
         self.assertEqual(safety.status(SESSION)["kind"], "network")
 
     def test_rate_obeys_retry_after_and_cannot_be_resumed_early(self):

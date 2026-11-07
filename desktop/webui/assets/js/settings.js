@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"155ee3bc48d3cf652ec8fd98209143dac82fcb877570656ca5cd77c12bd5e72a","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"835f3c18ca961740bf1981046b2b1f4a22edce31a893e18236c6aa8922247b8e"} */
+/* BiliOshi JSX {"code_sha256":"55595494b0c39d996370cf1000d82b90246dd868fe1cccda100412bd3d162453","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"5f43cdfff2fe3388beeec5af8f2275b9b1afb6159314e223c872560fbae68fcd"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -181,28 +181,16 @@ const SettingsPage = ({
   pendingSettings,
   theme = "white",
   onTheme,
-  scope,
-  scopeAll
+  onLogs
 }) => {
   const disabled = key => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
-    "data-screen-label": "\u6302\u673A\u8BBE\u7F6E"
+    "data-screen-label": "\u8BBE\u7F6E"
   }, /*#__PURE__*/React.createElement("div", {
     className: "settings-inner"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "scope-bar"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "scope-label"
-  }, "\u5E94\u7528\u5BF9\u8C61"), /*#__PURE__*/React.createElement("span", {
-    className: "scope-chip"
-  }, scope ? /*#__PURE__*/React.createElement(window.AccountAvatar, {
-    account: scope,
-    size: "sm"
-  }) : null, scope ? scope.name : "全部账号"), /*#__PURE__*/React.createElement("span", {
-    className: "scope-note"
-  }, scope ? `正在编辑此账号；每个账号独立保存，切换账号后本页会跟随` : "正在编辑当前挂机账号；从顶部账号标签选择可直接切换编辑对象")), /*#__PURE__*/React.createElement("section", {
+  }, /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head"
@@ -265,7 +253,17 @@ const SettingsPage = ({
       label: "激进"
     }],
     onChange: value => onSetting("run_mode", value)
-  }))), /*#__PURE__*/React.createElement("section", {
+  })), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u8FD0\u884C\u65E5\u5FD7",
+    desc: "\u5728\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668\u4E2D\u6253\u5F00\u5F53\u524D\u8D26\u53F7\u7684\u65E5\u5FD7\u76EE\u5F55\uFF0C\u6392\u67E5\u5F02\u5E38\u6216\u67E5\u770B\u8FD0\u884C\u8BB0\u5F55"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onLogs
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "folder",
+    size: 13
+  }), "\u67E5\u770B\u65E5\u5FD7"))), /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head"
@@ -281,7 +279,6 @@ const SettingsPage = ({
 };
 const AccountRow = ({
   account,
-  isView,
   isActive,
   image,
   onView,
@@ -311,40 +308,25 @@ const AccountRow = ({
       name: "qr",
       size: 12
     }), "\u91CD\u65B0\u626B\u7801");
-  } else if (account.running) {
-    action = isView ? null : /*#__PURE__*/React.createElement("button", {
+  } else if (isActive) {
+    action = /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "btn sm",
       onClick: () => onView(account.id)
     }, "\u67E5\u770B\u603B\u89C8");
-  } else if (account.paused) {
-    action = /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      className: "btn sm primary",
-      onClick: () => onSwitch(account.id)
-    }, /*#__PURE__*/React.createElement(Icon, {
-      name: "play",
-      size: 12
-    }), "\u6062\u590D\u6302\u673A");
-  } else if (isActive) {
-    action = /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      className: "btn sm primary",
-      onClick: () => onSwitch(account.id)
-    }, /*#__PURE__*/React.createElement(Icon, {
-      name: "play",
-      size: 12
-    }), "\u5F00\u59CB\u6302\u673A");
   } else {
     action = /*#__PURE__*/React.createElement("button", {
       type: "button",
-      className: "btn sm",
+      className: "btn sm primary",
       onClick: () => onSwitch(account.id)
-    }, "\u5207\u6362\u5E76\u6302\u673A");
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "play",
+      size: 12
+    }), "\u5207\u6362\u8D26\u53F7");
   }
-  const note = protection ? account.safety?.reason || "账号操作已暂停，重新扫码不会解除" : needsLogin ? "登录已失效，其他账号不受影响" : account.paused ? "已暂停挂机，关注与今日额度已保留" : account.running ? "上次检查 " + relativeTime(account.snapshot_at) + " · 登录正常" : "上次检查 " + relativeTime(account.snapshot_at) + " · 未运行";
+  const note = protection ? account.safety?.reason || "账号操作已暂停，重新扫码不会解除" : needsLogin ? "登录已失效，其他账号不受影响" : isActive ? account.paused ? "已暂停挂机，关注与今日额度已保留" : "当前使用中 · 上次检查 " + relativeTime(account.snapshot_at) : "点击切换账号后即可使用此账号挂机";
   return /*#__PURE__*/React.createElement("div", {
-    className: `account-item ${isView ? "current" : ""}`
+    className: `account-item ${isActive ? "current" : ""}`
   }, /*#__PURE__*/React.createElement(window.AccountAvatar, {
     account: account,
     size: "lg",
@@ -353,9 +335,9 @@ const AccountRow = ({
     className: "account-item-main"
   }, /*#__PURE__*/React.createElement("div", {
     className: "account-item-title"
-  }, /*#__PURE__*/React.createElement("strong", null, account.name), isView && /*#__PURE__*/React.createElement("span", {
-    className: "mini-tag accent"
-  }, "\u5F53\u524D\u67E5\u770B"), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("strong", null, account.name), isActive && /*#__PURE__*/React.createElement("span", {
+    className: "mini-tag live"
+  }, "\u5F53\u524D\u4F7F\u7528"), !isActive && !needsLogin && !protection && /*#__PURE__*/React.createElement("span", {
     className: `mini-tag ${state.tone}`
   }, state.label), needsLogin && /*#__PURE__*/React.createElement("span", {
     className: "mini-tag warn"
@@ -392,7 +374,6 @@ const AccountRow = ({
 const AccountPage = ({
   accounts,
   activeId,
-  viewId,
   account,
   avatar,
   onScan,
@@ -404,8 +385,7 @@ const AccountPage = ({
   onResumeSafety,
   onCheck,
   busy,
-  version,
-  inactive
+  version
 }) => {
   const hold = account.safety || {};
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
@@ -432,9 +412,8 @@ const AccountPage = ({
   }), "\u6DFB\u52A0\u8D26\u53F7")), accounts.length ? accounts.map(item => /*#__PURE__*/React.createElement(AccountRow, {
     key: item.id,
     account: item,
-    isView: item.id === viewId,
     isActive: item.id === activeId,
-    image: item.id === viewId ? avatar : undefined,
+    image: item.id === activeId ? avatar : undefined,
     onView: onView,
     onSwitch: onSwitch,
     onScan: onScan,
@@ -465,7 +444,7 @@ const AccountPage = ({
     type: "button",
     className: "btn sm",
     onClick: () => action?.(),
-    disabled: !action || busy || inactive
+    disabled: !action || busy
   }, /*#__PURE__*/React.createElement(Icon, {
     name: needsLogin ? "qr" : "shield",
     size: 13
@@ -473,7 +452,7 @@ const AccountPage = ({
     className: "settings-note inside"
   }, "\u6700\u65E9\u6062\u590D\u65F6\u95F4\uFF1A", absoluteTime(hold.until), "\u3002\u51B7\u5374\u7ED3\u675F\u540E\u4F1A\u81EA\u52A8\u68C0\u67E5\u3002")), /*#__PURE__*/React.createElement("p", {
     className: "settings-note"
-  }, "\u30D3\u30EA\u63A8\u3057 ", version || "", " \xB7 \u5173\u95ED\u7A97\u53E3\u540E\u7EE7\u7EED\u5728\u6258\u76D8\u8FD0\u884C \xB7 \u5207\u6362\u8D26\u53F7\u4E0D\u4F1A\u91CD\u65B0\u626B\u7801"))));
+  }, "\u30D3\u30EA\u63A8\u3057 ", version || "", " \xB7 \u5173\u95ED\u7A97\u53E3\u540E\u7EE7\u7EED\u5728\u6258\u76D8\u8FD0\u884C \xB7 \u5207\u6362\u8D26\u53F7\u65E0\u9700\u91CD\u65B0\u626B\u7801"))));
 };
 Object.assign(window, {
   SettingsPage,

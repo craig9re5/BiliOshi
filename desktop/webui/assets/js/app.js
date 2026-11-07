@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"3d158825eef599a7428655b637c4018dd58aa8627fa472d320e769decd94c86b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"776d3b289b8a6aadad6e5968b13bc13dfc799a24c4203999ebf17f7f9415d203"} */
+/* BiliOshi JSX {"code_sha256":"f70bcaa336d62f88ef3b1024095751e5c38baa4d8989d797760ef2a5a75a5366","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"1aa39f87a1af4126db167255a455a38da545d12e6c7cff901e9f9641a9abbc38"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -47,7 +47,6 @@ const Sidebar = ({
   onPage,
   account,
   avatar,
-  onLogs,
   onQuit,
   brandHidden,
   collapsed,
@@ -68,7 +67,7 @@ const Sidebar = ({
 }, "\u30D3\u30EA\u63A8\u3057"))), /*#__PURE__*/React.createElement("nav", {
   className: "nav",
   "aria-label": "\u4E3B\u5BFC\u822A"
-}, [["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "挂机设置"], ["account", "user", "账号"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
+}, [["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"], ["account", "user", "账号"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
   type: "button",
   key: key,
   className: "nav-item",
@@ -84,14 +83,6 @@ const Sidebar = ({
   className: "nav nav-bottom",
   "aria-label": "\u5E94\u7528\u64CD\u4F5C"
 }, /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: "nav-item",
-  onClick: onLogs,
-  "aria-label": "\u67E5\u770B\u65E5\u5FD7",
-  title: "\u67E5\u770B\u65E5\u5FD7"
-}, /*#__PURE__*/React.createElement(Icon, {
-  name: "folder"
-}), /*#__PURE__*/React.createElement("span", null, "\u67E5\u770B\u65E5\u5FD7")), /*#__PURE__*/React.createElement("button", {
   type: "button",
   className: "nav-item",
   onClick: onQuit,
@@ -117,7 +108,7 @@ const Sidebar = ({
 const pageTitles = {
   monitor: "直播总览",
   growth: "成长记录",
-  automation: "挂机设置",
+  automation: "设置",
   account: "账号"
 };
 const WindowButtons = () => {
@@ -427,11 +418,9 @@ function App() {
   }, [receiveSnapshot, toast]);
   const accounts = snap.accounts || [];
   const activeId = snap.active_account_id || "";
-  const viewId = snap.view_account_id || "all";
-  const isAllView = viewId === "all" || !viewId;
-  // The top level stays the running account; a different account carries its
-  // own snapshot so stale data is never shown as live.
-  const viewed = !isAllView && viewId !== activeId && snap.view ? snap.view : snap;
+  const viewId = activeId;
+  const isAllView = false;
+  const viewed = snap;
   useEffect(() => {
     const rows = viewed.rows || [];
     if (!selectionInitialized.current && rows.length) {
@@ -439,32 +428,32 @@ function App() {
       setSelectedId(rows[0].room);
     } else if (selectedId !== null && !rows.some(row => row.room === selectedId)) setSelectedId(null);
   }, [viewed.rows, selectedId]);
+  const fetchAvatar = useCallback(uid => {
+    if (!uid || images[uid] || avatarPending.current.has(uid)) return;
+    if (Date.now() < (avatarRetry.current[uid] || 0)) return;
+    avatarPending.current.add(uid);
+    call("avatar", uid, "", activeId).then(result => {
+      avatarPending.current.delete(uid);
+      if (result?.ok && result.data_uri && alive.current) {
+        delete avatarRetry.current[uid];
+        setImages(items => ({
+          ...items,
+          [uid]: result.data_uri
+        }));
+      } else {
+        avatarRetry.current[uid] = Date.now() + 60000;
+      }
+    }).catch(() => {
+      avatarPending.current.delete(uid);
+      avatarRetry.current[uid] = Date.now() + 60000;
+    });
+  }, [images, activeId]);
   useEffect(() => {
     if (!connected || !viewed.accountInfo?.signed_in) return;
-    const now = Date.now();
     for (const row of viewed.rows || []) {
-      if (!row.uid || images[row.uid] || avatarPending.current.has(row.uid)) continue;
-      if (now < (avatarRetry.current[row.uid] || 0)) continue;
-      avatarPending.current.add(row.uid);
-      call("avatar", row.uid, "", viewId === "all" ? "" : viewId).then(result => {
-        avatarPending.current.delete(row.uid);
-        if (result?.ok && result.data_uri && alive.current) {
-          delete avatarRetry.current[row.uid];
-          setImages(items => ({
-            ...items,
-            [row.uid]: result.data_uri
-          }));
-        } else {
-          avatarRetry.current[row.uid] = Date.now() + 60000;
-        }
-      }).catch(() => {
-        // A failed request must release the slot or the room keeps its letter
-        // placeholder until the whole app restarts.
-        avatarPending.current.delete(row.uid);
-        avatarRetry.current[row.uid] = Date.now() + 60000;
-      });
+      fetchAvatar(row.uid);
     }
-  }, [viewed.rows, connected, images, viewId]);
+  }, [viewed.rows, connected, fetchAvatar]);
   const rooms = (viewed.rows || []).map(row => toRoom(row, viewed));
   const selected = rooms.find(room => room.room === selectedId);
   const account = viewed.accountInfo || EMPTY_SNAPSHOT.accountInfo;
@@ -481,7 +470,7 @@ function App() {
     let live = true;
     let retry = 0;
     const load = () => {
-      call("account_avatar", viewId === "all" ? "" : viewId).then(result => {
+      call("account_avatar", activeId).then(result => {
         if (!live) return;
         if (result?.ok && result.data_uri) setAccountAvatar(result.data_uri);else if (result?.error) retry = window.setTimeout(load, 60000);
       }).catch(() => {
@@ -493,7 +482,7 @@ function App() {
       live = false;
       window.clearTimeout(retry);
     };
-  }, [connected, account.signed_in, account.name, avatarVersion, viewId]);
+  }, [connected, account.signed_in, account.name, avatarVersion, activeId]);
   const invoke = async (method, args = [], success = "") => {
     try {
       const result = await call(method, ...args);
@@ -552,7 +541,7 @@ function App() {
       try {
         await invoke("save_settings", [{
           [key]: value
-        }, viewId === "all" ? "" : viewId]);
+        }, activeId]);
         delete settingOverrides.current[key];
         await refresh();
       } finally {
@@ -694,10 +683,9 @@ function App() {
       if (alive.current) setDialogBusy(false);
     }
   };
-
-  /* Changing the running account is explicit: the switcher only changes the
-     viewed account, so a second account never steals the running slot. */
-  const requestSwitch = accountId => {
+  const switchAccount = async accountId => {
+    setSwitcher(false);
+    if (!accountId || accountId === activeId) return;
     const target = accounts.find(item => item.id === accountId);
     if (!target) return;
     if (!target.signed_in || target.status === "needs_login") {
@@ -711,10 +699,13 @@ function App() {
       });
       return;
     }
-    setDialog({
-      type: "switch",
-      account: target
-    });
+    const result = await invoke("switch_account", [accountId]);
+    if (result?.ok) {
+      selectionInitialized.current = false;
+      setSelectedId(null);
+      toast(`已切换至「${target.name}」`);
+      await refresh();
+    }
   };
   const confirmAction = async () => {
     if (dialogBusy) return;
@@ -749,11 +740,11 @@ function App() {
     }
   };
   const recover = async () => {
-    const route = viewed.recovery || {};
-    if (route.action === "login") openQr(viewId === "all" ? "" : viewId);else if (route.action === "resume") control("toggle_pause");else if (route.action === "switch") {
+    const route = snap.recovery || {};
+    if (route.action === "login") openQr(activeId);else if (route.action === "resume") control("toggle_pause");else if (route.action === "switch") {
       setPage("monitor");
     } else if (route.action === "safety") {
-      if (viewed.safety?.kind === "auth" || viewed.safety?.kind === "credentials") openQr(viewId === "all" ? "" : viewId);else if (viewed.safety?.until > Date.now() / 1000) {
+      if (snap.safety?.kind === "auth" || snap.safety?.kind === "credentials") openQr(activeId);else if (snap.safety?.until > Date.now() / 1000) {
         setPage("account");
       } else setDialog({
         type: "safety"
@@ -761,7 +752,7 @@ function App() {
     } else if (route.action === "room") {
       setPage("monitor");
       setSelectedId(route.room);
-    } else if (route.action === "logs") invoke("open_logs", [viewId === "all" ? "" : viewId]);else if (route.action === "refresh") control("refresh");else control("check_now");
+    } else if (route.action === "logs") invoke("open_logs", [activeId]);else if (route.action === "refresh") control("refresh");else control("check_now");
   };
   handlers.current = {
     openQr,
@@ -788,18 +779,6 @@ function App() {
       x: event.clientX,
       y: event.clientY
     });
-  };
-  const viewAccount = async accountId => {
-    setSwitcher(false);
-    if (accountId === "all") {
-      await invoke("set_view_account", ["all"]);
-      await refresh();
-      return;
-    }
-    await invoke("set_view_account", [accountId]);
-    selectionInitialized.current = false;
-    setSelectedId(null);
-    await refresh();
   };
   const dialogCopy = {
     remove: {
@@ -844,7 +823,7 @@ function App() {
   };
   const sidebarAccount = {
     ...account,
-    subtitle: isAllView ? snap.global_paused ? "挂机：全局暂停中" : accounts.filter(item => item.running).length ? `挂机：${accounts.filter(item => item.running).map(item => item.name).join("、")}` : "挂机：无" : viewed.inactive ? "此账号未运行" : "当前挂机"
+    subtitle: account.signed_in ? snap.paused ? "已暂停挂机" : "当前挂机中" : "未登录"
   };
   return /*#__PURE__*/React.createElement("div", {
     className: `app ${collapsed ? "side-collapsed" : ""}`
@@ -853,7 +832,6 @@ function App() {
     onPage: setPage,
     account: sidebarAccount,
     avatar: accountAvatar,
-    onLogs: () => invoke("open_logs", [viewId === "all" ? "" : viewId]),
     onQuit: () => setDialog({
       type: "quit"
     }),
@@ -864,9 +842,8 @@ function App() {
   }), /*#__PURE__*/React.createElement(window.AccountSwitcher, {
     open: switcher,
     accounts: accounts,
-    viewId: viewId,
     activeId: activeId,
-    onSelect: viewAccount,
+    onSelect: switchAccount,
     onManage: () => {
       setSwitcher(false);
       setPage("account");
@@ -901,68 +878,28 @@ function App() {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("div", {
     className: "chrome-actions"
-  }, page === "monitor" && !isAllView && /*#__PURE__*/React.createElement(window.OverviewActions, {
-    paused: viewed.paused,
+  }, page === "monitor" && /*#__PURE__*/React.createElement(window.OverviewActions, {
+    paused: snap.paused,
     onTogglePause: () => control("toggle_pause"),
     onCheck: () => control("check_now"),
-    checking: viewed.checking,
+    checking: snap.checking,
     controlBusy: controlBusy,
-    closing: closing,
-    inactive: Boolean(viewed.inactive)
-  }), page === "monitor" && isAllView && accounts.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn",
-    onClick: () => control("check_now"),
-    disabled: controlBusy || closing
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "refresh",
-    size: 13
-  }), "\u5168\u90E8\u68C0\u67E5"), snap.global_paused ? /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn primary",
-    onClick: () => control("set_global_paused", [false]),
-    disabled: controlBusy || closing
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "play",
-    size: 13
-  }), "\u6062\u590D\u5168\u90E8") : /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn",
-    onClick: () => control("set_global_paused", [true]),
-    disabled: controlBusy || closing
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "pause",
-    size: 13
-  }), "\u5168\u90E8\u6682\u505C"))), /*#__PURE__*/React.createElement(WindowButtons, {
+    closing: closing
+  })), /*#__PURE__*/React.createElement(WindowButtons, {
     key: page
-  })), page === "monitor" && /*#__PURE__*/React.createElement(window.AccountTabs, {
+  })), page === "monitor" && accounts.length > 0 && /*#__PURE__*/React.createElement(window.AccountTabs, {
     accounts: accounts,
-    viewId: viewId,
     activeId: activeId,
-    onView: viewAccount,
+    onSelect: switchAccount,
     onAdd: () => openQr("")
   }), /*#__PURE__*/React.createElement("div", {
     className: "page",
     id: "monitor-body"
-  }, page === "monitor" && isAllView && /*#__PURE__*/React.createElement(window.AccountDashboard, {
-    accounts: accounts,
-    globalPaused: Boolean(snap.global_paused),
-    onView: viewAccount,
-    onSwitch: requestSwitch,
-    onCheckAll: () => control("check_now"),
-    onPauseAll: () => control("set_global_paused", [true]),
-    onResumeAll: () => control("set_global_paused", [false]),
-    onRelogin: id => openQr(id),
-    onProtection: id => setDialog({
-      type: "protection",
-      account: accounts.find(item => item.id === id)
-    }),
-    busy: controlBusy || closing
-  }), page === "monitor" && !isAllView && /*#__PURE__*/React.createElement(window.Overview, {
+  }, page === "monitor" && /*#__PURE__*/React.createElement(window.Overview, {
     rooms: rooms,
     selectedId: selectedId,
     onSelect: select,
-    paused: viewed.paused,
+    paused: snap.paused,
     onAction: roomAction,
     onOpen: id => invoke("open_room", [id]),
     onAddMember: openAdd,
@@ -971,40 +908,41 @@ function App() {
     onContextMenu: onContextMenu,
     busyRoom: busyRoom,
     controlBusy: controlBusy,
-    error: viewed.error || viewed.ui_error,
-    recovery: viewed.recovery,
+    error: snap.error || snap.ui_error,
+    recovery: snap.recovery,
     onRecovery: recover,
-    interval: viewed.settings?.check_minutes || 5,
-    lastCheck: viewed.last_check,
-    checking: viewed.checking,
+    interval: snap.settings?.check_minutes || 5,
+    lastCheck: snap.last_check,
+    checking: snap.checking,
     images: images,
     signedIn: account.signed_in,
     closing: closing,
     bridgeConnected: connected,
-    accountName: accounts.find(item => item.id === viewId)?.name || "",
-    inactive: Boolean(viewed.inactive),
-    onSwitch: () => requestSwitch(viewId)
+    accountName: account.name || ""
   }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
-    viewId: viewId,
+    viewId: activeId,
+    images: images,
+    onNeedAvatar: fetchAvatar,
     onOpenAccount: () => setPage("account"),
     onOpenMonitor: () => setPage("monitor")
   }), page === "automation" && /*#__PURE__*/React.createElement(window.SettingsPage, {
-    settings: viewed.settings || DEFAULT_SETTINGS,
+    settings: snap.settings || DEFAULT_SETTINGS,
     onSetting: setSetting,
     pendingSettings: pendingSettings,
     theme: theme,
     onTheme: chooseTheme,
-    scope: accounts.find(item => item.id === viewId) || null,
-    scopeAll: isAllView
+    scope: accounts.find(item => item.id === activeId) || null,
+    scopeAll: false,
+    onLogs: () => invoke("open_logs", [activeId])
   }), page === "account" && /*#__PURE__*/React.createElement(window.AccountPage, {
     accounts: accounts,
     activeId: activeId,
-    viewId: viewId,
+    viewId: activeId,
     account: account,
     avatar: accountAvatar,
     onScan: openQr,
-    onView: viewAccount,
-    onSwitch: requestSwitch,
+    onView: () => setPage("monitor"),
+    onSwitch: switchAccount,
     onLogout: id => setDialog({
       type: "logout",
       account: accounts.find(item => item.id === id)
@@ -1022,7 +960,6 @@ function App() {
     }),
     onCheck: () => control("check_now"),
     busy: controlBusy || closing,
-    inactive: Boolean(viewed.inactive),
     version: snap.version
   }))), /*#__PURE__*/React.createElement("div", {
     className: "toasts",

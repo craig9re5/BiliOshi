@@ -49,13 +49,20 @@ const GrowthState = ({ icon, title, text, action, onAction }) => (
   </section>
 );
 
-function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
+function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMonitor }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const request = useRef(0);
+
+  useEffect(() => {
+    if (!data?.rooms || typeof onNeedAvatar !== "function") return;
+    for (const room of data.rooms) {
+      if (room.uid && !images[room.uid]) onNeedAvatar(room.uid);
+    }
+  }, [data?.rooms, images, onNeedAvatar]);
 
   useEffect(() => {
     let live = true;
@@ -148,8 +155,11 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
     });
   }
 
-  const tracked = rooms.filter((room) => room.tracked);
-  const untracked = rooms.filter((room) => !room.tracked);
+  const recordedRooms = rooms.filter((room) =>
+    (room.recorded_days || 0) > 0 || (cellAt(room, todayIndex).recorded && cellAt(room, todayIndex).value > 0)
+  );
+  const tracked = recordedRooms.filter((room) => room.tracked);
+  const untracked = recordedRooms.filter((room) => !room.tracked);
   const compareRooms = (left, right) => {
     const a = cellAt(left, todayIndex);
     const b = cellAt(right, todayIndex);
@@ -162,19 +172,19 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
   const untrackedRows = untracked.slice().sort(compareRooms);
 
   let maxMini = 1;
-  for (const room of rooms) {
+  for (const room of recordedRooms) {
     for (const cell of room.cells) {
       if (cell.recorded && cell.value > maxMini) maxMini = cell.value;
     }
   }
 
   const selected = selectedRoom !== null
-    ? rooms.find((room) => room.room === selectedRoom) || null
+    ? recordedRooms.find((room) => room.room === selectedRoom) || null
     : null;
   const chartValues = selected
     ? days.map((_day, index) => (cellAt(selected, index).recorded ? cellAt(selected, index).value : null))
     : days.map((_day, index) => (
-      rooms.some((room) => cellAt(room, index).recorded) ? dayValue(index) : null));
+      recordedRooms.some((room) => cellAt(room, index).recorded) ? dayValue(index) : null));
   const chartTitle = selected
     ? `${selected.name || `直播间 ${selected.room}`} · 近 7 日`
     : "每日总成长";
@@ -186,7 +196,7 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
     const value = chartValues[index];
     const missing = !Number.isFinite(value);
     return `${index === todayIndex ? "今天" : dayParts(day).md} ${
-      missing ? (index === todayIndex ? "尚未同步" : "未记录") : `+${numberText(value)}`}`;
+      missing ? "" : `+${numberText(value)}`}`;
   }).join("，");
 
   let banner = null;
@@ -219,6 +229,7 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
     const todayCell = cellAt(room, todayIndex);
     const name = room.name || `直播间 ${room.room}`;
     const isSelected = selectedRoom === room.room;
+    const image = images?.[room.uid];
     const todayMissing = !todayCell.recorded;
     const todayLabel = todayMissing
       ? (room.tracked ? "尚未同步" : "未记录")
@@ -231,7 +242,7 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
         onClick={() => setSelectedRoom((current) => (current === room.room ? null : room.room))}>
         <span className="growth-room-id">
           <span className="growth-avatar" style={{ background: colorFor(room.room) }}>
-            {Array.from(name.trim())[0] || "?"}
+            {image ? <img src={image} alt="" /> : Array.from(name.trim())[0] || "?"}
           </span>
           <span className="growth-room-name">{name}</span>
         </span>
@@ -276,15 +287,6 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
     <div className="growth-page">
       <div className="growth-inner">
         <span className="growth-sr" aria-live="polite">{announcement}</span>
-        <div className="growth-head">
-          <p className="growth-meta">粉丝牌今日亲密度 · 每日 00:00 重置</p>
-          {accountName ? <div className="growth-head-side">
-            <span className="growth-scope" title={`当前账号：${accountName}`}>
-              <span className="growth-scope-avatar">{Array.from(accountName.trim())[0] || "?"}</span>
-              {accountName}
-            </span>
-          </div> : null}
-        </div>
 
         {banner ? <div className={`growth-banner${data.status === "needs_login" || data.status === "protection" ? " warn" : ""}`}>
           <Icon name="info" size={14} />
@@ -292,34 +294,11 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
           {banner.action ? <button type="button" className="growth-link" onClick={banner.run}>{banner.action}</button> : null}
         </div> : null}
 
-        {rooms.length === 0
+        {recordedRooms.length === 0
           ? <GrowthState icon="trend" title="还没有可记录的直播间"
             text="关注主播并开始挂机后，这里会自动记录每天的粉丝牌亲密度。"
             action={onOpenMonitor ? "去直播总览" : ""} onAction={onOpenMonitor} />
           : <>
-            <div className="growth-summary">
-              <section className="growth-stat card">
-                <div className="growth-stat-label" title="账号当日累计，可能包含手机或网页端的收益">
-                  <i className="growth-dot" />今日成长
-                </div>
-                <div className={`growth-stat-value${todayHasRecords ? "" : " muted"}`}>
-                  {todayHasRecords ? <><span className="plus">+</span>{numberText(todayTotal)}</> : "—"}
-                </div>
-                <div className="growth-stat-sub">{todaySub}</div>
-              </section>
-              <section className="growth-stat card">
-                <div className="growth-stat-label" title="仅合计已记录的直播间；未记录不补 0">
-                  <i className="growth-dot" />近 7 日
-                </div>
-                <div className={`growth-stat-value${recordedDays ? "" : " muted"}`}>
-                  {recordedDays ? <><span className="plus">+</span>{numberText(grandTotal)}</> : "—"}
-                </div>
-                <div className="growth-stat-sub">
-                  {recordedDays ? `${recordedDays} 天 · 日均 +${numberText(average)}` : "暂无记录"}
-                </div>
-              </section>
-            </div>
-
             <section className="growth-panel card">
               <div className="growth-panel-head">
                 <div className="growth-panel-title" title={selected ? "该直播间每日观测峰值；未记录不补 0" : "柱高为当日有记录直播间的合计；未记录不补 0"}>
@@ -341,18 +320,18 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
                     && coverage.rooms_recorded < coverage.rooms_recordable
                     ? ` · ${coverage.rooms_recorded}/${coverage.rooms_recordable}` : "";
                   const tip = missing
-                    ? `${dayParts(day).md} ${isToday ? "尚未同步" : "未记录"}`
+                    ? `${dayParts(day).md}`
                     : (selected
                       ? `${dayParts(day).md} · +${numberText(value)}`
                       : `${dayParts(day).md} · 合计 ${numberText(value)} · 当前 ${coverage.rooms_recorded}/${coverage.rooms_recordable} 间有记录`);
                   return (
                     <div className="growth-chart-col" key={day} title={tip}>
                       <div className={`growth-chart-value${missing ? " missing" : isToday ? " strong" : ""}`}>
-                        {missing ? (isToday ? "—" : "未记录") : shortNumber(value)}
+                        {missing ? "" : shortNumber(value)}
                       </div>
                       <div className="growth-chart-area">
                         {missing
-                          ? <div className="growth-chart-missing" />
+                          ? null
                           : <div className={`growth-chart-bar${zero ? " zero" : ""}${isToday ? " today" : ""}`}
                             style={{ height: `${height}%` }} />}
                       </div>
@@ -360,7 +339,7 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
                         {isToday ? <strong>今天</strong> : dayParts(day).md}
                         <span className="cover">
                           {isToday
-                            ? (missing ? "尚未同步" : data.running ? <span className="ongoing">进行中</span> : "未挂机")
+                            ? (missing ? "" : data.running ? <span className="ongoing">进行中</span> : "未挂机")
                             : dayParts(day).week}
                           {coverageText}
                         </span>
@@ -372,7 +351,6 @@ function GrowthPage({ viewId, onOpenAccount, onOpenMonitor }) {
             </section>
 
             <section className="growth-rooms card">
-              <div className="growth-rooms-head"><span className="growth-rooms-title">各直播间</span></div>
               <div className="growth-cols"><span>直播间</span><span>近 7 日</span><span>今日</span><span>合计</span></div>
               {rowNodes}
             </section>

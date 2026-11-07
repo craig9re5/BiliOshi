@@ -1848,7 +1848,7 @@ button:disabled { cursor: default; }
 
 .growth-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   margin-bottom: 10px;
 }
@@ -1950,13 +1950,7 @@ button:disabled { cursor: default; }
 .growth-chart-col:hover .growth-chart-bar { background: rgba(45, 103, 99, 0.54); }
 .growth-chart-col:hover .growth-chart-bar.today { background: var(--accent-ink); }
 .growth-chart-missing {
-  width: 36px;
-  max-width: 44%;
-  height: 100%;
-  border: 1px dashed var(--line-strong);
-  border-bottom: 0;
-  border-radius: 4px 4px 0 0;
-  background: repeating-linear-gradient(135deg, transparent 0 5px, var(--wash-soft) 5px 6px);
+  display: none;
 }
 .growth-chart-day {
   display: flex;
@@ -1972,14 +1966,6 @@ button:disabled { cursor: default; }
 .growth-chart-day .ongoing { color: var(--accent); font-weight: 600; }
 
 .growth-rooms { overflow: hidden; }
-.growth-rooms-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 16px 6px;
-}
-.growth-rooms-title { font-size: 12px; font-weight: 650; }
 .growth-cols,
 .growth-row {
   display: grid;
@@ -1988,44 +1974,56 @@ button:disabled { cursor: default; }
   align-items: center;
 }
 .growth-cols {
-  padding: 0 16px 5px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--line);
-  font-size: 9.5px;
+  font-size: 11.5px;
+  font-weight: 600;
   color: var(--ink-3);
+  letter-spacing: 0.01em;
 }
 .growth-cols span:nth-child(2) { text-align: center; }
 .growth-cols span:nth-child(3),
 .growth-cols span:nth-child(4) { text-align: right; }
 .growth-row {
   width: 100%;
-  padding: 5px 16px;
+  padding: 8px 16px;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: transparent;
   text-align: left;
   transition: background 120ms var(--ease);
+  min-height: 52px;
 }
 .growth-row:last-child { border-bottom: 0; }
 .growth-row:hover { background: var(--wash-soft); }
 .growth-row[aria-pressed="true"] { background: var(--accent-soft); }
 .growth-row:focus-visible { outline-offset: -2px; }
-.growth-room-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.growth-room-id { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .growth-avatar {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: 10px;
   color: #fff;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+.growth-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .growth-room-name {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
@@ -2043,29 +2041,28 @@ button:disabled { cursor: default; }
 .growth-mini i.zero { height: 1.5px !important; background: var(--line-strong); }
 .growth-mini i.missing {
   height: 100%;
-  border: 1px dashed var(--line-strong);
-  border-bottom: 0;
+  border: 0;
   border-radius: 2px 2px 0 0;
   background: transparent;
 }
 .growth-room-today {
   text-align: right;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .growth-room-today.zero { color: var(--ink-2); }
-.growth-room-today.missing { color: var(--ink-3); font-weight: 500; font-size: 10.5px; }
+.growth-room-today.missing { color: var(--ink-3); font-weight: 500; font-size: 11px; }
 .growth-room-total {
   text-align: right;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.growth-room-total.missing { color: var(--ink-3); font-size: 10.5px; }
+.growth-room-total.missing { color: var(--ink-3); font-size: 11px; }
 .growth-group {
   display: flex;
   align-items: center;

@@ -1,4 +1,6 @@
+import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -42,6 +44,19 @@ class EngineSuspensionTests(unittest.TestCase):
             }, self.engine.last_check or 0)
             spawn.assert_not_called()
             self.assertEqual(self.engine.workers, {})
+
+    def test_suspended_status_stays_stale_and_not_running(self):
+        self.engine.statuses = {"2": {"live_status": 1}}
+        self.engine.status_times = {"2": time.time()}
+        self.engine.suspend()
+        before = json.loads((self.root / "status.json").read_text())
+        self.engine.cycle()
+        after = json.loads((self.root / "status.json").read_text())
+
+        self.assertTrue(after["stale"])
+        self.assertFalse(after["running"])
+        self.assertTrue(after["suspended"])
+        self.assertEqual(after["updated"], before["updated"])
 
     def test_stale_probe_generation_is_discarded(self):
         self.engine.activate()

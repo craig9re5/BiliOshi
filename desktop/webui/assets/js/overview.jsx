@@ -133,29 +133,38 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore }) => {
   );
 };
 
-const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy, closing }) => (
+const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy, closing, inactive }) => (
   <>
-    <button type="button" className="btn" onClick={onCheck} disabled={checking || controlBusy || closing}>
+    <button type="button" className="btn" onClick={onCheck}
+      disabled={checking || controlBusy || closing || inactive}>
       <Icon name="refresh" size={13} className={checking ? "spin" : ""} />{checking ? "检查中…" : "立即检查"}</button>
-    <button type="button" className={`btn ${paused ? "primary" : ""}`} onClick={onTogglePause} disabled={controlBusy || closing}>
+    <button type="button" className={`btn ${paused ? "primary" : ""}`} onClick={onTogglePause}
+      disabled={controlBusy || closing || inactive}>
       <Icon name={paused ? "play" : "pause"} size={13} />{paused ? "恢复挂机" : "暂停挂机"}</button>
   </>
 );
 
 const Overview = ({ rooms, selectedId, onSelect, paused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, busyRoom, controlBusy,
-  error, recovery, onRecovery, interval, lastCheck, checking, images, signedIn, closing, bridgeConnected }) => {
+  error, recovery, onRecovery, interval, lastCheck, checking, images, signedIn, closing, bridgeConnected,
+  accountName, inactive, onSwitch }) => {
   const selected = rooms.find((room) => room.room === selectedId);
   const healthy = rooms.filter((room) => room.healthy).length;
   const unknown = rooms.filter((room) => room.live_status == null).length;
-  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : paused ? "已暂停挂机"
+  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : inactive ? "此账号未运行"
+    : paused ? "已暂停挂机"
     : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中`
     : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.
   const cadence = `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
   return (<>
-    {(error || recovery?.action === "login") && <div className="banner" role="status">
+    {inactive && <div className="banner neutral" role="status">
+      <Icon name="info" size={14} />
+      <span>「{accountName || "此账号"}」当前未挂机，显示的是上次运行的数据。切换后才会开始检查。</span>
+      <button type="button" className="btn sm" onClick={onSwitch} disabled={closing}>切换并挂机</button>
+    </div>}
+    {(error || recovery?.action === "login") && !inactive && <div className="banner" role="status">
       <Icon name={recovery?.action === "login" ? "user" : "alert"} size={14} />
       <span>{!signedIn ? "登录 B 站，开始自动挂机与每日任务" : error || recovery?.message}</span>
       {recovery?.action && <button type="button" className="btn sm" onClick={onRecovery}>{recovery.label || "查看详情"}</button>}
@@ -163,17 +172,19 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
     <div className="workspace">
       <section className="list card" aria-label="关注的直播间">
         <header className="list-head"><span className="list-title">关注的直播间</span><span className="list-count">{rooms.length}</span>
+          {accountName && <span className="list-context">{accountName}</span>}
           <span className="spacer" />
-          <button type="button" className="btn ghost sm" onClick={onAddMember} disabled={closing}>
+          <button type="button" className="btn ghost sm" onClick={onAddMember} disabled={closing || inactive}>
             <Icon name="plus" size={12} />添加主播</button>
-          <button type="button" className="btn ghost sm" onClick={onSyncMedals} disabled={closing}>
+          <button type="button" className="btn ghost sm" onClick={onSyncMedals} disabled={closing || inactive}>
             <Icon name="medal" size={12} />同步粉丝牌</button>
         </header>
         <div className="rooms" role="listbox" aria-label="直播间列表">
           {rooms.length ? rooms.map((room) => <RoomRow key={room.room} room={room} selected={room.room === selectedId}
             image={images[room.uid]} onSelect={onSelect} onContextMenu={onContextMenu} />)
             : <div className="empty list-empty"><Icon name="monitor" size={24} /><strong>还没有关注主播</strong>
-              <span>添加主播或同步已有粉丝牌，开播后自动开始</span><button type="button" className="btn" onClick={onAddMember}>添加主播</button></div>}
+              <span>添加主播或同步已有粉丝牌，开播后自动开始</span>
+              <button type="button" className="btn" onClick={onAddMember} disabled={inactive}>添加主播</button></div>}
         </div>
       </section>
       <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen}

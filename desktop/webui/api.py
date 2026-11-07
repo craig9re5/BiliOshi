@@ -20,6 +20,7 @@ import time
 import webbrowser
 from pathlib import Path
 
+from bilioshi.accounts import ALL_ACCOUNTS
 from bilioshi.operating_mode import PROFILES, profile_for
 from bilioshi.redaction import redact
 from bilioshi.runtime import read_json, update_json
@@ -43,6 +44,9 @@ _PENDING_MESSAGES = {
     "check": "正在请求检查", "safety": "正在检查账号并解除保护暂停", "logout": "正在退出登录",
     "add": "正在添加主播", "import": "正在导入粉丝牌主播",
 }
+# These operations always touch the active Engine. A view of another account
+# must stay read-only rather than silently mutating the running account.
+_ACTIVE_VIEW_ONLY = {"add", "import", "resolve", "medals", "check", "pause", "safety"}
 
 
 def _public(value):
@@ -152,17 +156,22 @@ class Api:
 
     def _account_root(self, account_id=None):
         account_id = account_id or self._view_account_id()
-        if self._store is not None and account_id:
-            try:
-                return self._store.account_root(account_id)
-            except Exception:
-                pass
+        if self._store is not None and account_id and account_id != ALL_ACCOUNTS:
+            return self._store.account_root(account_id)
         return self._root
 
     def _view_is_active(self):
         if self._host is None:
             return True
         return self._host.view_id in (None, self._host.active_id)
+
+    def _view_allows_active_action(self, kind):
+        """The all-accounts dashboard may check the running account."""
+        if self._host is None:
+            return True
+        if self._host.view_id == ALL_ACCOUNTS:
+            return kind == "check"
+        return self._view_is_active()
 
     def _empty_snapshot(self):
         return {
@@ -246,7 +255,9 @@ class Api:
             from desktop.storage import initialize
 
             initialize(root, [])
-        if account_id and self._store is not None and account_id != self._active_account_id():
+        if account_id and self._store is not None and account_id not in (
+            self._active_account_id(), ALL_ACCOUNTS
+        ):
             return self._read_settings(root)
         with self._cache_lock:
             signature = (_signature(root / "settings.json"), _signature(root / "members.json"))
@@ -260,8 +271,8 @@ class Api:
         value = {key: summary.get(key) for key in (
             "id", "uid", "name", "face", "created_at", "last_used_at",
             "last_checked_at", "status", "watch_enabled", "credential_token",
-            "signed_in", "running", "paused", "state", "room_count",
-            "live_room_count", "snapshot_at", "stale", "safety", "account",
+            "signed_in", "running", "paused", "global_paused", "state", "room_count",
+            "live_room_count", "gain", "snapshot_at", "stale", "safety", "account",
         )}
         return _public(value)
 
@@ -303,8 +314,10 @@ class Api:
             ui_error=ui_error,
         )
         snap["accounts"] = [self._summary_public(item) for item in self._host.summaries()]
+        view_id = self._host.view_id
+        viewing_other = bool(view_id) and view_id not in (self._host.active_id, ALL_ACCOUNTS)
         try:
-            snap["settings"] = self.settings()
+            snap["settings"] = self.settings(None if viewing_other else view_id)
         except Exception:
             logging.exception("Web settings read failed")
             snap["settings"] = dict(self._settings_cache)
@@ -324,7 +337,7 @@ class Api:
             }
         snap["recovery"] = recovery_route(snap)
         snap["notifications"] = {"available": False}
-        if self._host.view_id and self._host.view_id != self._host.active_id:
+        if self._host.view_id and self._host.view_id not in (self._host.active_id, ALL_ACCOUNTS):
             snap["view"] = self._view_snapshot(self._host.view_id)
         return _public(snap)
 
@@ -441,7 +454,7 @@ class Api:
         if self._host is None:
             return {"ok": False, "error": "当前版本只支持单账号。"}
         try:
-            self._host.view(account_id)
+            self._host.view(account_id or ALL_ACCOUNTS)
         except Exception:
             return {"ok": False, "error": "账号不存在或已被移除。"}
         self._ui.push_now()
@@ -451,7 +464,8 @@ class Api:
         if self._host is None:
             return {"ok": False, "error": "当前版本只支持单账号。"}
         try:
-            self._host.switch_to(account_id)
+            with self._mutations, self._control_mutations:
+                self._host.switch_to(account_id)
         except Exception as exc:
             message = str(exc) if str(exc) else "切换账号失败，请稍后重试。"
             return {"ok": False, "error": message}
@@ -488,7 +502,8 @@ class Api:
         if self._host is None:
             return {"ok": False, "error": "当前版本只支持单账号。"}
         try:
-            self._host.remove_account(account_id)
+            with self._mutations, self._control_mutations:
+                self._host.remove_account(account_id)
         except Exception:
             return {"ok": False, "error": "账号不存在或无法移除。"}
         self._sync_active()
@@ -515,7 +530,8 @@ class Api:
         self._sync_active()
         if self._engine is None and not allow_without_engine:
             return {"ok": False, "error": "当前没有正在运行的账号。"}
-        if room is not None and self._host is not None and not self._view_is_active():
+        if (room is not None and self._host is not None and not self._view_is_active()) or (
+                kind in _ACTIVE_VIEW_ONLY and not self._view_allows_active_action(kind)):
             return {"ok": False, "error": "此账号当前未运行，切换到该账号后才能执行操作。"}
         with self._state:
             if self._closing.is_set():
@@ -587,6 +603,8 @@ class Api:
             if key in changes and type(changes[key]) is not bool:
                 return {"ok": False, "error": "设置开关必须为 true 或 false。"}
         target_id = account_id or self._view_account_id() or self._active_account_id()
+        if target_id == ALL_ACCOUNTS:
+            target_id = self._active_account_id()
         try:
             target_root = self._account_root(target_id) if target_id else self._root
             if target_id and self._store is not None:
@@ -739,7 +757,13 @@ class Api:
         return {"ok": bool(ok), **({} if ok else {"error": "无法打开直播间，请检查默认浏览器。"})}
 
     def open_logs(self, account_id=None):
-        root = self._account_root(account_id) if account_id else self._root
+        try:
+            if not account_id or account_id == ALL_ACCOUNTS:
+                root = self._host_root if self._host is not None else self._root
+            else:
+                root = self._account_root(account_id)
+        except Exception:
+            return {"ok": False, "error": "账号不存在或已被移除。"}
         try:
             os.startfile(str(root / "logs"))
         except (OSError, AttributeError):
@@ -863,8 +887,13 @@ class Api:
 
     def account_avatar(self, account_id=None):
         """The requested account's public avatar; the renderer never supplies a UID."""
-        target_id = account_id or self._view_account_id()
-        root = self._account_root(target_id)
+        target_id = account_id or self._view_account_id() or self._active_account_id()
+        if target_id == ALL_ACCOUNTS:
+            target_id = self._active_account_id()
+        try:
+            root = self._account_root(target_id)
+        except Exception:
+            return {"ok": False, "error": "账号不存在或已被移除。"}
 
         def fetch():
             try:
@@ -872,7 +901,7 @@ class Api:
                     present = self._store.has_credentials(target_id)
                 else:
                     present, _error = self._credentials_present()
-            except (OSError, ValueError):
+            except (OSError, ValueError, RuntimeError):
                 return {"ok": False}
             if not present:
                 return {"ok": False}
@@ -933,6 +962,7 @@ class Api:
                 and generation == self._qr_generation and session is self._qr_session)
 
     def qr_start(self, account_id=None):
+        account_id = account_id or None
         if account_id is not None:
             try:
                 if self._store is not None:
@@ -1002,6 +1032,7 @@ class Api:
                 }))
 
     def _complete_login(self, uid, account, profile, cookies, context, target_id):
+        target_id = target_id or None
         sessdata, bili_jct = cookies["SESSDATA"], cookies["bili_jct"]
         face = profile.get("face", "")
         if self._store is None:
@@ -1050,6 +1081,10 @@ class Api:
             self._store.upsert(uid, account, face)
         else:
             self._store.update(account_id, name=account or existing.get("name", ""), face=face)
+        # A QR refresh must not clear a platform protection hold that was
+        # retained across logout or remove/re-add.
+        if safety.status(sessdata, root).get("blocked"):
+            self._store.update(account_id, status="blocked")
         if self._host is not None:
             if account_id == self._active_account_id():
                 self._host.reload_account(account_id)

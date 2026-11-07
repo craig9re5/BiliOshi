@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"b97a8be855aa1b9f6fc3673717cbfe574de46e7d21da5d0b75142265f429af09","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"9dcaf81b3d0f1ed2608d51d134d63cbd8407a1388efdd9411b666e9ce158e7de"} */
+/* BiliOshi JSX {"code_sha256":"038489100cc9542af4c43b32018122c2ca9f37c4b690853a4fcf09a8e38077b0","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"abe6c8bf65b2523924ea5a3c37d12803d1da59cf47ba2b270251111950931669"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -80,9 +80,10 @@ const QrModal = ({
     expired: "二维码已过期，刷新后重新扫描",
     error: qr.message || "无法连接登录服务，稍后重试"
   };
+  const relogin = Boolean(qr.account_id);
   return /*#__PURE__*/React.createElement(Modal, {
-    title: qr.state === "confirmed" ? "已登录" : "扫码登录 B 站",
-    desc: qr.state === "confirmed" ? qr.account : "使用 B 站 App 扫码，并在手机上确认",
+    title: qr.state === "confirmed" ? "已登录" : relogin ? "重新登录这个账号" : "扫码登录 B 站",
+    desc: qr.state === "confirmed" ? qr.account : relogin ? "只会更新这个账号的登录凭证，其他账号继续运行；以后切换账号不用重新扫码。" : "使用 B 站 App 扫码，并在手机上确认",
     onClose: onClose,
     actions: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
       type: "button",
@@ -224,7 +225,8 @@ const ConfirmModal = ({
   danger,
   onConfirm,
   onClose,
-  busy
+  busy,
+  body
 }) => /*#__PURE__*/React.createElement(Modal, {
   title: title,
   desc: desc,
@@ -240,7 +242,7 @@ const ConfirmModal = ({
     onClick: onConfirm,
     disabled: busy
   }, busy ? "正在处理…" : confirmLabel))
-});
+}, body);
 const RoomMenu = ({
   menu,
   room,

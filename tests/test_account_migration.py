@@ -119,6 +119,23 @@ class MigrationTests(unittest.TestCase):
         self.assertFalse(again.migrated)
         self.assertEqual(len(AccountStore(self.root).accounts()), 1)
 
+    def test_missing_registry_recovers_backup_without_replaying_legacy(self):
+        self.legacy()
+        first = ensure_account_store(self.root, validator=lambda *_: self.fail("network used"))
+        store = first.store
+        row, _ = store.upsert(456, "第二账号")
+        store.ensure_root(row["id"], 456)
+        save_login("sess-456", "csrf-456", store.credential_path(row["id"]))
+        store.set_global_paused(True)
+        store.set_global_paused(False)
+        store.path.unlink()
+
+        result = ensure_account_store(self.root, validator=lambda *_: self.fail("network used"))
+
+        self.assertFalse(result.migrated)
+        self.assertFalse(result.legacy_mode)
+        self.assertEqual({row["id"] for row in result.store.accounts()}, {"uid-123", "uid-456"})
+
     def test_corrupt_members_do_not_seed_defaults(self):
         self.legacy()
         (self.root / "members.json").write_text("{broken")

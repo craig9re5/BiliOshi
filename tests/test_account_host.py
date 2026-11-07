@@ -110,6 +110,18 @@ class AccountHostTests(unittest.TestCase):
         self.assertFalse(engine.suspended)
         self.assertFalse(self.store.global_paused)
 
+    def test_global_pause_does_not_suspend_an_individually_paused_engine(self):
+        self.host.start()
+        engine = self.host.engine_for("uid-1")
+        engine.set_paused(True)
+
+        self.host.set_global_paused(True)
+        self.assertFalse(engine.suspended)
+
+        self.host.set_global_paused(False)
+        self.assertFalse(engine.suspended)
+        self.assertTrue(engine.paused)
+
     def test_view_does_not_start_an_engine(self):
         self.host.start()
         self.host.view("uid-2")

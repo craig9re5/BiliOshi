@@ -45,9 +45,11 @@ def _capture(window, destination):
 
 def run(output, screenshot=None):
     """Return a process exit code and a small, account-free verification report."""
+    from bilioshi.accounts import AccountStore
     from bilioshi.qr_login import PollResult
     from bilioshi.runtime import task_day
     from desktop.engine import Engine
+    from desktop.host import AccountHost
     from desktop.storage import initialize, write_json, send_command
     from .window import WebHost
 
@@ -64,33 +66,60 @@ def run(output, screenshot=None):
 
     with tempfile.TemporaryDirectory(prefix="livesupport-webui-") as directory:
         root = Path(directory)
-        members = [{"name": "测试主播", "room": 7, "uid": 9}, {"name": "示例主播", "room": 8, "uid": 10}]
-        initialize(root, members)
-        write_json(root / "credentials.json", {"SESSDATA": "diagnostic-session", "bili_jct": "diagnostic-csrf"})
+        store = AccountStore(root)
+        first_row, _ = store.upsert(123, "示例账号")
+        second_row, _ = store.upsert(456, "第二账号")
+        first_id, second_id = first_row["id"], second_row["id"]
+        first_members = [{"name": "测试主播", "room": 7, "uid": 9}, {"name": "示例主播", "room": 8, "uid": 10}]
+        second_members = [{"name": "第二主播", "room": 7, "uid": 11}]
+        initialize(root, [])
+        for account_id, uid, members in (
+            (first_id, 123, first_members), (second_id, 456, second_members),
+        ):
+            account_root = store.ensure_root(account_id, uid)
+            initialize(account_root, [])
+            write_json(account_root / "members.json", members)
+        store.save_credentials(first_id, "diagnostic-session", "diagnostic-csrf")
+        store.save_credentials(second_id, "diagnostic-session-2", "diagnostic-csrf-2")
+        first_root = store.account_root(first_id)
         from desktop.avatars import file_token, save_account_profile
 
-        save_account_profile(root, 123, "", file_token(root / "credentials.json"))
-        engine = Engine(root, job=Mock())
-        engine.account = "示例账号"
-        engine.account_checked_at = time.time()
-        engine.last_check = time.time() - 90
-        engine.statuses = {"7": {"live_status": 1, "title": "桌面窗口与桥接验收"}, "8": {"live_status": 0}}
-        engine.status_times = {"7": time.time(), "8": time.time()}
-        engine.medals = {9: {"medal_name": "同行者", "level": 9, "today_intimacy": 15, "day_limit": 1500, "is_lighted": 1}}
-        engine.tasks["7"] = {"day": task_day(), "updated": time.time(), "intimacy": 1280,
-            "next_intimacy": 3000, "tasks": [
-                {"title": "发送弹幕", "sub_title": "5 / 5", "is_done": True},
-                {"title": "直播点赞", "sub_title": "8 / 10", "is_done": False},
-                {"title": "观看直播", "sub_title": "30 / 30", "is_done": True}]}
+        save_account_profile(first_root, 123, "", file_token(first_root / "credentials.json"))
         worker = Mock(pid=os.getpid())
         worker.poll.return_value = None
-        engine.workers[7] = worker
-        write_json(root / "state/7.json", {"pid": os.getpid(), "phase": "挂机中", "started": time.time() - 2520,
-            "last_heartbeat": time.time() - 12, "beats": 41})
+        engines = []
+
+        def make_engine(account_root, *, job=None, account_id=None):
+            engine = Engine(account_root, job=job, account_id=account_id)
+            engine.account = "示例账号" if account_id == first_id else "第二账号"
+            engine.account_checked_at = time.time()
+            engine.last_check = time.time() - 90
+            if account_id == first_id:
+                engine.statuses = {"7": {"live_status": 1, "title": "桌面窗口与桥接验收"},
+                                   "8": {"live_status": 0}}
+                engine.status_times = {"7": time.time(), "8": time.time()}
+                engine.medals = {9: {"medal_name": "同行者", "level": 9, "today_intimacy": 15,
+                                     "day_limit": 1500, "is_lighted": 1}}
+                engine.tasks["7"] = {"day": task_day(), "updated": time.time(), "intimacy": 1280,
+                    "next_intimacy": 3000, "tasks": [
+                        {"title": "发送弹幕", "sub_title": "5 / 5", "is_done": True},
+                        {"title": "直播点赞", "sub_title": "8 / 10", "is_done": False},
+                        {"title": "观看直播", "sub_title": "30 / 30", "is_done": True}]}
+                engine.workers[7] = worker
+                write_json(account_root / "state/7.json", {
+                    "pid": os.getpid(), "phase": "挂机中", "started": time.time() - 2520,
+                    "last_heartbeat": time.time() - 12, "beats": 41})
+            else:
+                engine.statuses = {"7": {"live_status": 1, "title": "第二账号的直播"}}
+                engine.status_times = {"7": time.time()}
+            engines.append(engine)
+            return engine
+
+        accounts_host = AccountHost(root, store, engine_factory=make_engine, job_factory=Mock)
         qr_session = Mock()
         qr_session.generate.return_value = "https://account.bilibili.com/h5/account-h5/auth/scan-web?key=diagnostic-only"
         qr_session.poll.return_value = PollResult("waiting")
-        host = WebHost(engine)
+        host = WebHost(accounts_host)
 
         def check(name, condition):
             if not condition:
@@ -114,6 +143,29 @@ def run(output, screenshot=None):
             try:
                 wait("Boolean(window.LS && document.querySelectorAll('.room').length === 2)")
                 check("two rooms rendered", True)
+                wait("document.querySelectorAll('.account-tab[role=\"tab\"]').length === 3")
+                check("account tabs rendered", True)
+                click("#account-tab-all")
+                wait("document.querySelectorAll('.account-card').length === 2")
+                check("all-account dashboard rendered", True)
+                click(".account-card:nth-of-type(2) .link-btn")
+                wait("Boolean(document.querySelector('.modal'))")
+                click(".modal .btn.primary")
+                wait("document.querySelector('.account-tab.active')?.id === "
+                     + json.dumps("account-tab-" + second_id))
+                wait("document.querySelectorAll('.room').length === 1")
+                wait("document.querySelector('.detail-name')?.textContent === '第二主播'")
+                check("switch to second account without QR", True)
+                click("#account-tab-all")
+                wait("document.querySelectorAll('.account-card').length === 2")
+                click(".account-card:nth-of-type(1) .link-btn")
+                wait("Boolean(document.querySelector('.modal'))")
+                click(".modal .btn.primary")
+                wait("document.querySelector('.account-tab.active')?.id === "
+                     + json.dumps("account-tab-" + first_id))
+                wait("document.querySelectorAll('.room').length === 2")
+                wait("document.querySelector('.detail-name')?.textContent === '测试主播'")
+                check("switch back without QR", True)
                 report["typography"] = host._window.evaluate_js("({body:getComputedStyle(document.body).fontFamily, heading:getComputedStyle(document.querySelector('.chrome-title')).fontFamily})")
                 check("account stays a string", isinstance(host._api.snapshot()["account"], str))
                 check("single title bar", host._window.evaluate_js(
@@ -154,7 +206,7 @@ def run(output, screenshot=None):
                 click('[role="switch"][aria-label="直播点赞"]')
                 wait("document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]')?.getAttribute('aria-checked') === 'true'")
                 wait("!document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]').disabled")
-                check("setting persisted", json.loads((root / "settings.json").read_text(encoding="utf-8"))["auto_like"] is True)
+                check("setting persisted", json.loads((first_root / "settings.json").read_text(encoding="utf-8"))["auto_like"] is True)
                 check("native select removed", host._window.evaluate_js("!document.querySelector('select')"))
                 click('.choice-button')
                 wait("Boolean(document.querySelector('.choice-menu'))")
@@ -163,10 +215,10 @@ def run(output, screenshot=None):
                 wait("!document.querySelector('.choice-menu')")
                 deadline = time.monotonic() + 3
                 while (time.monotonic() < deadline
-                       and json.loads((root / "settings.json").read_text(encoding="utf-8"))["run_mode"] != "aggressive"):
+                       and json.loads((first_root / "settings.json").read_text(encoding="utf-8"))["run_mode"] != "aggressive"):
                     time.sleep(0.05)
                 check("run mode uses themed menu",
-                      json.loads((root / "settings.json").read_text(encoding="utf-8"))["run_mode"] == "aggressive")
+                      json.loads((first_root / "settings.json").read_text(encoding="utf-8"))["run_mode"] == "aggressive")
                 original_theme = host._window.evaluate_js(
                     "document.documentElement.dataset.theme || 'white'")
                 click('.theme-option[data-theme="mist"]')
@@ -181,12 +233,14 @@ def run(output, screenshot=None):
                 click('button[aria-label="账号"]')
                 wait("document.querySelector('.chrome-title')?.textContent === '账号'")
                 check("account rendered", "示例账号" in host._window.evaluate_js("document.body.innerText"))
-                wait("Boolean(document.querySelector('.account-avatar img'))")
+                check("both accounts listed", host._window.evaluate_js(
+                    "document.querySelectorAll('.account-item').length === 2"))
+                wait("Boolean(document.querySelector('.account-item .avatar img'))")
                 check("account avatar uses the public profile", host._window.evaluate_js(
-                    "document.querySelector('.account-avatar img').src.startsWith('data:image/png;base64,')"))
+                    "document.querySelector('.account-item .avatar img').src.startsWith('data:image/png;base64,')"))
                 wait("Boolean(document.querySelector('.sidebar-avatar img'))")
                 check("sidebar avatar matches the account", True)
-                click('.setting .btn.primary')
+                click('.group-head .btn.primary')
                 wait("Boolean(document.querySelector('.qr-wrap img'))")
                 check("QR has image", True)
                 host._window.evaluate_js("document.querySelector('.scrim').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))")
@@ -203,10 +257,10 @@ def run(output, screenshot=None):
                 # Use the same disk IPC used by a second launch, without touching installed data.
                 send_command(root, "pause")
                 wait("document.querySelector('.statusbar').textContent.includes('已暂停')")
-                check("IPC pause", engine.paused)
+                check("IPC pause", accounts_host.active_engine().paused)
                 send_command(root, "resume")
                 wait("!document.querySelector('.statusbar').textContent.includes('已暂停')")
-                check("IPC resume", not engine.paused)
+                check("IPC resume", not accounts_host.active_engine().paused)
                 if host._has_tray():
                     check("close hides to tray", host.close_window())
                     check("engine remains running", not host._closing.is_set())
@@ -234,12 +288,15 @@ def run(output, screenshot=None):
                 save()
                 host.quit()
 
+        def mark_started(engine):
+            engine._started = True
+
         host.window_loaded_hook = loaded
         threading.Thread(target=watchdog, daemon=True).start()
         from PIL import Image
         avatar = Image.new("RGB", (64, 64), "#2d6763")
         with patch.dict(os.environ, {"BILIOSHI_APP_DATA": str(root)}), \
-             patch.object(engine, "start"), \
+             patch.object(Engine, "start", mark_started), \
              patch("urllib.request.urlopen", side_effect=forbidden), \
              patch("urllib.request.OpenerDirector.open", side_effect=forbidden), \
              patch("desktop.avatars.load_avatar", side_effect=lambda *_: avatar.copy()), \
@@ -248,7 +305,8 @@ def run(output, screenshot=None):
             host.run(show=True)
         avatar.close()
         report["checks"].append("native window returned cleanly")
-        check("engine shutdown completed", host._closed.is_set() and engine.stopping.is_set())
+        check("engine shutdown completed", host._closed.is_set()
+              and all(item.stopping.is_set() for item in engines))
         check("no pending QR or bridge IO", host._api._active == 0)
         save()
     return 0 if report["ok"] else 1

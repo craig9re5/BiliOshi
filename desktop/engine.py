@@ -298,15 +298,21 @@ class Engine:
             self.persist()
             logging.info("Engine activated account=%s", self.account_id)
 
-    def _write_last_snapshot(self):
+    def _status_snapshot(self):
+        """A suspended account keeps a stale snapshot instead of looking live."""
         snapshot = self.snapshot()
-        snapshot.update({
-            "account_id": self.account_id,
-            "active": False,
-            "stale": True,
-            "suspended": True,
-        })
-        write_json(self.root / "state" / "last-snapshot.json", snapshot)
+        if self.suspended:
+            snapshot.update({
+                "account_id": self.account_id,
+                "active": False,
+                "running": False,
+                "stale": True,
+                "suspended": True,
+            })
+        return snapshot
+
+    def _write_last_snapshot(self):
+        write_json(self.root / "state" / "last-snapshot.json", self._status_snapshot())
 
     def reconnect_room(self, room):
         """Replace only the selected worker, after a fresh live-status probe."""
@@ -405,7 +411,7 @@ class Engine:
             self.lock.release()
 
     def persist(self, exited=False):
-        write_json(self.root / "status.json", {**self.snapshot(), "exited": exited})
+        write_json(self.root / "status.json", {**self._status_snapshot(), "exited": exited})
         self.last_status_publish = time.time()
         self.publish_error = ""
 
@@ -419,11 +425,14 @@ class Engine:
             self.error = f"配置或运行错误：{type(exc).__name__}"
             self.next_check = time.time() + 60
         now = time.time()
-        # Retry a failed publication on the next cycle instead of waiting for a full interval.
-        if self.publish_error or now - self.last_status_publish >= STATUS_PUBLISH_SECONDS:
+        # A suspended account keeps its suspend-time status; refreshing it would
+        # make stale rows look like a live connection to the dashboard.
+        if not self.suspended and (
+            self.publish_error or now - self.last_status_publish >= STATUS_PUBLISH_SECONDS
+        ):
             try:
                 # Recovery clears the previous publication error only after an actual write.
-                snapshot = self.snapshot()
+                snapshot = self._status_snapshot()
                 snapshot["error"] = self.error
                 write_json(self.root / "status.json", {**snapshot, "exited": False})
                 self.last_status_publish = time.time()

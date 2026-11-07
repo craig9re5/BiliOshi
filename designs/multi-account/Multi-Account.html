@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="white">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>ビリ推し · 多账号交互设计稿</title>
+<style>
+  /* ------------------------------------------------------------------
+     Design tokens lifted from desktop/webui/assets/style.css (Paper White).
+     The prototype follows the production surface language: paper canvas,
+     white cards, one hairline border, deep-teal accent only for actions.
+     ------------------------------------------------------------------ */
+  :root {
+    --paper: #fcfcfb;
+    --surface: #ffffff;
+    --surface-sunk: #f5f5f2;
+    --surface-hover: #efefec;
+    --line: rgba(28, 28, 25, 0.08);
+    --line-strong: rgba(28, 28, 25, 0.14);
+    --ink: #1f1f1d;
+    --ink-2: rgba(31, 31, 29, 0.68);
+    --ink-3: rgba(31, 31, 29, 0.64);
+    --accent: #2d6763;
+    --accent-ink: #245550;
+    --accent-soft: #e8f1ee;
+    --accent-line: #cfe2dc;
+    --live: #1f8a5f;
+    --live-ink: #176a49;
+    --live-soft: #e9f6ef;
+    --warn: #8a5a12;
+    --warn-soft: #fdf3e2;
+    --danger: #a4432f;
+    --danger-soft: #fbede9;
+    --wash-soft: rgba(28, 28, 25, 0.032);
+    --wash-nav: rgba(28, 28, 25, 0.045);
+    --wash: rgba(28, 28, 25, 0.05);
+    --wash-strong: rgba(28, 28, 25, 0.07);
+    --wash-active: rgba(28, 28, 25, 0.11);
+    --border-hover: rgba(28, 28, 25, 0.20);
+    --track: rgba(28, 28, 25, 0.07);
+    --switch-off: rgba(28, 28, 25, 0.15);
+    --avatar-bg: #e9e7e2;
+    --scroll-thumb: rgba(28, 28, 25, 0.16);
+    --scroll-thumb-soft: rgba(28, 28, 25, 0.14);
+    --dot-paused: rgba(28, 28, 25, 0.28);
+    --dot-paused-ring: rgba(28, 28, 25, 0.06);
+    --r-sm: 7px;
+    --r-md: 10px;
+    --r-lg: 13px;
+    --r-xl: 16px;
+    --shadow-1: 0 1px 2px rgba(28, 28, 25, 0.05);
+    --shadow-2: 0 1px 2px rgba(28, 28, 25, 0.05), 0 6px 18px rgba(28, 28, 25, 0.055);
+    --font: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei",
+            -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+    --review-bg: #efeeea;
+    --review-ink: #2a2926;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--review-bg);
+    color: var(--review-ink);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, [role="option"]:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  img { max-width: 100%; }
+  ::selection { background: rgba(45, 103, 99, 0.16); }
+
+  /* ---------- review page ---------- */
+  .review-header {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 54px 32px 26px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 32px;
+  }
+  .review-kicker {
+    font-size: 10.5px;
+    font-weight: 650;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .review-header h1 {
+    margin: 10px 0 0;
+    font-size: clamp(28px, 4.4vw, 44px);
+    line-height: 1.15;
+    letter-spacing: -0.045em;
+    font-weight: 680;
+    color: var(--review-ink);
+  }
+  .review-header p {
+    max-width: 560px;
+    margin: 12px 0 0;
+    font-size: 13.5px;
+    line-height: 1.75;
+    color: rgba(42, 41, 38, 0.68);
+  }
+  .review-note {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 11px;
+    border: 1px solid rgba(42, 41, 38, 0.12);
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.55);
+    font-size: 11.5px;
+    color: rgba(42, 41, 38, 0.64);
+    white-space: nowrap;
+  }
+  .note-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--live);
+    box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.12);
+  }
+  .review-shell { max-width: 1240px; margin: 0 auto; padding: 0 32px 56px; }
+
+  .review-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 14px;
+    padding: 8px 10px;
+    border: 1px solid rgba(42, 41, 38, 0.10);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.62);
+    backdrop-filter: blur(8px);
+  }
+  .review-pages, .review-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .review-toolbar button {
+    height: 30px;
+    padding: 0 11px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(42, 41, 38, 0.66);
+    font-size: 12px;
+    white-space: nowrap;
+    transition: background 120ms var(--ease), color 120ms var(--ease), border-color 120ms var(--ease);
+  }
+  .review-toolbar button:hover { background: rgba(42, 41, 38, 0.055); color: var(--review-ink); }
+  .review-toolbar button.active {
+    border-color: rgba(42, 41, 38, 0.11);
+    background: #fff;
+    color: var(--review-ink);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(28, 28, 25, 0.05);
+  }
+  .review-tools { gap: 8px; }
+  .review-tools .demo-button {
+    border-color: rgba(42, 41, 38, 0.12);
+    background: rgba(255, 255, 255, 0.7);
+  }
+  .mode-switch {
+    display: inline-flex;
+    padding: 3px;
+    border: 1px solid rgba(42, 41, 38, 0.11);
+    border-radius: 8px;
+    background: rgba(42, 41, 38, 0.035);
+  }
+  .mode-switch button { height: 26px; padding: 0 10px; border-radius: 6px; font-size: 11.5px; }
+  .mode-switch button.active {
+    background: #fff;
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(28, 28, 25, 0.08);
+  }
+
+  .window-stage { display: flex; justify-content: center; }
+  .window-wrap { position: relative; width: 100%; max-width: 1180px; }
+  .app-window {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1180px;
+    height: 760px;
+    display: flex;
+    overflow: hidden;
+    transform-origin: top left;
+    border-radius: 14px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 13px;
+    line-height: 1.55;
+    box-shadow: 0 2px 6px rgba(28, 28, 25, 0.08), 0 28px 70px rgba(28, 28, 25, 0.16);
+  }
+
+  /* ---------- app primitives ---------- */
+  .icon { flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .spacer { flex: 1; }
+  .app-window button { cursor: default; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 29px;
+    padding: 0 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: var(--shadow-1);
+    transition: background 110ms var(--ease), border-color 110ms var(--ease), transform 110ms var(--ease);
+  }
+  .btn:hover { background: var(--surface-hover); border-color: var(--border-hover); }
+  .btn:active { transform: translateY(0.5px); box-shadow: none; }
+  .btn[disabled] { opacity: 0.42; box-shadow: none; pointer-events: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 1px 2px rgba(36, 85, 80, 0.28); }
+  .btn.primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+  .btn.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--ink-2); }
+  .btn.ghost:hover { background: var(--wash); color: var(--ink); }
+  .btn.sm { height: 25px; padding: 0 9px; font-size: 12px; }
+  .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+  .btn.icon-only { width: 25px; padding: 0; }
+  .link-btn { border: 0; background: transparent; color: var(--accent); font-size: 11.5px; font-weight: 600; padding: 0; }
+  .link-btn:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-1); }
+
+  .app-window { display: flex; }
+  .side {
+    width: 224px;
+    flex: 0 0 224px;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 11px 12px;
+    background: var(--surface-sunk);
+    border-right: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 9px; padding: 4px 8px 18px; }
+  .logo {
+    width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+    color: #8fe6c6; background: linear-gradient(160deg, #26474b 0%, #14262a 100%);
+    box-shadow: inset 0 0 0 1px rgba(143, 230, 198, 0.16), 0 1px 2px rgba(28, 28, 25, 0.12);
+  }
+  .brand-name { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+  .nav { display: flex; flex-direction: column; gap: 1px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 8px 10px; border: 0; border-radius: var(--r-sm);
+    background: transparent; color: var(--ink-2); font-size: 13px; text-align: left;
+    transition: background 120ms var(--ease), color 120ms var(--ease);
+  }
+  .nav-item:hover { background: var(--wash-nav); color: var(--ink); }
+  .nav-item[aria-current="page"] {
+    background: var(--surface); color: var(--ink); font-weight: 600;
+    box-shadow: var(--shadow-1), inset 0 0 0 1px var(--line);
+  }
+  .nav-item .icon { opacity: 0.72; }
+  .nav-item[aria-current="page"] .icon { opacity: 1; color: var(--accent); }
+  .nav-spacer { flex: 1; }
+  .nav-bottom { padding-bottom: 10px; }
+  .sidebar-account {
+    display: flex; gap: 9px; align-items: center; width: 100%;
+    padding: 11px 7px 6px; border: 0; border-top: 1px solid var(--line);
+    background: transparent; text-align: left; border-radius: 0;
+  }
+  .sidebar-account:hover { background: var(--wash-soft); }
+  .sidebar-avatar {
+    display: grid; place-items: center; width: 29px; height: 29px; flex: 0 0 29px;
+    border-radius: 50%; overflow: hidden; background: var(--avatar-bg);
+    color: #fff; font-size: 11px; font-weight: 650;
+  }
+  .sidebar-account-text { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+  .sidebar-account-text strong { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-account-text small { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-account > .icon { color: var(--ink-3); flex: 0 0 13px; }
+
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .chrome {
+    display: flex; align-items: center; gap: 9px; height: 46px; flex: 0 0 46px;
+    padding: 0 6px 0 14px; border-bottom: 1px solid var(--line); background: var(--surface-sunk);
+    user-select: none;
+  }
+  .side-btn {
+    width: 30px; height: 30px; display: grid; place-items: center;
+    border: 0; border-radius: 8px; background: transparent; color: var(--ink-2);
+  }
+  .side-btn:hover { background: var(--wash-strong); color: var(--ink); }
+  .chrome .logo { width: 22px; height: 22px; border-radius: 7px; box-shadow: none; }
+  .chrome-brand { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; }
+  .chrome-name { font-size: 13px; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
+  .chrome-divider { width: 1px; height: 15px; background: var(--line-strong); flex: 0 0 1px; margin: 0 3px; }
+  .chrome-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+  .chrome-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  .chrome-actions .btn { height: 27px; font-size: 12px; }
+  .page { flex: 1; min-height: 0; display: none; flex-direction: column; }
+  .page.active { display: flex; }
+  .win-buttons { display: flex; align-items: center; gap: 2px; margin-left: 8px; flex: 0 0 auto; }
+  .win-btn {
+    width: 40px; height: 32px; display: grid; place-items: center; border: 0;
+    border-radius: 8px; background: transparent; color: var(--ink-2);
+  }
+  .win-btn:hover { background: var(--wash-strong); color: var(--ink); }
+  .win-btn.close:hover { background: #c4453a; color: #fff; }
+
+  /* ---------- account tabs ---------- */
+  .account-tabs {
+    display: flex; align-items: center; gap: 4px;
+    flex: 0 0 46px; min-height: 46px; padding: 7px 24px;
+    background: var(--paper); border-bottom: 1px solid var(--line);
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .account-tabs::-webkit-scrollbar { display: none; }
+  .account-tablist { display: flex; align-items: center; gap: 4px; }
+  .account-tab {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 31px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px;
+    background: transparent; color: var(--ink-2); font-size: 12px; white-space: nowrap;
+    transition: background 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease);
+  }
+  .account-tab:hover { background: var(--wash); color: var(--ink); }
+  .account-tab.active {
+    background: var(--surface); border-color: var(--line); color: var(--ink);
+    font-weight: 600; box-shadow: var(--shadow-1);
+  }
+  .account-tab.add { color: var(--ink-3); font-size: 16px; padding: 0 9px; }
+  .account-tab.add:hover { color: var(--accent); background: var(--accent-soft); }
+  .tab-avatar {
+    width: 18px; height: 18px; flex: 0 0 18px; border-radius: 6px;
+    display: grid; place-items: center; color: #fff; font-size: 9px; font-weight: 700;
+  }
+  .tab-state { width: 5px; height: 5px; border-radius: 50%; flex: 0 0 5px; background: var(--dot-paused); }
+  .tab-state.live { background: var(--live); box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.10); }
+  .tab-state.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(138, 90, 18, 0.09); }
+  .tab-count {
+    min-width: 16px; height: 17px; padding: 0 5px; border-radius: 5px;
+    display: inline-grid; place-items: center; background: var(--surface-sunk);
+    color: var(--ink-3); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .account-tab.active .tab-count { background: var(--accent-soft); color: var(--accent); }
+
+  /* ---------- monitor: dashboard ---------- */
+  .monitor-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .dashboard-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px 22px; }
+  .dashboard-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+  .dashboard-head h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: -0.015em; }
+  .dashboard-head p { margin: 3px 0 0; font-size: 11.5px; color: var(--ink-3); }
+  .dash-actions { display: flex; gap: 7px; }
+  .account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+  .account-card {
+    display: flex; flex-direction: column; min-width: 0; padding: 14px 15px 12px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+    box-shadow: var(--shadow-1); transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease);
+  }
+  .account-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-2); }
+  .account-card.running { border-color: var(--accent-line); }
+  .account-card header { display: flex; align-items: center; gap: 10px; }
+  .avatar {
+    width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px;
+    display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 650;
+    letter-spacing: 0; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); overflow: hidden;
+  }
+  .avatar.lg { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 12px; font-size: 14px; }
+  .avatar.sm { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px; font-size: 10px; }
+  .account-card-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .account-card-title strong { font-size: 13px; font-weight: 650; letter-spacing: -0.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .account-card-title span { font-size: 10.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px;
+    border-radius: 6px; font-size: 10.5px; font-weight: 550; white-space: nowrap;
+    background: var(--surface-sunk); color: var(--ink-3);
+  }
+  .status-pill.live { background: var(--live-soft); color: #176a49; }
+  .status-pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .status-pill.muted { background: transparent; color: var(--ink-3); padding: 0; height: auto; }
+  .account-stats {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0;
+    margin-top: 12px; padding: 9px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .account-stats div { display: flex; flex-direction: column; gap: 1px; padding-left: 11px; border-left: 1px solid var(--line); }
+  .account-stats div:first-child { padding-left: 0; border-left: 0; }
+  .account-stats strong { font-size: 15px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .account-stats span { font-size: 10.5px; color: var(--ink-3); }
+  .mini-rooms { display: flex; flex-direction: column; gap: 1px; margin-top: 7px; flex: 1; }
+  .mini-room { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 5px 0; font-size: 11.5px; }
+  .mini-room .dot { width: 5px; height: 5px; border-radius: 50%; flex: 0 0 5px; background: var(--dot-paused); }
+  .mini-room .dot.live { background: var(--live); }
+  .mini-room .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+  .mini-room .meta { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
+  .card-notice {
+    display: flex; align-items: center; gap: 7px; margin-top: 10px; padding: 8px 9px;
+    border-radius: var(--r-sm); background: var(--warn-soft); color: var(--warn); font-size: 11px; line-height: 1.5;
+  }
+  .card-notice .icon { flex: 0 0 13px; }
+  .card-notice .link-btn { margin-left: auto; color: var(--warn); white-space: nowrap; }
+  .account-card footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
+  .account-card footer > span { font-size: 10.5px; color: var(--ink-3); }
+
+  /* ---------- monitor: single account ---------- */
+  .banner {
+    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    margin: 12px 24px 0; padding: 8px 11px; border-radius: var(--r-md);
+    background: var(--warn-soft); color: var(--warn); font-size: 12px;
+  }
+  .banner.neutral { background: var(--surface-sunk); color: var(--ink-2); border: 1px solid var(--line); }
+  .banner .icon { flex: 0 0 14px; }
+  .banner > span { flex: 1; }
+  .workspace { flex: 1; min-height: 0; display: flex; gap: 16px; padding: 16px 24px 18px; overflow: hidden; }
+  .list { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .list-head { display: flex; align-items: center; gap: 8px; padding: 13px 16px 9px; flex-shrink: 0; }
+  .list-title { font-size: 12px; font-weight: 650; letter-spacing: 0.005em; }
+  .list-count { font-size: 11.5px; color: var(--ink-3); }
+  .list-context {
+    display: inline-flex; align-items: center; gap: 5px; margin-left: 4px;
+    padding-left: 10px; border-left: 1px solid var(--line);
+    font-size: 11px; color: var(--ink-3);
+  }
+  .list-context .avatar.sm { width: 18px; height: 18px; flex-basis: 18px; border-radius: 6px; font-size: 8px; }
+  .rooms { flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 6px; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+  .rooms::-webkit-scrollbar { width: 9px; }
+  .rooms::-webkit-scrollbar-thumb { background: var(--scroll-thumb-soft); border-radius: 6px; border: 3px solid var(--surface); }
+  .room {
+    display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px;
+    border: 0; border-radius: var(--r-md); background: transparent; text-align: left;
+    transition: background 110ms var(--ease), box-shadow 110ms var(--ease);
+  }
+  .room:hover { background: var(--wash-soft); }
+  .room[aria-selected="true"] { background: var(--surface); box-shadow: var(--shadow-2), inset 0 0 0 1px var(--line-strong); }
+  .room + .room { margin-top: 1px; }
+  .room-main { flex: 1; min-width: 0; }
+  .room-name { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+  .room-name span { overflow: hidden; text-overflow: ellipsis; }
+  .live-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.13); }
+  .room-title { display: block; margin-top: 1px; font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .room-meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 11px; color: var(--ink-2); white-space: nowrap; overflow: hidden; min-width: 0; }
+  .room-meta .sep { color: var(--line-strong); }
+  .room-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding-left: 6px; }
+  .pill { display: inline-flex; align-items: center; gap: 4px; height: 19px; padding: 0 7px; border-radius: 6px; background: var(--surface-sunk); color: var(--ink-2); font-size: 10.5px; white-space: nowrap; }
+  .pill.live { background: var(--live-soft); color: #176a49; }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.muted { background: transparent; color: var(--ink-3); padding: 0; height: auto; }
+
+  .detail { width: 344px; flex: 0 0 344px; display: flex; flex-direction: column; overflow: hidden; }
+  .detail-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 4px; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+  .detail-scroll::-webkit-scrollbar { width: 9px; }
+  .detail-scroll::-webkit-scrollbar-thumb { background: var(--scroll-thumb-soft); border-radius: 6px; border: 3px solid var(--surface); }
+  .detail-heading { display: flex; align-items: flex-start; gap: 6px; }
+  .detail-identity { flex: 1; min-width: 0; }
+  .eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); }
+  .detail-name { margin-top: 3px; font-size: 17px; font-weight: 680; letter-spacing: -0.02em; line-height: 1.3; }
+  .detail-title { margin-top: 2px; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .icon-button { width: 25px; padding: 0; }
+  .state-row { display: flex; align-items: center; gap: 9px; margin-top: 13px; padding: 9px 11px; border-radius: var(--r-md); background: var(--surface-sunk); border: 1px solid var(--line); }
+  .state-label { flex: 1; font-size: 12px; font-weight: 600; color: var(--accent); }
+  .state-label.warn { color: var(--warn); }
+  .state-sub { display: block; margin-top: 1px; font-size: 10.5px; font-weight: 400; color: var(--ink-3); }
+  .gain-card { margin-top: 11px; padding: 13px 14px 14px; border-radius: var(--r-md); background: var(--paper); border: 1px solid var(--line); }
+  .gain-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .gain-label { font-size: 11px; color: var(--ink-3); }
+  .gain-medal { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gain-value { display: flex; align-items: baseline; gap: 5px; margin-top: 2px; font-size: 30px; font-weight: 660; letter-spacing: -0.04em; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .gain-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 10.5px; color: var(--ink-3); }
+  .bar { height: 4px; margin-top: 8px; border-radius: 99px; background: var(--track); overflow: hidden; }
+  .bar.thin { height: 3px; margin-top: 6px; }
+  .bar > i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+  .bar.thin > i { background: rgba(45, 103, 99, 0.32); }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .block { margin-top: 17px; }
+  .block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+  .block-title { font-size: 12px; font-weight: 650; }
+  .block-note { font-size: 10.5px; color: var(--ink-3); }
+  .task-table { display: flex; flex-direction: column; }
+  .task { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .task:last-child { border-bottom: 0; }
+  .task-name { color: var(--ink); }
+  .task-val { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .task-val.done { color: var(--live-ink); font-weight: 600; }
+  .task-val.pending { color: var(--ink-3); }
+  .notice { display: flex; gap: 8px; margin-top: 12px; padding: 9px 10px; border-radius: var(--r-sm); background: var(--warn-soft); color: var(--warn); font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere; }
+  .notice.neutral { background: var(--surface-sunk); color: var(--ink-2); }
+  .notice .icon { flex: 0 0 14px; margin-top: 1px; }
+  .detail-action-area { margin-top: auto; background: var(--surface); border-top: 1px solid var(--line); }
+  .action-hint { margin: 0; padding: 10px 16px 0; font-size: 11px; color: var(--ink-3); line-height: 1.6; overflow-wrap: anywhere; }
+  .detail-foot { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+  .detail-action-area .detail-foot { border: 0; }
+  .detail-foot .btn { flex: 1; }
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 6px; text-align: center; color: var(--ink-3); font-size: 12px; padding: 24px; }
+  .empty strong { color: var(--ink-2); font-weight: 600; font-size: 13px; }
+  .empty .btn { margin-top: 8px; }
+  .list-empty { min-height: 200px; padding: 36px 18px; }
+  .statusbar { display: flex; align-items: center; gap: 10px; padding: 8px 24px; border-top: 1px solid var(--line); background: var(--paper); font-size: 11.5px; color: var(--ink-3); }
+  .statusbar strong { color: var(--ink-2); font-weight: 600; }
+  .dot-live { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.12); }
+  .dot-paused { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--dot-paused); box-shadow: 0 0 0 3px var(--dot-paused-ring); }
+
+  /* ---------- settings / account page ---------- */
+  .settings { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px 28px; }
+  .settings-inner { max-width: 1120px; }
+  .group { margin-bottom: 14px; overflow: hidden; }
+  .group-head { padding: 13px 16px 9px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 650; }
+  .group-head small { display: block; margin-top: 1px; font-size: 11px; font-weight: 400; color: var(--ink-3); }
+  .group-head.with-action { display: flex; align-items: center; gap: 12px; }
+  .group-head.with-action > div { flex: 1; min-width: 0; }
+  .setting { display: flex; align-items: center; gap: 20px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+  .setting:last-child { border-bottom: 0; }
+  .setting-text { flex: 1; min-width: 0; }
+  .setting-name { font-size: 12.5px; font-weight: 550; }
+  .setting-desc { margin-top: 1px; font-size: 11.5px; color: var(--ink-3); line-height: 1.65; }
+  .switch { position: relative; width: 38px; height: 22px; flex: 0 0 38px; border: 0; border-radius: 99px; background: var(--switch-off); transition: background 160ms var(--ease); }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(28, 28, 25, 0.22), 0 0 0 0.5px rgba(28, 28, 25, 0.06); transition: transform 160ms var(--ease); }
+  .switch[aria-checked="true"] { background: var(--accent); }
+  .switch[aria-checked="true"]::after { transform: translateX(16px); }
+  .switch:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(45, 103, 99, 0.18); }
+  .switch[disabled] { opacity: 0.45; pointer-events: none; }
+  .experimental-label { display: inline-flex; margin-left: 5px; padding: 1px 5px; font-size: 10px; font-weight: 400; background: var(--surface-sunk); color: var(--ink-3); border: 1px solid var(--line); border-radius: 4px; }
+  .settings-note { font-size: 11px; line-height: 1.7; color: var(--ink-3); margin: 12px 0; }
+  .settings-note.inside { padding: 0 16px 12px; margin: 0; }
+  .mode-note { padding: 10px 16px; font-size: 11.5px; line-height: 1.65; color: var(--ink-2); background: var(--surface-sunk); border-top: 1px solid var(--line); }
+  .risk-note { display: flex; gap: 8px; padding: 11px 16px; font-size: 11.5px; line-height: 1.65; color: var(--warn); background: var(--warn-soft); border-top: 1px solid rgba(138, 90, 18, 0.12); }
+  .risk-note .icon { flex: 0 0 14px; margin-top: 1px; }
+
+  .scope-bar { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; padding: 10px 13px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-1); }
+  .scope-label { font-size: 11px; color: var(--ink-3); }
+  .scope-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 5px; border: 1px solid var(--accent-line); border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 600; }
+  .scope-chip .avatar.sm { width: 18px; height: 18px; flex-basis: 18px; border-radius: 6px; font-size: 8px; }
+  .scope-note { font-size: 11px; color: var(--ink-3); }
+
+  .account-item { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line); }
+  .account-item:last-child { border-bottom: 0; }
+  .account-item.current { background: linear-gradient(90deg, rgba(45, 103, 99, 0.035), transparent 60%); }
+  .account-item-main { flex: 1; min-width: 0; }
+  .account-item-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .account-item-title strong { font-size: 12.5px; font-weight: 650; }
+  .account-item-meta { margin-top: 2px; font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .account-item-sub { margin-top: 1px; font-size: 10.5px; color: var(--ink-3); }
+  .account-item-sub.warn { color: var(--warn); }
+  .account-item-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  .mini-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 5px; background: var(--surface-sunk); color: var(--ink-3); font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+  .mini-tag.accent { background: var(--accent-soft); color: var(--accent); }
+  .mini-tag.live { background: var(--live-soft); color: #176a49; }
+  .mini-tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .inline-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--ink-3); }
+  .inline-switch .switch { width: 32px; height: 19px; flex-basis: 32px; }
+  .inline-switch .switch::after { width: 15px; height: 15px; }
+  .inline-switch .switch[aria-checked="true"]::after { transform: translateX(13px); }
+  .current-label { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--accent); font-weight: 600; }
+
+  .choice { position: relative; width: 112px; flex: 0 0 112px; }
+  .choice-button { display: flex; align-items: center; justify-content: space-between; gap: 9px; width: 100%; height: 29px; padding: 0 9px 0 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); font-size: 12.5px; box-shadow: var(--shadow-1); }
+  .choice-button .icon { flex: 0 0 12px; color: var(--ink-3); }
+
+  /* ---------- switcher ---------- */
+  .switcher-scrim { position: absolute; inset: 0; z-index: 20; display: none; }
+  .switcher-scrim.open { display: block; }
+  .switcher {
+    position: absolute; left: 11px; bottom: 60px; z-index: 21; width: 246px;
+    display: none; padding: 5px; border: 1px solid var(--line-strong);
+    border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-2);
+    transform-origin: bottom left; animation: pop-in 130ms var(--ease);
+  }
+  .switcher.open { display: block; }
+  @keyframes pop-in { from { opacity: 0; transform: translateY(4px) scale(0.985); } to { opacity: 1; transform: none; } }
+  .switcher-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 7px; font-size: 11px; color: var(--ink-3); }
+  .switcher-head strong { font-size: 11.5px; color: var(--ink); font-weight: 650; }
+  .switcher-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 7px 8px; border: 0; border-radius: 7px; background: transparent; text-align: left; }
+  .switcher-item:hover { background: var(--surface-hover); }
+  .switcher-item[aria-current="true"] { background: var(--accent-soft); }
+  .switcher-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .switcher-item-main strong { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .switcher-item-main small { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .switcher-item-main small.warn { color: var(--warn); }
+  .switcher-item .icon { color: var(--accent); }
+  .switcher-mode { margin: 4px 5px 0; padding: 8px 8px; border-top: 1px solid var(--line); font-size: 10.5px; line-height: 1.55; color: var(--ink-3); }
+  .switcher-mode strong { color: var(--ink-2); font-weight: 600; }
+  .switcher-foot { display: flex; gap: 1px; margin-top: 2px; padding-top: 4px; border-top: 1px solid var(--line); }
+  .switcher-foot button { flex: 1; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-2); font-size: 11.5px; }
+  .switcher-foot button:hover { background: var(--surface-hover); color: var(--ink); }
+
+  /* ---------- menus ---------- */
+  .account-menu {
+    position: absolute; z-index: 30; width: 186px; padding: 5px;
+    border: 1px solid var(--line-strong); border-radius: var(--r-md);
+    background: var(--surface); box-shadow: var(--shadow-2);
+    animation: pop-in 110ms var(--ease);
+  }
+  .account-menu button { display: flex; width: 100%; padding: 7px 10px; border: 0; background: transparent; border-radius: 5px; font-size: 12px; text-align: left; color: var(--ink); }
+  .account-menu button:hover { background: var(--surface-hover); }
+  .account-menu button.destructive { color: var(--danger); }
+  .menu-divider { height: 1px; background: var(--line); margin: 4px 5px; }
+
+  /* ---------- modals ---------- */
+  .scrim { position: absolute; inset: 0; z-index: 40; display: none; place-items: center; background: rgba(28, 27, 25, 0.24); backdrop-filter: blur(2px); }
+  .scrim.open { display: grid; animation: fade 140ms var(--ease); }
+  .modal { width: min(344px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 22px; border-radius: var(--r-xl); background: var(--surface); border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(28, 28, 25, 0.08), 0 24px 60px rgba(28, 28, 25, 0.18); animation: rise 170ms var(--ease); text-align: center; }
+  .modal.wide { width: min(430px, calc(100vw - 32px)); }
+  .modal:focus { outline: none; }
+  .modal h3 { margin: 0; font-size: 14.5px; font-weight: 650; }
+  .modal p { margin: 5px 0 0; font-size: 12px; color: var(--ink-2); line-height: 1.65; }
+  .modal .field-note { padding: 10px 0 0; font-size: 11px; color: var(--ink-3); }
+  .qr-wrap { width: 220px; height: 220px; margin: 18px auto 0; padding: 10px; border-radius: var(--r-md); border: 1px dashed var(--line-strong); background: var(--paper); display: grid; place-items: center; }
+  .qr-wrap img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .qr-caption { margin-top: 9px; font-size: 10.5px; color: var(--ink-3); }
+  .qr-placeholder { display: flex; flex-direction: column; align-items: center; gap: 9px; color: var(--ink-3); }
+  .qr-placeholder .icon { opacity: 0.55; }
+  .qr-placeholder span { font-size: 10.5px; }
+  .qr-hint { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 12px; font-size: 11.5px; color: var(--ink-3); }
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+  .modal-actions .btn { flex: 1; }
+  .modal-actions .btn.ghost { flex: 0 0 auto; }
+  .modal-check { display: flex; align-items: flex-start; gap: 9px; margin-top: 16px; padding: 10px 11px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); text-align: left; }
+  .modal-check input { margin: 3px 0 0; accent-color: var(--accent); width: 14px; height: 14px; flex: 0 0 14px; }
+  .modal-check span { font-size: 11.5px; color: var(--ink-2); line-height: 1.55; }
+  .account-preview { display: flex; align-items: center; gap: 11px; margin-top: 16px; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); text-align: left; }
+  .account-preview-main { flex: 1; min-width: 0; }
+  .account-preview-main strong { display: block; font-size: 12.5px; }
+  .account-preview-main span { display: block; font-size: 10.5px; color: var(--ink-3); }
+  .switch-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; margin-top: 14px; }
+  .switch-pair .account-preview { margin-top: 0; padding: 9px 10px; }
+  .switch-arrow { color: var(--ink-3); font-size: 14px; }
+  .modal-note { margin-top: 14px; padding: 10px 11px; border-radius: var(--r-sm); background: var(--surface-sunk); color: var(--ink-2); font-size: 11.5px; line-height: 1.6; text-align: left; }
+  .demo-link { display: inline-block; margin-top: 12px; border: 0; background: transparent; color: var(--ink-3); font-size: 10.5px; text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ---------- toasts ---------- */
+  .toasts { position: absolute; right: 20px; bottom: 46px; z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+  .toast { display: flex; align-items: flex-start; gap: 8px; max-width: 330px; padding: 9px 12px; border-radius: var(--r-md); background: #1f1e1c; color: rgba(255, 255, 255, 0.94); font-size: 12px; line-height: 1.5; box-shadow: 0 2px 6px rgba(28, 28, 25, 0.16), 0 12px 32px rgba(28, 28, 25, 0.2); animation: toast-in 180ms var(--ease); }
+  .toast .icon { flex: 0 0 13px; margin-top: 2px; color: #8fe6c6; }
+  .toast.warn .icon { color: #f3c37a; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px) scale(0.99); } to { opacity: 1; transform: none; } }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+  /* ---------- review notes ---------- */
+  .review-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 28px; }
+  .note-card { padding: 18px 18px 17px; border: 1px solid rgba(42, 41, 38, 0.10); border-radius: 12px; background: rgba(255, 255, 255, 0.62); }
+  .note-index { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--accent); }
+  .note-card h3 { margin: 6px 0 5px; font-size: 13px; font-weight: 650; letter-spacing: -0.01em; }
+  .note-card p { margin: 0; font-size: 11.5px; line-height: 1.7; color: rgba(42, 41, 38, 0.66); }
+  .review-footer { max-width: 1240px; margin: 0 auto; padding: 0 32px 42px; display: flex; justify-content: space-between; gap: 16px; font-size: 10.5px; color: rgba(42, 41, 38, 0.46); }
+
+  @media (max-width: 900px) {
+    .review-header { padding: 34px 18px 20px; flex-direction: column; align-items: flex-start; }
+    .review-shell { padding: 0 18px 40px; }
+    .review-notes { grid-template-columns: 1fr; }
+    .review-footer { padding: 0 18px 32px; flex-direction: column; }
+    .review-toolbar { align-items: flex-start; flex-direction: column; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="12.5" rx="2.2"></rect><path d="M8.5 20.5h7M12 17v3.5"></path></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"></path><circle cx="15" cy="7" r="2.1"></circle><circle cx="9" cy="17" r="2.1"></circle></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"></circle><path d="M4.8 20c.7-3.6 3.6-5.6 7.2-5.6s6.5 2 7.2 5.6"></path></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.2c0-1 .8-1.8 1.8-1.8h3.4l1.8 2.2h8.2c1 0 1.8.8 1.8 1.8v8c0 1-.8 1.8-1.8 1.8H5.3c-1 0-1.8-.8-1.8-1.8V7.2Z"></path></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 4.6v7"></path><path d="M7.6 7.2a7 7 0 1 0 8.8 0"></path></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11.4a8 8 0 1 0-2.1 6.2"></path><path d="M20 4.8v6.6h-6.6"></path></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.6" y="5" width="3.6" height="14" rx="1.1"></rect><rect x="13.8" y="5" width="3.6" height="14" rx="1.1"></rect></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.4 5.2v13.6L19 12 7.4 5.2Z"></path></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.2"></rect><rect x="14" y="4" width="6" height="6" rx="1.2"></rect><rect x="4" y="14" width="6" height="6" rx="1.2"></rect><path d="M14 14h2.6v2.6H14zM18.4 18.4H20V20h-1.6z"></path></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.6 19 6v5.4c0 4-2.8 7-7 8.9-4.2-1.9-7-4.9-7-8.9V6l7-2.4Z"></path><path d="M9 12.2 11.3 14.5 15.3 10"></path></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6.5 9.2 12 14.6l5.5-5.4"></path></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M13.8 4.5H19.5V10"></path><path d="M19.5 4.5 11 13"></path><path d="M19.5 14.6v3.6c0 1-.8 1.8-1.8 1.8H5.3c-1 0-1.8-.8-1.8-1.8V6.3c0-1 .8-1.8 1.8-1.8h3.6"></path></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.4 9.4 17l10.1-10"></path></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4.6 21 19.4H3L12 4.6Z"></path><path d="M12 10v4.2M12 17.2v.1"></path></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"></circle><path d="M12 11v5.2M12 7.9v.1"></path></symbol>
+  <symbol id="i-medal" viewBox="0 0 24 24"><circle cx="12" cy="9" r="5.5"></circle><path d="M8 13.5 6.5 21l5.5-3 5.5 3-1.5-7.5"></path></symbol>
+  <symbol id="i-reconnect" viewBox="0 0 24 24"><path d="M4.3 10.2A7.9 7.9 0 0 1 18 8.4"></path><path d="M19.7 13.8A7.9 7.9 0 0 1 6 15.6"></path><path d="M18.4 4.6v4h-4M5.6 19.4v-4h4"></path></symbol>
+</svg>
+
+<header class="review-header">
+  <div>
+    <div class="review-kicker">ビリ推し / MULTI-ACCOUNT 01</div>
+    <h1>一个窗口，照顾每个账号。</h1>
+    <p>每个账号拥有独立的关注列表、任务进度与直播总览。切换账号只换会话，不重新扫码；同时挂机作为可选的实验模式，默认关闭。</p>
+  </div>
+  <div class="review-note"><span class="note-dot"></span>高保真 · 可交互 · 非生产代码</div>
+</header>
+
+<main class="review-shell">
+  <div class="review-toolbar">
+    <div class="review-pages" aria-label="预览页面">
+      <button type="button" data-review-page="monitor" class="active">直播总览</button>
+      <button type="button" data-review-page="account">账号管理</button>
+      <button type="button" data-review-page="automation">挂机设置</button>
+    </div>
+    <div class="review-tools">
+      <button type="button" class="demo-button" data-demo="switcher">账号切换器</button>
+      <button type="button" class="demo-button" data-demo="add">添加账号</button>
+      <div class="mode-switch" role="group" aria-label="运行模式">
+        <button type="button" data-mode="single" class="active">单账号运行</button>
+        <button type="button" data-mode="concurrent">同时挂机</button>
+      </div>
+    </div>
+  </div>
+
+  <section class="window-stage" aria-label="高保真界面预览">
+    <div class="window-wrap" id="window-wrap">
+      <div class="app-window" id="app-window">
+
+        <aside class="side">
+          <div class="brand">
+            <div class="logo"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z" fill="currentColor"></path><path d="M4.6 12h4.1l1.5-3.2 2.2 6.1 1.6-3.4 1.1 2.5h4.3" stroke="#16383a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+            <span class="brand-name">ビリ推し</span>
+          </div>
+          <nav class="nav" aria-label="主导航">
+            <button type="button" class="nav-item" data-page="monitor" aria-current="page"><svg class="icon" width="15" height="15"><use href="#i-monitor"></use></svg><span>直播总览</span></button>
+            <button type="button" class="nav-item" data-page="automation"><svg class="icon" width="15" height="15"><use href="#i-sliders"></use></svg><span>挂机设置</span></button>
+            <button type="button" class="nav-item" data-page="account"><svg class="icon" width="15" height="15"><use href="#i-user"></use></svg><span>账号</span></button>
+          </nav>
+          <div class="nav-spacer"></div>
+          <nav class="nav nav-bottom" aria-label="应用操作">
+            <button type="button" class="nav-item" data-demo="logs"><svg class="icon" width="15" height="15"><use href="#i-folder"></use></svg><span>查看日志</span></button>
+            <button type="button" class="nav-item" data-demo="quit"><svg class="icon" width="15" height="15"><use href="#i-power"></use></svg><span>退出应用</span></button>
+          </nav>
+          <button type="button" class="sidebar-account" id="sidebar-account" aria-haspopup="menu" aria-expanded="false"></button>
+        </aside>
+
+        <main class="main">
+          <header class="chrome">
+            <button type="button" class="side-btn" aria-label="收起侧栏"><svg class="icon" width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="2"></rect><path d="M6.2 3.2v9.6"></path></svg></button>
+            <div class="chrome-brand">
+              <span class="logo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z" fill="currentColor"></path><path d="M4.6 12h4.1l1.5-3.2 2.2 6.1 1.6-3.4 1.1 2.5h4.3" stroke="#16383a" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+              <span class="chrome-name">ビリ推し</span>
+            </div>
+            <span class="chrome-divider" aria-hidden="true"></span>
+            <h1 class="chrome-title" id="chrome-title">直播总览</h1>
+            <span class="spacer"></span>
+            <div class="chrome-actions" id="chrome-actions"></div>
+            <div class="win-buttons" aria-label="窗口控制">
+              <button type="button" class="win-btn" aria-label="最小化"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></path></svg></button>
+              <button type="button" class="win-btn" aria-label="最大化"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="2.6" y="2.6" width="6.8" height="6.8" rx="1.2" stroke="currentColor" stroke-width="1.2"></rect></svg></button>
+              <button type="button" class="win-btn close" aria-label="关闭"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"></path></svg></button>
+            </div>
+          </header>
+
+          <div class="page active" id="page-monitor">
+            <div class="account-tabs" id="account-tabs" role="tablist" aria-label="账号"></div>
+            <div class="monitor-body" id="monitor-body" role="tabpanel" aria-live="polite"></div>
+          </div>
+
+          <div class="page" id="page-account">
+            <div class="settings">
+              <div class="settings-inner">
+                <section class="group card">
+                  <header class="group-head with-action">
+                    <div>B 站账号<small>每个账号独立保存登录凭证、关注列表和任务进度</small></div>
+                    <button type="button" class="btn primary sm" data-action="add-account"><svg class="icon" width="13" height="13"><use href="#i-plus"></use></svg>添加账号</button>
+                  </header>
+                  <div id="account-list"></div>
+                </section>
+
+                <section class="group card">
+                  <header class="group-head">同时挂机<span class="experimental-label">实验性</span><small>让多个账号同时建立挂机连接</small></header>
+                  <div class="setting">
+                    <div class="setting-text">
+                      <div class="setting-name">允许同时挂机</div>
+                      <div class="setting-desc">开启后，可让多个账号同时运行；切换查看不会中断其他账号。默认关闭。</div>
+                    </div>
+                    <button type="button" class="switch" id="master-switch" role="switch" aria-label="允许同时挂机"></button>
+                  </div>
+                  <div class="mode-note" id="mode-note"></div>
+                  <div class="risk-note" id="risk-note" hidden>
+                    <svg class="icon" width="14" height="14"><use href="#i-alert"></use></svg>
+                    <span>多个账号会同时建立连接并执行互动任务。B 站可能将同设备多账号行为视为异常；请只添加你本人的账号，建议同时运行不超过 3 个。</span>
+                  </div>
+                </section>
+
+                <p class="settings-note">登录凭证使用 Windows 用户级 DPAPI 加密保存。切换账号不会重新扫码；凭证失效的账号会单独标记，不影响其他账号。移除账号只删除登录凭证和公开资料，任务额度与账号保护记录会保留，避免通过移除账号重置每日上限。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="page" id="page-automation">
+            <div class="settings">
+              <div class="settings-inner">
+                <div class="scope-bar">
+                  <span class="scope-label">应用对象</span>
+                  <span class="scope-chip" id="scope-chip"></span>
+                  <span class="scope-note" id="scope-note">每个账号独立保存；切换账号后本页会跟随</span>
+                </div>
+
+                <section class="group card">
+                  <header class="group-head">每日任务<small>开播后，按 B 站的任务进度自动完成</small></header>
+                  <div class="setting"><div class="setting-text"><div class="setting-name">点亮粉丝牌</div><div class="setting-desc">粉丝牌熄灭时发送弹幕，点亮后停止</div></div><button type="button" class="switch" role="switch" aria-checked="true" aria-label="点亮粉丝牌"></button></div>
+                  <div class="setting"><div class="setting-text"><div class="setting-name">完成弹幕任务</div><div class="setting-desc">只补齐剩余弹幕，完成后停止</div></div><button type="button" class="switch" role="switch" aria-checked="true" aria-label="完成弹幕任务"></button></div>
+                  <div class="setting"><div class="setting-text"><div class="setting-name">直播点赞</div><div class="setting-desc">自动点赞并检查任务进度，默认关闭</div></div><button type="button" class="switch" role="switch" aria-checked="false" aria-label="直播点赞"></button></div>
+                </section>
+
+                <section class="group card">
+                  <header class="group-head">运行与启动</header>
+                  <div class="setting"><div class="setting-text"><div class="setting-name">开播通知</div><div class="setting-desc">关注的主播开播时，通过系统通知提醒</div></div><button type="button" class="switch" role="switch" aria-checked="true" aria-label="开播通知"></button></div>
+                  <div class="setting"><div class="setting-text"><div class="setting-name">开机启动</div><div class="setting-desc">登录 Windows 后在托盘运行，不打开主窗口</div></div><button type="button" class="switch" role="switch" aria-checked="false" aria-label="开机启动"></button></div>
+                  <div class="setting"><div class="setting-text"><div class="setting-name">运行模式</div><div class="setting-desc">稳健：5 分钟查开播、60 秒续点赞；激进：1 分钟查开播、20 秒续点赞</div></div><button type="button" class="choice-button" style="width:112px;flex:0 0 112px"><span>稳健</span><svg class="icon" width="12" height="12"><use href="#i-chevron"></use></svg></button></div>
+                </section>
+
+                <section class="group card">
+                  <header class="group-head">外观<small>全应用设置，不随账号切换</small></header>
+                  <div class="setting"><div class="setting-text"><div class="setting-name">界面主题</div><div class="setting-desc">选择界面表面颜色，切换后立即生效并记住选择</div></div><button type="button" class="btn sm">纸白</button></div>
+                </section>
+
+                <p class="settings-note">设置按账号独立保存。修改后立即应用到该账号；其他正在挂机的账号不受影响。</p>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <div class="switcher-scrim" id="switcher-scrim"></div>
+        <div class="switcher" id="switcher" role="menu" aria-label="切换账号"></div>
+
+        <div class="scrim" id="modal-scrim"><div id="modal-root"></div></div>
+        <div class="toasts" id="toasts" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="review-notes" aria-label="设计说明">
+    <article class="note-card">
+      <div class="note-index">01 / SWITCH</div>
+      <h3>切号不扫码</h3>
+      <p>每个账号的登录凭证单独加密保存。切换只替换当前会话；凭证失效的账号单独提示重新扫码，不影响其他账号。</p>
+    </article>
+    <article class="note-card">
+      <div class="note-index">02 / OVERVIEW</div>
+      <h3>每个账号，各自一套总览</h3>
+      <p>关注列表、粉丝牌、任务进度、今日亲密度和连接状态都按账号隔离。“全部”只做汇总，具体的补齐与暂停仍回到账号。</p>
+    </article>
+    <article class="note-card">
+      <div class="note-index">03 / CONCURRENT</div>
+      <h3>同时挂机，默认关闭</h3>
+      <p>先用单账号模式把账号管理做稳；同时挂机作为实验开关，按账号参与、错峰启动，并明确提示平台风控的不确定性。</p>
+    </article>
+  </section>
+</main>
+
+<footer class="review-footer">
+  <span>来源：desktop/webui/assets/style.css · desktop/webui/assets/js/*.jsx</span>
+  <span>仅用于设计评审，未修改应用</span>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  const ACCOUNTS = {
+    a1: {
+      id: "a1", name: "夜航星", uid: "41278891", initial: "夜", color: "#3d7a6c",
+      status: "ok", gain: 36, lastCheck: "2 分钟前",
+      rooms: [
+        { room: "22637261", name: "嘉然今天吃什么", title: "今天也要好好吃饭", live: true, healthy: true, minutes: 72, gain: 12, state: "挂机中", tone: "live", medal: "嘉心糖", level: 24, intimacy: 12480, next: 20000, dayLimit: 100,
+          tasks: [["点亮粉丝牌", "已完成", true], ["发送弹幕", "12 / 15", false], ["观看直播", "已完成", true], ["直播点赞", "5 / 10", false]] },
+        { room: "22625027", name: "向晚大魔王", title: "", live: false, healthy: false, minutes: 0, gain: null, state: "未开播", tone: "muted", tasks: [["点亮粉丝牌", "待更新", false], ["发送弹幕", "—", false], ["观看直播", "—", false], ["直播点赞", "—", false]] },
+        { room: "22632424", name: "贝拉kira", title: "练舞日常", live: true, healthy: true, minutes: 48, gain: 12, state: "挂机中", tone: "live", medal: "贝极星", level: 21, intimacy: 8600, next: 12000, dayLimit: 100,
+          tasks: [["点亮粉丝牌", "已完成", true], ["发送弹幕", "15 / 15", true], ["观看直播", "已完成", true], ["直播点赞", "10 / 10", true]] },
+        { room: "22625025", name: "乃琳Queen", title: "", live: false, healthy: false, minutes: 0, gain: null, state: "未开播", tone: "muted", tasks: [["点亮粉丝牌", "待更新", false], ["发送弹幕", "—", false], ["观看直播", "—", false], ["直播点赞", "—", false]] }
+      ]
+    },
+    a2: {
+      id: "a2", name: "纸飞机", uid: "52801146", initial: "纸", color: "#6a5f8f",
+      status: "ok", gain: 18, lastCheck: "18 分钟前",
+      rooms: [
+        { room: "22625025", name: "乃琳Queen", title: "睡前聊天", live: true, healthy: true, minutes: 124, gain: 18, state: "挂机中", tone: "live", medal: "奶淇琳", level: 18, intimacy: 5400, next: 9000, dayLimit: 100,
+          tasks: [["点亮粉丝牌", "已完成", true], ["发送弹幕", "9 / 15", false], ["观看直播", "已完成", true], ["直播点赞", "10 / 10", true]] },
+        { room: "22637261", name: "嘉然今天吃什么", title: "", live: false, healthy: false, minutes: 0, gain: null, state: "未开播", tone: "muted", tasks: [["点亮粉丝牌", "待更新", false], ["发送弹幕", "—", false], ["观看直播", "—", false], ["直播点赞", "—", false]] },
+        { room: "22632424", name: "贝拉kira", title: "", live: false, healthy: false, minutes: 0, gain: null, state: "未开播", tone: "muted", tasks: [["点亮粉丝牌", "待更新", false], ["发送弹幕", "—", false], ["观看直播", "—", false], ["直播点赞", "—", false]] }
+      ]
+    },
+    a3: {
+      id: "a3", name: "南风", uid: "33905527", initial: "南", color: "#8a7b62",
+      status: "expired", gain: null, lastCheck: "2 小时前",
+      rooms: [
+        { room: "22625027", name: "向晚大魔王", title: "", live: null, healthy: false, minutes: 0, gain: null, state: "等待检查", tone: "warn", tasks: [["点亮粉丝牌", "待更新", false], ["发送弹幕", "—", false], ["观看直播", "—", false], ["直播点赞", "—", false]] },
+        { room: "22632424", name: "贝拉kira", title: "", live: false, healthy: false, minutes: 0, gain: null, state: "未开播", tone: "muted", tasks: [["点亮粉丝牌", "待更新", false], ["发送弹幕", "—", false], ["观看直播", "—", false], ["直播点赞", "—", false]] }
+      ]
+    },
+    a4: {
+      id: "a4", name: "白昼", uid: "61729034", initial: "白", color: "#7a6270",
+      status: "protection", gain: null, lastCheck: "今天 14:02",
+      protection: "收到验证或异常拒绝，账号操作已暂停。重新扫码不会解除，需要先在平台处理。",
+      rooms: [
+        { room: "22632424", name: "贝拉kira", title: "练舞日常", live: true, healthy: false, minutes: 0, gain: null, state: "保护暂停", tone: "warn", tasks: [["点亮粉丝牌", "待更新", false], ["发送弹幕", "—", false], ["观看直播", "—", false], ["直播点赞", "—", false]] },
+        { room: "22625025", name: "乃琳Queen", title: "", live: false, healthy: false, minutes: 0, gain: null, state: "未开播", tone: "muted", tasks: [["点亮粉丝牌", "待更新", false], ["发送弹幕", "—", false], ["观看直播", "—", false], ["直播点赞", "—", false]] }
+      ]
+    }
+  };
+
+  const ORDER = ["a1", "a2", "a3", "a4"];
+  const PALETTE = ["#3d7a6c", "#6a5f8f", "#8a7b62", "#7a6270", "#4f6f8a", "#7d6a4f"];
+
+  const state = {
+    page: "monitor",
+    view: "all",
+    mode: "single",
+    current: "a1",
+    paused: { a1: false, a2: false, a3: false, a4: false },
+    concurrent: { a1: true, a2: false, a3: false, a4: false },
+    globalPaused: false,
+    resumeSet: [],
+    selectedRoom: { a1: "22637261", a2: "22625025", a3: "22625027", a4: "22632424" },
+    switcher: false,
+    modal: null,
+    menu: null,
+    modalTrigger: null,
+    modalTriggerSelector: null,
+    lastClickSelector: null,
+    modalWasOpen: false
+  };
+
+  const $ = (selector, root) => (root || document).querySelector(selector);
+  const $$ = (selector, root) => Array.from((root || document).querySelectorAll(selector));
+
+  function icon(name, size) {
+    return '<svg class="icon" width="' + (size || 15) + '" height="' + (size || 15) + '"><use href="#i-' + name + '"></use></svg>';
+  }
+
+  function roomColor(room) {
+    let hash = 0;
+    for (const ch of String(room)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    return PALETTE[hash % PALETTE.length];
+  }
+
+  function account(id) { return ACCOUNTS[id]; }
+
+  function isRunning(id) {
+    const acc = account(id);
+    if (!acc || acc.status !== "ok" || state.paused[id] || state.globalPaused) return false;
+    if (state.mode === "single") return state.current === id;
+    return state.concurrent[id] === true;
+  }
+
+  function statusOf(id) {
+    const acc = account(id);
+    if (acc.status === "expired") return { label: "登录失效", tone: "warn" };
+    if (acc.status === "protection") return { label: "保护暂停", tone: "warn" };
+    if (state.globalPaused) return { label: "全局暂停", tone: "muted" };
+    if (state.paused[id]) return { label: "已暂停", tone: "muted" };
+    if (isRunning(id)) return { label: "挂机中", tone: "live" };
+    return { label: "未运行", tone: "muted" };
+  }
+
+  function liveCount(id) {
+    return account(id).rooms.filter((room) => room.live === true).length;
+  }
+
+  function runningIds() {
+    return ORDER.filter(isRunning);
+  }
+
+  function displayGain(id) {
+    const acc = account(id);
+    if (acc.gain !== null && acc.gain !== undefined) return acc.gain;
+    const values = acc.rooms.map((room) => room.gain).filter((value) => value !== null && value !== undefined);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+  }
+
+  function idleNotice(id) {
+    if (state.mode === "single" && state.current && state.current !== id && account(state.current)) {
+      return "此账号当前未挂机（正在挂机：" + account(state.current).name + "）。显示的是上次运行的数据。";
+    }
+    return "此账号当前未参与同时挂机。显示的是上次运行的数据。";
+  }
+
+  function avatar(acc, cls) {
+    return '<span class="avatar ' + (cls || "") + '" style="background:' + acc.color + '" aria-hidden="true">' + acc.initial + "</span>";
+  }
+
+  function currentViewLabel() {
+    if (state.view === "all") return "全部账号";
+    return account(state.view).name;
+  }
+
+  function showToast(text, tone) {
+    const host = $("#toasts");
+    const node = document.createElement("div");
+    node.className = "toast " + (tone || "");
+    node.innerHTML = icon(tone === "warn" ? "alert" : "check", 14) + "<span>" + text + "</span>";
+    host.appendChild(node);
+    while (host.children.length > 3) host.removeChild(host.firstChild);
+    window.setTimeout(() => { if (node.parentNode) node.parentNode.removeChild(node); }, 4200);
+  }
+
+  /* ---------- tabs ---------- */
+  function renderTabs() {
+    const host = $("#account-tabs");
+    let html = '<div class="account-tablist" role="tablist" aria-label="账号">';
+    html += '<button type="button" id="tab-all" class="account-tab ' + (state.view === "all" ? "active" : "") + '" data-view="all" role="tab" aria-controls="monitor-body" aria-selected="' + (state.view === "all") + '" tabindex="' + (state.view === "all" ? "0" : "-1") + '" aria-label="全部账号，共 ' + ORDER.length + ' 个">' + icon("monitor", 14) + '<span>全部</span><span class="tab-count">' + ORDER.length + " 个账号</span></button>";
+    for (const id of ORDER) {
+      const acc = account(id);
+      const status = statusOf(id);
+      const running = isRunning(id);
+      const dotClass = status.tone === "live" ? "live" : status.tone === "warn" ? "warn" : "";
+      const count = liveCount(id);
+      const badge = running && count ? '<span class="tab-count">' + count + " 直播</span>" : "";
+      html += '<button type="button" id="tab-' + id + '" class="account-tab ' + (state.view === id ? "active" : "") + '" data-view="' + id + '" role="tab" aria-controls="monitor-body" aria-selected="' + (state.view === id) + '" tabindex="' + (state.view === id ? "0" : "-1") + '" aria-label="' + acc.name + "，" + status.label + (running && count ? "，" + count + " 个直播中" : "") + '">' +
+        '<span class="tab-avatar" style="background:' + acc.color + '">' + acc.initial + "</span>" +
+        "<span>" + acc.name + "</span>" +
+        '<span class="tab-state ' + dotClass + '"></span>' +
+        badge +
+        "</button>";
+    }
+    html += "</div>";
+    html += '<button type="button" class="account-tab add" data-action="add-account" title="添加账号" aria-label="添加账号">' + icon("plus", 15) + "</button>";
+    host.innerHTML = html;
+    const active = host.querySelector(".account-tab.active");
+    if (active) active.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  /* ---------- dashboard ---------- */
+  function renderDashboard() {
+    if (!ORDER.length) {
+      return '<div class="dashboard-scroll"><div class="empty" style="min-height:420px">' +
+        icon("user", 28) + "<strong>尚未添加 B 站账号</strong><span>扫码添加账号后，每个账号会有独立的关注列表和直播总览。</span>" +
+        '<button type="button" class="btn primary sm" data-action="add-account">' + icon("qr", 12) + "扫码添加账号</button></div></div>";
+    }
+    const running = runningIds();
+    const liveTotal = running.reduce((sum, id) => sum + liveCount(id), 0);
+    const globalBanner = state.globalPaused
+      ? '<div class="banner neutral" style="margin:0 0 12px">' + icon("pause", 14) + "<span>所有账号已暂停挂机（全局暂停）。恢复时只恢复暂停前正在运行的账号。</span><button type=\"button\" class=\"btn sm\" data-action=\"resume-all\">" + icon("play", 12) + "恢复全部</button></div>"
+      : "";
+    const cards = ORDER.map((id) => {
+      const acc = account(id);
+      const status = statusOf(id);
+      const isRunningNow = isRunning(id);
+      const live = liveCount(id);
+      const gain = displayGain(id);
+      let extra = "";
+      if (acc.status === "expired") {
+        extra = '<div class="card-notice">' + icon("alert", 13) + "<span>登录已失效，无法开始挂机</span><button type=\"button\" class=\"link-btn\" data-action=\"relogin\" data-account=\"" + id + "\">重新扫码</button></div>";
+      } else if (acc.status === "protection") {
+        extra = '<div class="card-notice">' + icon("shield", 13) + "<span>账号保护暂停，重新扫码不会解除</span><button type=\"button\" class=\"link-btn\" data-action=\"protection-info\" data-account=\"" + id + "\">查看原因</button></div>";
+      } else if (state.paused[id]) {
+        extra = '<div class="card-notice" style="background:var(--surface-sunk);color:var(--ink-2)">' + icon("pause", 13) + "<span>已暂停，关注列表和进度已保留</span><button type=\"button\" class=\"link-btn\" style=\"color:var(--accent)\" data-action=\"resume-account\" data-account=\"" + id + "\">恢复</button></div>";
+      } else {
+        const shown = acc.rooms.filter((room) => room.live === true).slice(0, 2);
+        const rest = acc.rooms.filter((room) => room.live === true).length - shown.length;
+        extra = '<div class="mini-rooms">' + (shown.length ? shown.map((room) =>
+          '<div class="mini-room"><span class="dot live"' + (isRunningNow ? "" : ' style="opacity:.35"') + '></span><span class="name">' + room.name + '</span><span class="meta">' + (isRunningNow ? "挂机中 · " + room.minutes + " 分钟" : "上次直播中") + "</span></div>"
+        ).join("") : '<div class="mini-room"><span class="dot"></span><span class="name">' + (isRunningNow ? "当前没有直播中的主播" : "上次没有直播中的主播") + "</span></div>") +
+          (rest > 0 ? '<div class="mini-room"><span class="dot live" style="opacity:.35"></span><span class="name" style="color:var(--ink-3)">另有 ' + rest + " 个直播间上次直播中</span></div>" : "") + "</div>";
+      }
+      const liveValue = acc.status === "expired" ? "—" : live;
+      const liveLabel = isRunningNow ? "直播中" : "上次直播中";
+      const gainLabel = isRunningNow ? "今日亲密度" : "上次今日亲密度";
+      return '<article class="account-card ' + (isRunningNow ? "running" : "") + '">' +
+        "<header>" + avatar(acc, "lg") +
+          '<div class="account-card-title"><strong>' + acc.name + '</strong><span>UID ' + acc.uid + "</span></div>" +
+          '<span class="status-pill ' + status.tone + '">' + status.label + "</span>" +
+        "</header>" +
+        '<div class="account-stats">' +
+          "<div><strong>" + acc.rooms.length + "</strong><span>关注</span></div>" +
+          "<div><strong>" + liveValue + "</strong><span>" + liveLabel + "</span></div>" +
+          "<div><strong>" + (gain === null ? "—" : "+" + gain) + "</strong><span>" + gainLabel + "</span></div>" +
+        "</div>" + extra +
+        '<footer><span>上次检查 ' + acc.lastCheck + '</span><button type="button" class="link-btn" data-action="open-account" data-account="' + id + '">打开总览 →</button></footer>' +
+      "</article>";
+    }).join("");
+
+    const allActions = state.globalPaused
+      ? '<button type="button" class="btn sm" data-action="resume-all">' + icon("play", 12) + '恢复全部</button>'
+      : running.length
+        ? '<button type="button" class="btn sm" data-action="pause-all">' + icon("pause", 12) + '全部暂停</button>'
+        : "";
+    return '<div class="dashboard-scroll">' + globalBanner +
+      '<div class="dashboard-head"><div><h2>账号总览</h2><p>' + (state.globalPaused ? "全局暂停中 · 上次运行：" + (state.resumeSet.length || 0) + " 个账号" : running.length ? running.length + " 个账号挂机中 · " + liveTotal + " 个直播间直播中" : "当前没有账号在挂机") + '</p></div><div class="dash-actions"><button type="button" class="btn sm" data-action="check-all">' + icon("refresh", 12) + '全部检查</button>' + allActions + '</div></div>' +
+      '<div class="account-grid">' + cards + "</div>" +
+    "</div>";
+  }
+
+  /* ---------- single account overview ---------- */
+  function roomStateLabel(id, room) {
+    if (account(id).status === "expired") return { label: "等待检查", tone: "warn" };
+    if (account(id).status === "protection") return { label: "保护暂停", tone: "warn" };
+    if (state.globalPaused) return { label: "全局暂停", tone: "muted" };
+    if (state.paused[id]) return { label: "已暂停", tone: "muted" };
+    if (!isRunning(id)) return { label: "未运行", tone: "muted" };
+    return { label: room.state, tone: room.tone };
+  }
+
+  function renderRooms(id) {
+    const acc = account(id);
+    const selected = state.selectedRoom[id];
+    return acc.rooms.map((room) => {
+      const status = roomStateLabel(id, room);
+      return '<button type="button" class="room" role="option" aria-selected="' + (room.room === selected) + '" data-room="' + room.room + '">' +
+        '<span class="avatar" style="background:' + roomColor(room.room) + '" aria-hidden="true">' + room.name.slice(0, 1) + "</span>" +
+        '<span class="room-main"><span class="room-name">' + (room.live === true ? '<i class="live-dot"' + (isRunning(id) ? "" : ' style="opacity:.35"') + "></i>" : "") + "<span>" + room.name + "</span></span>" +
+        (room.live === true && room.title ? '<span class="room-title">' + room.title + "</span>" : "") +
+        '<span class="room-meta">' +
+          (isRunning(id) && room.healthy ? "<span>已连接 " + room.minutes + " 分钟</span>" : "") +
+          (isRunning(id) && room.healthy && room.gain !== null ? '<span class="sep">·</span><span>今日 +' + room.gain + "</span>" : "") +
+          (!isRunning(id) && room.live === true ? "<span>上次运行 " + acc.lastCheck + "</span>" : "") +
+        "</span></span>" +
+        (room.state !== "未开播" ? '<span class="room-side"><span class="pill ' + status.tone + '">' + status.label + "</span></span>" : "") +
+      "</button>";
+    }).join("");
+  }
+
+  function renderDetail(id) {
+    const acc = account(id);
+    const room = acc.rooms.find((item) => item.room === state.selectedRoom[id]) || acc.rooms[0];
+    if (!room) {
+      return '<aside class="detail card"><div class="empty">' + icon("monitor", 24) + "<strong>还没有关注主播</strong><span>添加主播后，直播总览会显示在这里</span></div></aside>";
+    }
+    if (acc.status === "expired") {
+      return '<aside class="detail card"><div class="empty">' + icon("user", 24) + "<strong>登录已失效</strong><span>重新扫码登录「" + acc.name + "」后，可恢复此账号的直播总览。</span><button type=\"button\" class=\"btn primary sm\" data-action=\"relogin\" data-account=\"" + id + '">重新扫码</button></div></aside>';
+    }
+    if (acc.status === "protection") {
+      return '<aside class="detail card"><div class="empty">' + icon("shield", 24) + "<strong>账号保护暂停</strong><span>" + (acc.protection || "账号操作已暂停，需要先在平台处理。") + "</span><button type=\"button\" class=\"btn primary sm\" data-action=\"protection-info\" data-account=\"" + id + '">查看原因</button></div></aside>';
+    }
+    const running = isRunning(id);
+    const paused = state.paused[id];
+    const globalPaused = state.globalPaused;
+    const stateLabel = globalPaused ? "全局暂停" : running ? room.state : paused ? "已暂停" : "未运行";
+    const stateTone = globalPaused ? "warn" : running ? (room.tone === "warn" ? "warn" : "") : "warn";
+    const sub = globalPaused
+      ? "恢复全部后才会继续挂机"
+      : running
+        ? (room.healthy ? "已连接 " + room.minutes + " 分钟 · 12 秒前同步" : "开播后自动建立连接")
+        : paused ? "关注列表与任务进度已保留" : "上次运行 " + acc.lastCheck;
+    const progress = room.next ? Math.min(100, Math.max(0, room.intimacy / room.next * 100)) : 0;
+    const taskDone = room.tasks.filter((task) => task[2]).length;
+    const showNotice = !running;
+    return '<aside class="detail card">' +
+      '<div class="detail-scroll">' +
+        '<div class="detail-heading"><div class="detail-identity"><div class="detail-name">' + room.name + '</div><div class="detail-title">' + (room.live === true ? room.title || "直播中" : room.state) + '</div></div><button type="button" class="btn ghost icon-only" aria-label="更多操作">' + icon("more", 17) + "</button></div>" +
+        '<div class="state-row"><span class="state-label ' + stateTone + '">' + stateLabel + '<span class="state-sub">' + sub + '</span></span><button type="button" class="btn sm" ' + (running ? "" : "disabled") + ">" + icon("reconnect", 12) + "重连</button></div>" +
+        '<div class="gain-card"><div class="gain-head"><span class="gain-label">' + (running ? "今日亲密度" : "上次今日亲密度") + '</span><span class="gain-medal">' + (room.medal ? room.medal + " Lv." + room.level : "暂无粉丝牌") + '</span></div><div class="gain-value">' + (room.gain === null || room.gain === undefined ? "—" : "+" + room.gain) + '</div><div class="gain-foot"><span>' + (room.gain === null || room.gain === undefined ? "等待更新" : running ? "已确认到账" : "上次运行数据") + '</span><span>每日上限 ' + (room.dayLimit || 100) + "</span></div>" +
+          (room.next ? '<div class="bar thin" role="progressbar" aria-valuenow="' + room.intimacy + '" aria-valuemin="0" aria-valuemax="' + room.next + '"><i style="width:' + progress + '%"></i></div><div class="gain-foot"><span>等级经验</span><span class="tnum">' + room.intimacy + " / " + room.next + "</span></div>" : "") +
+        "</div>" +
+        (showNotice ? '<div class="notice neutral">' + icon("info", 14) + "<span>" + (globalPaused ? "全局暂停中，所有账号的挂机连接已停止。显示的是上次运行的数据。" : paused ? "此账号已暂停挂机。显示的是上次运行的数据。" : idleNotice(id)) + "</span></div>" : "") +
+        '<section class="block"><div class="block-head"><span class="block-title">今日任务</span><span class="block-note">' + (running ? taskDone + " 项已完成" : "上次运行数据") + '</span></div><div class="task-table">' +
+          room.tasks.map((task) => '<div class="task"><span class="task-name">' + task[0] + '</span><span class="task-val ' + (task[2] ? "done" : !task[1] ? "pending" : "") + '">' + (task[2] ? icon("check", 11) : "") + (task[1] || "待更新") + "</span></div>").join("") +
+        "</div></section>" +
+      "</div>" +
+      '<div class="detail-action-area">' +
+        (!running ? '<p class="action-hint">' + (globalPaused ? "全局暂停中，请先在全部账号页恢复全部。" : paused ? "恢复挂机后会重新查询直播状态，不会重复发送已完成的任务。" : "开始挂机后会重新查询直播状态与任务进度，只补齐缺额。") + "</p>" : "") +
+        '<div class="detail-foot"><button type="button" class="btn">' + icon("external", 13) + '打开直播间</button>' +
+          (running ? '<button type="button" class="btn primary" data-action="redo">' + icon("check", 13) + "补齐任务</button>"
+            : globalPaused ? '<button type="button" class="btn primary" data-action="resume-all">' + icon("play", 13) + "恢复全部</button>"
+            : paused ? '<button type="button" class="btn primary" data-action="resume-account" data-account="' + id + '">' + icon("play", 13) + "恢复挂机</button>"
+            : '<button type="button" class="btn primary" data-action="start-account" data-account="' + id + '">' + icon("play", 13) + "开始挂机</button>") +
+        "</div>" +
+      "</div>" +
+    "</aside>";
+  }
+
+  function renderAccountOverview(id) {
+    const acc = account(id);
+    if (!acc) return renderDashboard();
+    const running = isRunning(id);
+    const expired = acc.status === "expired";
+    const protection = acc.status === "protection";
+    const paused = state.paused[id];
+    const globalPaused = state.globalPaused;
+    let banner = "";
+    if (protection) {
+      banner = '<div class="banner">' + icon("shield", 14) + "<span>「" + acc.name + "」账号保护暂停：" + (acc.protection || "账号操作已暂停") + "</span><button type=\"button\" class=\"btn sm\" data-action=\"protection-info\" data-account=\"" + id + '">查看原因</button></div>';
+    } else if (expired) {
+      banner = '<div class="banner">' + icon("alert", 14) + "<span>「" + acc.name + "」的登录已失效，无法开始挂机。此账号的凭证需要单独重新扫码。</span><button type=\"button\" class=\"btn sm\" data-action=\"relogin\" data-account=\"" + id + '">' + icon("qr", 12) + "重新扫码</button></div>";
+    } else if (globalPaused) {
+      banner = '<div class="banner neutral">' + icon("pause", 14) + "<span>全局暂停中。恢复时只恢复暂停前正在运行的账号，单独暂停的账号保持暂停。</span><button type=\"button\" class=\"btn sm\" data-action=\"resume-all\">" + icon("play", 12) + "恢复全部</button></div>";
+    } else if (paused) {
+      banner = '<div class="banner neutral">' + icon("pause", 14) + "<span>此账号已暂停挂机。关注列表、任务进度和今日额度都已保留。</span><button type=\"button\" class=\"btn sm\" data-action=\"resume-account\" data-account=\"" + id + '">' + icon("play", 12) + "恢复挂机</button></div>";
+    } else if (!running) {
+      banner = '<div class="banner neutral">' + icon("info", 14) + "<span>" + idleNotice(id) + "</span><button type=\"button\" class=\"btn sm\" data-action=\"start-account\" data-account=\"" + id + '">' + icon("play", 12) + "开始挂机</button></div>";
+    }
+    const healthy = running ? acc.rooms.filter((room) => room.healthy).length : 0;
+    const statusText = protection ? "保护暂停中" : expired ? "登录失效，等待重新扫码" : globalPaused ? "全局暂停中" : paused ? "已暂停挂机" : running ? (healthy ? healthy + " 个直播间挂机中" : "等待检查") : (state.mode === "single" && account(state.current) && state.current !== id ? "未挂机 · 当前挂机：" + account(state.current).name : "未参与同时挂机");
+    const cadence = running
+      ? "每 5 分钟检查一次 · 上次检查 " + acc.lastCheck
+      : protection ? "保护暂停中 · 重新扫码不会解除"
+        : expired ? "登录失效 · 需要重新扫码"
+          : globalPaused ? "全局暂停中 · 上次检查 " + acc.lastCheck
+            : "未运行 · 数据停在 " + acc.lastCheck;
+    return banner +
+      '<div class="workspace">' +
+        '<section class="list card" aria-label="关注的直播间"><header class="list-head"><span class="list-title">关注的直播间</span><span class="list-count">' + acc.rooms.length + '</span><span class="list-context">' + avatar(acc, "sm") + "<span>" + acc.name + "</span></span><span class=\"spacer\"></span><button type=\"button\" class=\"btn ghost sm\" data-action=\"add-member\">" + icon("plus", 12) + '添加主播</button><button type="button" class="btn ghost sm" data-action="sync-medals">' + icon("medal", 12) + "同步粉丝牌</button></header>" +
+          '<div class="rooms" role="listbox" aria-label="直播间列表">' + renderRooms(id) + "</div>" +
+        "</section>" +
+        renderDetail(id) +
+      "</div>" +
+      '<footer class="statusbar"><span class="' + (running ? "dot-live" : "dot-paused") + '"></span><strong>' + acc.name + " · " + statusText + '</strong><span class="spacer"></span><span style="color:var(--ink-3)">' + cadence + "</span></footer>";
+  }
+
+  function renderMonitor() {
+    if (state.view === "all") {
+      $("#monitor-body").innerHTML = renderDashboard();
+    } else {
+      $("#monitor-body").innerHTML = renderAccountOverview(state.view);
+    }
+  }
+
+  /* ---------- account page ---------- */
+  function renderAccountPage() {
+    const list = $("#account-list");
+    if (!ORDER.length) {
+      list.innerHTML = '<div class="empty" style="padding:38px 18px">' + icon("user", 26) +
+        "<strong>尚未添加 B 站账号</strong><span>扫码添加账号后，可以在这里管理登录状态与挂机策略。</span>" +
+        '<button type="button" class="btn primary sm" data-action="add-account">' + icon("qr", 12) + "扫码添加账号</button></div>";
+      $("#master-switch").setAttribute("aria-checked", "false");
+      $("#master-switch").setAttribute("aria-disabled", "true");
+      $("#master-switch").disabled = true;
+      $("#mode-note").textContent = "添加账号后才能开启同时挂机。";
+      $("#mode-note").hidden = false;
+      $("#risk-note").hidden = true;
+      return;
+    }
+    list.innerHTML = ORDER.map((id) => {
+      const acc = account(id);
+      const status = statusOf(id);
+      const expired = acc.status === "expired";
+      const protection = acc.status === "protection";
+      const running = isRunning(id);
+      const isCurrent = state.view === id;
+      const paused = state.paused[id];
+      const gain = displayGain(id);
+      const showConcurrent = state.mode === "concurrent" && acc.status === "ok";
+      let action = "";
+      if (protection) {
+        action = '<button type="button" class="btn sm primary" data-action="protection-info" data-account="' + id + '">' + icon("shield", 12) + "查看原因</button>";
+      } else if (expired) {
+        action = '<button type="button" class="btn sm primary" data-action="relogin" data-account="' + id + '">' + icon("qr", 12) + "重新扫码</button>";
+      } else if (running) {
+        action = isCurrent ? "" : '<button type="button" class="btn sm" data-action="view-account" data-account="' + id + '">查看总览</button>';
+      } else if (paused) {
+        action = '<button type="button" class="btn sm primary" data-action="resume-account" data-account="' + id + '">' + icon("play", 12) + "恢复挂机</button>";
+      } else if (isCurrent) {
+        action = '<button type="button" class="btn sm primary" data-action="start-account" data-account="' + id + '">' + icon("play", 12) + "开始挂机</button>";
+      } else if (state.mode === "single") {
+        action = '<button type="button" class="btn sm" data-action="switch-account" data-account="' + id + '">切换并挂机</button>';
+      } else {
+        action = '<button type="button" class="btn sm" data-action="view-account" data-account="' + id + '">查看总览</button>';
+      }
+      const pauseAction = running
+        ? '<button type="button" class="btn ghost sm icon-only" title="暂停此账号" aria-label="暂停此账号" data-action="pause-account" data-account="' + id + '">' + icon("pause", 13) + "</button>"
+        : "";
+      const switchMarkup = showConcurrent
+        ? '<span class="inline-switch"><span>参与同时挂机</span><button type="button" class="switch" role="switch" aria-label="' + acc.name + '参与同时挂机" aria-checked="' + (state.concurrent[id] === true) + '"' + (state.globalPaused ? " disabled" : "") + ' data-action="toggle-concurrent" data-account="' + id + '"></button></span>'
+        : "";
+      const liveLabel = running ? "直播中" : "上次直播中";
+      const sub = protection ? (acc.protection || "账号操作已暂停")
+        : expired ? "登录已失效，其他账号不受影响"
+          : state.globalPaused ? "全局暂停中，恢复全部后可继续"
+            : paused ? "已暂停挂机，关注与今日额度已保留"
+              : "上次检查 " + acc.lastCheck + (running ? " · 登录正常" : " · 未运行");
+      return '<div class="account-item ' + (isCurrent ? "current" : "") + '">' + avatar(acc, "lg") +
+        '<div class="account-item-main">' +
+          '<div class="account-item-title"><strong>' + acc.name + "</strong>" +
+            (isCurrent ? '<span class="mini-tag accent">当前查看</span>' : "") +
+            '<span class="mini-tag ' + status.tone + '">' + status.label + "</span>" +
+            (expired ? '<span class="mini-tag warn">需要重新扫码</span>' : "") +
+            (protection ? '<span class="mini-tag warn">需在平台处理</span>' : "") +
+          "</div>" +
+          '<div class="account-item-meta">UID ' + acc.uid + " · 关注 " + acc.rooms.length + " · " + liveLabel + " " + liveCount(id) + " · 今日 " + (gain === null ? "—" : "+" + gain) + "</div>" +
+          '<div class="account-item-sub ' + (expired || protection ? "warn" : "") + '">' + sub + "</div>" +
+        "</div>" +
+        '<div class="account-item-actions">' + switchMarkup + pauseAction + action + '<button type="button" class="btn ghost sm icon-only" data-action="account-menu" data-account="' + id + '" aria-label="更多操作" title="更多操作">' + icon("more", 15) + "</button></div>" +
+      "</div>";
+    }).join("");
+    const validCount = ORDER.filter((item) => ACCOUNTS[item].status === "ok").length;
+    const modeBlocked = validCount < 2 && state.mode !== "concurrent";
+    $("#master-switch").setAttribute("aria-checked", String(state.mode === "concurrent"));
+    $("#master-switch").disabled = modeBlocked;
+    $("#master-switch").setAttribute("aria-disabled", String(modeBlocked));
+    $("#mode-note").textContent = validCount < 2
+      ? state.mode === "concurrent"
+        ? "同时挂机已开启，但目前只有 " + validCount + " 个登录有效的账号；关闭此模式后会回到单账号运行。"
+        : "至少需要 2 个登录有效的账号，才能开启同时挂机。"
+      : state.mode === "single"
+        ? "当前为单账号模式。顶部标签只切换查看；账号页的「切换并挂机」才会停止原账号并启动新账号，不需要重新扫码。"
+        : "当前为同时挂机模式。切换查看不影响运行；每个账号需要单独开启「参与同时挂机」。";
+    $("#mode-note").hidden = false;
+    $("#risk-note").hidden = state.mode !== "concurrent";
+  }
+
+  /* ---------- settings scope ---------- */
+  function renderScope() {
+    const id = state.view === "all"
+      ? (state.current || ORDER.find((item) => ACCOUNTS[item].status === "ok"))
+      : state.view;
+    const acc = account(id);
+    if (!acc) {
+      const message = ORDER.length ? "没有登录有效的账号" : "尚未添加账号";
+      $("#scope-chip").innerHTML = message;
+      $("#scope-chip").title = ORDER.length ? "重新登录至少一个账号后才能保存挂机设置" : "添加账号后才能保存挂机设置";
+      $("#scope-note").textContent = ORDER.length
+        ? "重新登录至少一个账号后，才能编辑并保存此页设置"
+        : "添加账号后才能保存挂机设置";
+      return;
+    }
+    $("#scope-chip").innerHTML = '<span class="avatar sm" style="background:' + acc.color + '">' + acc.initial + "</span>" + acc.name;
+    $("#scope-chip").title = "本页设置应用于 " + acc.name;
+    $("#scope-note").textContent = state.view === "all"
+      ? "正在编辑当前挂机账号；从顶部标签选择账号可直接切换编辑对象"
+      : "正在编辑此账号；每个账号独立保存，切换账号后本页会跟随";
+  }
+
+  /* ---------- chrome ---------- */
+  function renderChrome() {
+    const titles = { monitor: "直播总览", automation: "挂机设置", account: "账号" };
+    $("#chrome-title").textContent = titles[state.page];
+    const host = $("#chrome-actions");
+    if (state.page !== "monitor") { host.innerHTML = ""; return; }
+    if (!ORDER.length) { host.innerHTML = ""; return; }
+    if (state.view === "all") {
+      const running = runningIds();
+      host.innerHTML = '<button type="button" class="btn" data-action="check-all">' + icon("refresh", 13) + '全部检查</button>' +
+        (state.globalPaused
+          ? '<button type="button" class="btn primary" data-action="resume-all">' + icon("play", 13) + "恢复全部</button>"
+          : running.length
+            ? '<button type="button" class="btn" data-action="pause-all">' + icon("pause", 13) + "全部暂停</button>"
+            : "");
+      return;
+    }
+    const id = state.view;
+    const acc = account(id);
+    const running = isRunning(id);
+    const expired = acc.status === "expired";
+    const protection = acc.status === "protection";
+    host.innerHTML = '<button type="button" class="btn" data-action="check-account" data-account="' + id + '">' + icon("refresh", 13) + "立即检查</button>" +
+      (protection
+        ? '<button type="button" class="btn primary" data-action="protection-info" data-account="' + id + '">' + icon("shield", 13) + "查看原因</button>"
+        : expired
+          ? '<button type="button" class="btn primary" data-action="relogin" data-account="' + id + '">' + icon("qr", 13) + "重新扫码</button>"
+          : state.globalPaused
+            ? '<button type="button" class="btn primary" data-action="resume-all">' + icon("play", 13) + "恢复全部</button>"
+            : running
+              ? '<button type="button" class="btn" data-action="pause-account" data-account="' + id + '">' + icon("pause", 13) + "暂停此账号</button>"
+              : state.paused[id]
+                ? '<button type="button" class="btn primary" data-action="resume-account" data-account="' + id + '">' + icon("play", 13) + "恢复挂机</button>"
+                : '<button type="button" class="btn primary" data-action="start-account" data-account="' + id + '">' + icon("play", 13) + "开始挂机</button>");
+  }
+
+  /* ---------- sidebar ---------- */
+  function renderSidebar() {
+    const id = state.view === "all" ? (state.current || ORDER[0]) : state.view;
+    const acc = account(id);
+    if (!acc) {
+      $("#sidebar-account").innerHTML = '<span class="sidebar-avatar">+</span><span class="sidebar-account-text"><strong>添加账号</strong><small>尚未登录</small></span><svg class="icon" width="13" height="13"><use href="#i-chevron"></use></svg>';
+      $("#sidebar-account").setAttribute("aria-expanded", String(state.switcher));
+      return;
+    }
+    const running = runningIds();
+    const runningLive = running.reduce((sum, item) => sum + liveCount(item), 0);
+    const runningNames = running.map((item) => account(item).name).join("、");
+    const title = state.view === "all" ? "查看：全部账号" : "查看：" + acc.name;
+    let sub;
+    if (state.globalPaused) {
+      sub = "挂机：全局暂停中";
+    } else if (running.length) {
+      sub = running.length === 1 && running[0] === state.view
+        ? "挂机中 · " + runningLive + " 个直播"
+        : "挂机：" + runningNames + (runningLive ? " · " + runningLive + " 个直播" : "");
+    } else {
+      sub = "挂机：无";
+    }
+    const avatarHtml = state.view === "all"
+      ? '<span class="sidebar-avatar" style="background:var(--accent-soft);color:var(--accent)">全</span>'
+      : '<span class="sidebar-avatar" style="background:' + acc.color + '">' + acc.initial + "</span>";
+    $("#sidebar-account").innerHTML = avatarHtml + '<span class="sidebar-account-text"><strong>' + title + "</strong><small>" + sub + '</small></span><svg class="icon" width="13" height="13"><use href="#i-chevron"></use></svg>';
+    $("#sidebar-account").setAttribute("aria-expanded", String(state.switcher));
+  }
+
+  /* ---------- switcher ---------- */
+  function renderSwitcher() {
+    const host = $("#switcher");
+    const running = runningIds();
+    if (!ORDER.length) {
+      host.innerHTML = '<div class="switcher-head"><strong>切换账号</strong><span>0 个</span></div>' +
+        '<div class="empty" style="height:auto;padding:18px 10px">' + icon("user", 22) + "<strong>尚未添加账号</strong><span>扫码后开始</span></div>" +
+        '<div class="switcher-foot"><button type="button" data-action="add-account">添加账号</button></div>';
+      host.classList.toggle("open", state.switcher);
+      $("#switcher-scrim").classList.toggle("open", state.switcher);
+      return;
+    }
+    host.innerHTML = '<div class="switcher-head"><strong>' + (state.mode === "single" ? "切换挂机账号" : "切换查看账号") + "</strong><span>" + ORDER.length + " 个</span></div>" +
+      ORDER.map((id) => {
+        const acc = account(id);
+        const status = statusOf(id);
+        const current = state.view === id;
+        const sub = acc.status === "protection" ? "保护暂停 · 需在平台处理" : acc.status === "expired" ? "登录已失效 · 需要重新扫码" : state.globalPaused ? "全局暂停中" : isRunning(id) ? "挂机中 · " + liveCount(id) + " 个直播间" : state.mode === "single" ? "未运行 · 点击切换并挂机" : "未运行 · 可开启同时挂机";
+        return '<button type="button" class="switcher-item" data-action="switch-account" data-account="' + id + '" role="menuitemradio" aria-checked="' + current + '">' + avatar(acc, "sm") +
+          '<span class="switcher-item-main"><strong>' + acc.name + '</strong><small class="' + (status.tone === "warn" ? "warn" : "") + '">' + sub + "</small></span>" +
+          (current ? icon("check", 13) : "") + "</button>";
+      }).join("") +
+      '<div class="switcher-mode"><strong>' + (state.globalPaused ? "全局暂停" : state.mode === "single" ? "单账号模式" : "同时挂机") + "</strong> · " + (state.globalPaused ? "先在总览恢复全部，才能切换或开始挂机。" : state.mode === "single" ? "切换会暂停当前账号并启动所选账号，不会重新扫码。只想查看？用顶部账号标签。" : "切换只改变查看，不会中断正在运行的账号。") + "</div>" +
+      '<div class="switcher-foot"><button type="button" role="menuitem" data-action="manage-accounts">管理账号</button><button type="button" role="menuitem" data-action="add-account">添加账号</button></div>';
+    host.classList.toggle("open", state.switcher);
+    $("#switcher-scrim").classList.toggle("open", state.switcher);
+  }
+
+  /* ---------- modal ---------- */
+  function renderModal() {
+    const host = $("#modal-root");
+    const scrim = $("#modal-scrim");
+    if (!state.modal) {
+      scrim.classList.remove("open");
+      host.innerHTML = "";
+      return;
+    }
+    scrim.classList.add("open");
+    if (state.modal.type === "add") {
+      const relogin = state.modal.relogin ? account(state.modal.relogin) : null;
+      host.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">' + (relogin ? "重新登录「" + relogin.name + "」" : "添加 B 站账号") + "</h3><p>" + (relogin ? "只会更新这个账号的登录凭证，其他账号继续运行，不需要重新扫码。" : "扫码后会把新账号加入本机账号列表。已登录的账号不会被退出。") + "</p>" +
+        '<div class="qr-wrap"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOgAAADoAQAAAADN0pXVAAABRklEQVR4nO1Yy27DMAwThf3/L3MwqTTdJYc5wTShbhEYFhCQ0YsWGBcrr4zxsfb/Gl8R8I5g+P86mck3FNIwTVM9TmbyDRRD6qg8zLaY8x4r5Vw2Q/WcFeKKB97cLZ758i9p1pzMF96CqtEq0n+MKh+z4i1fIaIc3395diEGlMegmPfEnLtWBLkCWT3Y7ciOboz591Yuxlg0ra5CNWtVrr6Yt/UkK4wd1SW2pvqXdArjePqoMeZN/0LXBZTgOC8OPTHnhjXkx1LPrBp9CBD2xJybVv7kCsuOmfEcNNWT7iEuVwqPzF+WYoYbkbiiM+a8Z74RZm0F7d3M+wLXBjXjsJCsg6H3QZgiA6J7znSG8q0FJW7Fs3aj+VIVS7+59SrXw+IxVKaWlqzRTmvMN8w3YrH1VKcuxT0x503zjf+COT/Wt3X9Nb4BSE2OvaGrfy0AAAAASUVORK5CYII=" alt="演示二维码" /></div>' +
+        '<div class="qr-caption">演示二维码 · 生产环境由登录接口生成</div>' +
+        '<div class="qr-hint">' + icon("shield", 12) + "凭证只保存在本机，不上传" + "</div>" +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>取消</button><button type="button" class="btn" data-action="refresh-qr">' + icon("refresh", 12) + "刷新二维码</button></div>" +
+        '<button type="button" class="demo-link" data-action="demo-scan">演示：模拟扫码成功</button></div>';
+      return;
+    }
+    if (state.modal.type === "remove") {
+      const acc = account(state.modal.account);
+      host.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">移除账号「' + acc.name + '」？</h3><p>会立即删除本机保存的登录凭证和公开资料，并把账号移出列表。如果只想暂时停用，请使用“退出此账号登录”。</p>' +
+        '<div class="account-preview">' + avatar(acc, "lg") + '<span class="account-preview-main"><strong>' + acc.name + "</strong><span>UID " + acc.uid + " · 关注 " + acc.rooms.length + " 位主播</span></span></div>" +
+        '<div class="modal-check" style="background:var(--surface-sunk)"><span>关注列表、任务进度、发送额度与保护记录会保留在本机；重新添加同一账号后可继续使用。为保护额度与账号保护记录，移除账号不会清除这些状态。</span></div>' +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>取消</button><button type="button" class="btn danger" data-action="confirm-remove" data-account="' + acc.id + '">移除账号</button></div></div>';
+      return;
+    }
+    if (state.modal.type === "protection") {
+      const acc = account(state.modal.account);
+      host.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">账号保护暂停</h3><p>' + (acc.protection || "账号操作已暂停。") + "</p>" +
+        '<div class="account-preview">' + avatar(acc, "lg") + '<span class="account-preview-main"><strong>' + acc.name + "</strong><span>UID " + acc.uid + " · 保护暂停不随扫码解除</span></span></div>" +
+        '<div class="modal-note">请先在 B 站完成验证或等待冷却，再按状态页提示确认恢复。重新扫码不会解除保护暂停，也不会影响其他账号。</div>' +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>关闭</button><button type="button" class="btn primary" data-action="open-protection">打开 B 站安全中心</button></div></div>';
+      return;
+    }
+    if (state.modal.type === "switch") {
+      const from = account(state.modal.from);
+      const to = account(state.modal.to);
+      host.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">切换挂机账号？</h3><p>连接会短暂中断；任务进度与今日额度保留，不需要重新扫码。</p>' +
+        '<div class="switch-pair">' +
+          '<div class="account-preview">' + avatar(from, "sm") + '<span class="account-preview-main"><strong>' + from.name + "</strong><span>当前挂机 → 将暂停</span></span></div>" +
+          '<span class="switch-arrow">→</span>' +
+          '<div class="account-preview">' + avatar(to, "sm") + '<span class="account-preview-main"><strong>' + to.name + "</strong><span>将开始挂机</span></span></div>" +
+        "</div>" +
+        '<div class="modal-note">只会切换挂机账号；“查看”本身不会停止任何连接。</div>' +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>取消</button><button type="button" class="btn primary" data-action="confirm-switch" data-account="' + to.id + '">切换并挂机</button></div></div>';
+      return;
+    }
+    if (state.modal.type === "close-concurrent") {
+      const keep = account(state.modal.keep);
+      const pause = state.modal.pause.map((id) => account(id).name).join("、");
+      host.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">关闭同时挂机？</h3><p>将保留「' + keep.name + '」继续挂机，暂停：' + pause + "。连接会中断，进度与额度保留。</p>" +
+        '<div class="account-preview">' + avatar(keep, "lg") + '<span class="account-preview-main"><strong>' + keep.name + "</strong><span>保留为单账号运行</span></span></div>" +
+        '<div class="modal-note">没有自动启动任何账号。关闭后可在账号页手动开始其他账号。</div>' +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>取消</button><button type="button" class="btn primary" data-action="confirm-close-concurrent">关闭同时挂机</button></div></div>';
+      return;
+    }
+    if (state.modal.type === "stop-concurrent") {
+      const acc = account(state.modal.account);
+      host.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">停止「' + acc.name + '」的同时挂机？</h3><p>这个账号的连接会中断，任务进度与今日额度保留；其他参与同时挂机的账号不受影响。</p>' +
+        '<div class="account-preview">' + avatar(acc, "lg") + '<span class="account-preview-main"><strong>' + acc.name + "</strong><span>将退出同时挂机，不再建立连接</span></span></div>" +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>取消</button><button type="button" class="btn danger" data-action="confirm-stop-concurrent" data-account="' + acc.id + '">停止挂机</button></div></div>';
+      return;
+    }
+    if (state.modal.type === "signout") {
+      const acc = account(state.modal.account);
+      host.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">退出「' + acc.name + '」的登录？</h3><p>会停止此账号的挂机并删除本机登录凭证；关注列表、任务进度、额度与保护记录保留。其他账号不受影响，重新登录需要扫码。</p>' +
+        '<div class="account-preview">' + avatar(acc, "lg") + '<span class="account-preview-main"><strong>' + acc.name + "</strong><span>UID " + acc.uid + " · 账号仍保留在列表中</span></span></div>" +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>取消</button><button type="button" class="btn danger" data-action="confirm-signout" data-account="' + acc.id + '">退出登录</button></div></div>';
+      return;
+    }
+    if (state.modal.type === "quit") {
+      const running = runningIds();
+      const names = running.map((id) => account(id).name).join("、");
+      host.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">退出 ビリ推し？</h3><p>' + (running.length ? "将停止 " + running.length + " 个账号的挂机：" + names + "。" : "当前没有账号在挂机。") + "关闭窗口到托盘会继续运行；只有退出应用才会停止所有连接。</p>" +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>取消</button><button type="button" class="btn danger" data-action="confirm-quit">退出应用</button></div></div>';
+      return;
+    }
+    if (state.modal.type === "enable-concurrent") {
+      host.innerHTML = '<div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="modal-title"><h3 id="modal-title">开启同时挂机？</h3><p>多个账号会在同一台设备上分别建立连接，并各自执行互动任务。B 站可能将同设备多账号行为视为异常。</p>' +
+        '<div class="modal-note">建议只添加你本人的账号，同时运行不超过 3 个。应用会为每个账号单独计算每日额度，但不会规避平台风控；是否使用由你决定。</div>' +
+        '<label class="modal-check"><input type="checkbox" id="risk-ack"><span>我已了解风险，只使用本人的账号，并自行承担可能出现的账号限制。</span></label>' +
+        '<div class="modal-actions"><button type="button" class="btn" data-modal-close>取消</button><button type="button" class="btn primary" data-action="confirm-enable-concurrent" disabled>开启同时挂机</button></div></div>';
+      return;
+    }
+  }
+
+  function modalTriggerSelector(node) {
+    if (node && node.id) return "#" + node.id;
+    if (node && node.closest) {
+      if (node.closest("#switcher")) return "#sidebar-account";
+      const withAccount = node.closest("[data-action][data-account]");
+      if (withAccount) return '[data-action="' + withAccount.dataset.action + '"][data-account="' + withAccount.dataset.account + '"]';
+      const withAction = node.closest("[data-action]");
+      if (withAction) return '[data-action="' + withAction.dataset.action + '"]';
+      const withView = node.closest("[data-view]");
+      if (withView) return '[data-view="' + withView.dataset.view + '"]';
+      const withMode = node.closest("[data-mode]");
+      if (withMode) return '[data-mode="' + withMode.dataset.mode + '"]';
+    }
+    return "#sidebar-account";
+  }
+
+  /* Focus the dialog, keep Tab inside it, and return focus to the trigger
+     after it closes. The trigger may have been re-rendered, so restore by a
+     stable selector rather than by the detached node. */
+  function syncModalFocus() {
+    const open = !!state.modal;
+    if (open && !state.modalWasOpen) {
+      state.modalTrigger = document.activeElement;
+      state.modalTriggerSelector = state.lastClickSelector || modalTriggerSelector(document.activeElement);
+      window.requestAnimationFrame(() => {
+        const modal = $("#modal-root .modal");
+        if (modal) { modal.setAttribute("tabindex", "-1"); modal.focus(); }
+      });
+    } else if (!open && state.modalWasOpen) {
+      const selector = state.modalTriggerSelector || "#sidebar-account";
+      window.requestAnimationFrame(() => {
+        const candidate = document.querySelector(selector);
+        const target = candidate && candidate.getClientRects().length
+          ? candidate
+          : $("#sidebar-account") || $("#app-window");
+        if (target && target.focus) target.focus();
+      });
+      state.modalTrigger = null;
+      state.modalTriggerSelector = null;
+    }
+    state.modalWasOpen = open;
+  }
+
+  /* ---------- account menu ---------- */
+  function renderMenu() {
+    $$(".account-menu").forEach((node) => node.remove());
+    if (!state.menu) return;
+    const acc = account(state.menu.account);
+    if (!acc) { state.menu = null; return; }
+    const node = document.createElement("div");
+    node.className = "account-menu";
+    node.setAttribute("role", "menu");
+    node.innerHTML = (acc.status === "protection"
+        ? '<button type="button" role="menuitem" data-action="protection-info" data-account="' + acc.id + '">' + icon("shield", 13) + "查看保护原因</button>"
+        : '<button type="button" role="menuitem" data-action="relogin" data-account="' + acc.id + '">' + icon("qr", 13) + "重新扫码</button>" +
+          (acc.status === "ok" ? '<button type="button" role="menuitem" data-action="sign-out" data-account="' + acc.id + '">' + icon("power", 13) + "退出此账号登录</button>" : "")) +
+      '<button type="button" role="menuitem" data-action="open-logs" data-account="' + acc.id + '">' + icon("folder", 13) + "打开此账号日志</button>" +
+      '<div class="menu-divider"></div><button type="button" class="destructive" role="menuitem" data-action="remove-account" data-account="' + acc.id + '">移除账号</button>';
+    $("#app-window").appendChild(node);
+    const rect = state.menu.rect;
+    const appRect = $("#app-window").getBoundingClientRect();
+    // The app window is CSS-scaled to fit the review column; convert visual
+    // coordinates back into the 1180x760 design space before positioning.
+    const scale = appRect.width / 1180 || 1;
+    node.style.left = Math.max(8, (rect.left - appRect.left) / scale - 145) + "px";
+    node.style.top = ((rect.bottom - appRect.top) / scale + 5) + "px";
+  }
+
+  /* ---------- orchestration ---------- */
+  function render() {
+    renderTabs();
+    renderMonitor();
+    renderAccountPage();
+    renderScope();
+    renderChrome();
+    renderSidebar();
+    renderSwitcher();
+    renderModal();
+    syncModalFocus();
+    renderMenu();
+    $$(".page").forEach((node) => node.classList.toggle("active", node.id === "page-" + state.page));
+    $$(".nav-item[data-page]").forEach((node) => node.setAttribute("aria-current", node.dataset.page === state.page ? "page" : "false"));
+    $$(".review-pages button").forEach((node) => node.classList.toggle("active", node.dataset.reviewPage === state.page));
+    $$(".mode-switch button").forEach((node) => node.classList.toggle("active", node.dataset.mode === state.mode));
+  }
+
+  function setPage(page) {
+    state.page = page;
+    state.switcher = false;
+    state.menu = null;
+    render();
+  }
+
+  function applySingleMode(keep) {
+    state.mode = "single";
+    if (keep && account(keep) && account(keep).status === "ok") {
+      state.current = keep;
+      state.paused[keep] = false;
+    } else {
+      const candidate = ORDER.find((id) => id === state.view && account(id).status === "ok")
+        || ORDER.find((id) => account(id).status === "ok");
+      if (candidate) {
+        state.current = candidate;
+        // Do not silently start an account that was not running before.
+        state.paused[candidate] = true;
+      } else {
+        state.current = null;
+      }
+    }
+    if (state.view !== "all" && (!account(state.view) || account(state.view).status !== "ok")) state.view = "all";
+  }
+
+  function applyConcurrentMode(announce) {
+    state.mode = "concurrent";
+    // Only the account that is running now participates; everything else must
+    // be opted in per account. New accounts never join automatically.
+    ORDER.forEach((id) => { state.concurrent[id] = false; });
+    if (state.current && account(state.current) && account(state.current).status === "ok" && !state.paused[state.current]) {
+      state.concurrent[state.current] = true;
+    }
+    if (announce !== false) {
+      showToast(state.concurrent[state.current]
+        ? "已开启同时挂机。当前运行账号已参与，其他账号需单独开启；平台风控存在不确定性。"
+        : "已开启同时挂机；当前没有运行中的账号，请为需要运行的账号打开“参与同时挂机”。", "warn");
+    }
+    render();
+  }
+
+  function setMode(mode, announce) {
+    if (state.mode === mode) return;
+    if (mode === "concurrent") {
+      const validCount = ORDER.filter((item) => ACCOUNTS[item].status === "ok").length;
+      if (validCount < 2) {
+        showToast("至少需要 2 个登录有效的账号，才能开启同时挂机。", "warn");
+        render();
+        return;
+      }
+      state.modal = { type: "enable-concurrent" };
+      render();
+      return;
+    }
+    const wasRunning = runningIds();
+    if (wasRunning.length > 1) {
+      const keep = wasRunning.includes(state.view) ? state.view : wasRunning[0];
+      state.modal = { type: "close-concurrent", keep, pause: wasRunning.filter((id) => id !== keep) };
+      render();
+      return;
+    }
+    applySingleMode(wasRunning[0] || null);
+    if (announce !== false) {
+      showToast(wasRunning[0]
+        ? "已切换为单账号模式；继续挂机：" + account(wasRunning[0]).name + "。"
+        : "已切换为单账号模式；没有自动启动任何账号。");
+    }
+    render();
+  }
+
+  /* Tabs, dashboard cards and "打开总览" only change the lens. They never
+     stop or start a connection; those are explicit account actions. */
+  function viewAccount(id, goMonitor) {
+    if (id !== "all" && !account(id)) return;
+    state.view = id;
+    if (goMonitor) state.page = "monitor";
+    state.switcher = false;
+    state.menu = null;
+    render();
+  }
+
+  /* "切换并挂机" / "开始挂机": the only path that changes the running set in
+     single-account mode (or joins an account in concurrent mode). */
+  function performActivate(id) {
+    const acc = account(id);
+    if (!acc) return;
+    state.paused[id] = false;
+    if (state.mode === "single") {
+      state.current = id;
+      showToast("已切换到「" + acc.name + "」，正在启动挂机；不需要重新扫码。");
+    } else {
+      state.concurrent[id] = true;
+      showToast("「" + acc.name + "」已加入同时挂机。");
+    }
+    state.view = id;
+    state.page = "monitor";
+    state.switcher = false;
+    state.menu = null;
+    state.modal = null;
+    render();
+  }
+
+  function activateAccount(id) {
+    const acc = account(id);
+    if (!acc) return;
+    if (acc.status === "protection") {
+      state.modal = { type: "protection", account: id };
+      render();
+      return;
+    }
+    if (acc.status === "expired") {
+      state.view = id;
+      state.page = "monitor";
+      state.switcher = false;
+      showToast("「" + acc.name + "」的登录已失效，请先重新扫码。", "warn");
+      render();
+      return;
+    }
+    if (state.globalPaused) {
+      showToast("全局暂停中，请先在总览恢复全部。", "warn");
+      return;
+    }
+    if (state.mode === "single" && state.current && state.current !== id && isRunning(state.current)) {
+      state.modal = { type: "switch", from: state.current, to: id };
+      render();
+      return;
+    }
+    performActivate(id);
+  }
+
+  function pauseAccount(id) {
+    if (!account(id)) return;
+    state.paused[id] = true;
+    showToast("已暂停「" + account(id).name + "」。关注列表与今日额度已保留。");
+    render();
+  }
+
+  function resumeAccount(id) {
+    if (!account(id)) return;
+    if (state.globalPaused) {
+      showToast("全局暂停中，请先在总览恢复全部。", "warn");
+      return;
+    }
+    if (state.mode === "single") {
+      activateAccount(id);
+      return;
+    }
+    state.paused[id] = false;
+    state.concurrent[id] = true;
+    showToast("已恢复「" + account(id).name + "」的挂机。");
+    render();
+  }
+
+  function startAccount(id) {
+    if (!account(id)) return;
+    if (state.mode === "single") {
+      activateAccount(id);
+      return;
+    }
+    if (account(id).status === "protection") {
+      state.modal = { type: "protection", account: id };
+      render();
+      return;
+    }
+    if (account(id).status === "expired") {
+      showToast("「" + account(id).name + "」的登录已失效，请先重新扫码。", "warn");
+      return;
+    }
+    if (state.globalPaused) {
+      showToast("全局暂停中，请先在总览恢复全部。", "warn");
+      return;
+    }
+    state.paused[id] = false;
+    state.concurrent[id] = true;
+    showToast("已开始「" + account(id).name + "」的挂机。");
+    render();
+  }
+
+  function relogin(id) {
+    if (!account(id)) return;
+    state.modal = null;
+    state.menu = null;
+    state.page = "account";
+    showToast("请扫码重新登录「" + account(id).name + "」。其他账号不会退出。");
+    render();
+    // The production build opens the QR modal with the account context.
+    window.setTimeout(() => { state.modal = { type: "add", relogin: id }; render(); }, 260);
+  }
+
+  function removeAccount(id) {
+    state.menu = null;
+    state.modal = { type: "remove", account: id };
+    render();
+  }
+
+  function confirmRemove(id) {
+    const acc = account(id);
+    delete ACCOUNTS[id];
+    const index = ORDER.indexOf(id);
+    if (index >= 0) ORDER.splice(index, 1);
+    delete state.paused[id];
+    delete state.concurrent[id];
+    delete state.selectedRoom[id];
+    state.resumeSet = state.resumeSet.filter((item) => item !== id);
+    if (state.current === id) state.current = ORDER.find((item) => ACCOUNTS[item].status === "ok") || null;
+    if (state.view === id) state.view = "all";
+    state.modal = null;
+    const remaining = runningIds();
+    showToast("已移除「" + acc.name + "」。" + (remaining.length ? "其他账号继续运行。" : "当前没有账号在挂机。"));
+    render();
+  }
+
+  /* Signing out keeps the account row, follows, task progress, quotas and
+     protection records; it only removes the local credential. Nothing else
+     is started automatically. */
+  function signOutAccount(id) {
+    const acc = account(id);
+    if (!acc) { state.modal = null; render(); return; }
+    acc.status = "expired";
+    state.paused[id] = true;
+    state.concurrent[id] = false;
+    state.resumeSet = state.resumeSet.filter((item) => item !== id);
+    if (state.current === id) {
+      const next = ORDER.find((item) => item !== id && ACCOUNTS[item].status === "ok");
+      state.current = next || null;
+      if (next) state.paused[next] = true;
+    }
+    state.modal = null;
+    showToast("已退出「" + acc.name + "」的登录；关注列表、任务进度与额度保留。重新登录需要扫码。");
+    render();
+  }
+
+  /* ---------- events ---------- */
+  document.addEventListener("click", (event) => {
+    state.lastClickSelector = modalTriggerSelector(event.target);
+    const reviewPage = event.target.closest("[data-review-page]");
+    if (reviewPage) { setPage(reviewPage.dataset.reviewPage); return; }
+
+    const reviewMode = event.target.closest(".mode-switch [data-mode]");
+    if (reviewMode) { setMode(reviewMode.dataset.mode); return; }
+
+    const demo = event.target.closest("[data-demo]");
+    if (demo) {
+      if (demo.dataset.demo === "switcher") {
+        state.page = "monitor"; state.switcher = !state.switcher; state.menu = null; render();
+      } else if (demo.dataset.demo === "add") {
+        state.modal = { type: "add" }; render();
+      } else if (demo.dataset.demo === "logs") {
+        showToast("生产环境会打开当前账号的日志目录。");
+      } else if (demo.dataset.demo === "quit") {
+        state.modal = { type: "quit" }; render();
+      }
+      return;
+    }
+
+    const nav = event.target.closest(".nav-item[data-page]");
+    if (nav) { setPage(nav.dataset.page); return; }
+
+    const tab = event.target.closest("[data-view]");
+    if (tab) {
+      if (tab.dataset.view === "all") {
+        state.view = "all";
+        state.page = "monitor";
+        state.switcher = false;
+        render();
+      } else {
+        viewAccount(tab.dataset.view);
+      }
+      return;
+    }
+
+    if (event.target.closest("#sidebar-account")) {
+      if (!ORDER.length) { state.modal = { type: "add" }; render(); return; }
+      state.switcher = !state.switcher; state.menu = null; render();
+      if (state.switcher) {
+        window.requestAnimationFrame(() => {
+          const current = $("#switcher .switcher-item[aria-current='true']") || $("#switcher .switcher-item");
+          if (current) current.focus();
+        });
+      }
+      return;
+    }
+    if (event.target.closest("#switcher-scrim")) {
+      state.switcher = false; render(); return;
+    }
+
+    const room = event.target.closest(".room[data-room]");
+    if (room) {
+      const id = state.view;
+      state.selectedRoom[id] = room.dataset.room;
+      render();
+      return;
+    }
+
+    const close = event.target.closest("[data-modal-close]");
+    if (close) { state.modal = null; render(); return; }
+    if (event.target.id === "modal-scrim") { state.modal = null; render(); return; }
+
+    if (event.target.closest("#master-switch")) {
+      setMode(state.mode === "single" ? "concurrent" : "single");
+      return;
+    }
+
+    const actionNode = event.target.closest("[data-action]");
+    if (!actionNode) {
+      if (state.menu && !event.target.closest(".account-menu")) { state.menu = null; render(); }
+      return;
+    }
+    const action = actionNode.dataset.action;
+    const id = actionNode.dataset.account;
+    if (state.menu && action !== "account-menu") { state.menu = null; }
+
+    switch (action) {
+      case "add-account":
+        state.modal = { type: "add" }; state.switcher = false; render(); break;
+      case "switch-account":
+        if (state.mode === "single") activateAccount(id); else viewAccount(id);
+        break;
+      case "view-account":
+        viewAccount(id, true); break;
+      case "open-account":
+        viewAccount(id, true); break;
+      case "pause-account":
+        pauseAccount(id); break;
+      case "resume-account":
+        resumeAccount(id); break;
+      case "start-account":
+        startAccount(id); break;
+      case "toggle-concurrent": {
+        const acc = account(id);
+        if (!acc) break;
+        if (state.concurrent[id] === true) {
+          if (isRunning(id)) {
+            state.modal = { type: "stop-concurrent", account: id };
+            render();
+          } else {
+            state.concurrent[id] = false;
+            showToast("「" + acc.name + "」已不再参与同时挂机。");
+            render();
+          }
+        } else {
+          state.concurrent[id] = true;
+          showToast(state.paused[id]
+            ? "「" + acc.name + "」已参与同时挂机，但仍处于暂停状态；恢复后才会开始。"
+            : "「" + acc.name + "」已参与同时挂机。");
+          render();
+        }
+        break;
+      }
+      case "check-all":
+        showToast("正在检查所有运行中的账号。"); break;
+      case "check-account":
+        showToast("正在检查「" + account(id).name + "」。"); break;
+      case "pause-all": {
+        const running = runningIds();
+        if (!running.length) {
+          showToast("当前没有账号在挂机。", "warn");
+          break;
+        }
+        state.resumeSet = running.slice();
+        state.globalPaused = true;
+        showToast("已全局暂停 " + running.length + " 个账号；恢复时只恢复这些账号。", "warn");
+        render();
+        break;
+      }
+      case "resume-all": {
+        if (!state.globalPaused) {
+          showToast("当前没有全局暂停。", "warn");
+          break;
+        }
+        const count = state.resumeSet.length;
+        state.globalPaused = false;
+        state.resumeSet = [];
+        showToast(count
+          ? "已恢复暂停前正在运行的 " + count + " 个账号；单独暂停的账号保持暂停。"
+          : "已解除全局暂停。");
+        render();
+        break;
+      }
+      case "protection-info":
+        state.modal = { type: "protection", account: id }; render(); break;
+      case "open-protection":
+        state.modal = null;
+        showToast("生产环境会打开 B 站安全中心；请先完成验证，再回到应用恢复。");
+        render(); break;
+      case "sign-out":
+        state.menu = null;
+        state.modal = { type: "signout", account: id };
+        render(); break;
+      case "confirm-signout":
+        signOutAccount(id); break;
+      case "confirm-switch":
+        performActivate(id || (state.modal && state.modal.to)); break;
+      case "confirm-stop-concurrent": {
+        const target = account(id);
+        if (target) {
+          state.concurrent[id] = false;
+          showToast("已停止「" + target.name + "」的同时挂机；其他账号不受影响。");
+        }
+        state.modal = null;
+        render();
+        break;
+      }
+      case "confirm-close-concurrent": {
+        const keep = state.modal ? state.modal.keep : null;
+        state.modal = null;
+        applySingleMode(keep);
+        showToast(keep ? "已切回单账号模式；「" + account(keep).name + "」继续挂机。" : "已切回单账号模式。");
+        render();
+        break;
+      }
+      case "confirm-enable-concurrent":
+        state.modal = null;
+        applyConcurrentMode();
+        break;
+      case "confirm-quit":
+        state.modal = null;
+        showToast("已退出应用（演示）。生产环境会停止所有账号的连接。", "warn");
+        render();
+        break;
+      case "redo":
+        showToast("正在为「" + account(state.view).name + "」补齐今日未完成任务。"); break;
+      case "add-member":
+        showToast("生产环境会打开添加主播弹窗，作用范围为当前账号。"); break;
+      case "sync-medals":
+        showToast("生产环境会同步当前账号的粉丝牌。"); break;
+      case "relogin":
+        relogin(id); break;
+      case "remove-account":
+        removeAccount(id); break;
+      case "confirm-remove":
+        confirmRemove(id); break;
+      case "account-menu": {
+        const rect = actionNode.getBoundingClientRect();
+        state.menu = state.menu && state.menu.account === id ? null : { account: id, rect };
+        render();
+        break;
+      }
+      case "open-logs":
+        state.menu = null;
+        showToast("生产环境会打开「" + account(id).name + "」的日志目录。");
+        render(); break;
+      case "manage-accounts":
+        setPage("account"); break;
+      case "refresh-qr":
+        showToast("二维码已刷新。"); break;
+      case "demo-scan": {
+        const candidate = ORDER.find((item) => !ACCOUNTS[item].name.startsWith("新账号")) || "new";
+        state.modal = null;
+        showToast("已添加账号（演示）。生产环境会显示新账号并保留当前账号运行。");
+        render();
+        break;
+      }
+      default:
+        break;
+    }
+  });
+
+  document.addEventListener("change", (event) => {
+    if (event.target.id === "risk-ack") {
+      const confirm = $('[data-action="confirm-enable-concurrent"]');
+      if (confirm) confirm.disabled = !event.target.checked;
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (state.modal && event.key === "Tab") {
+      const modal = $("#modal-root .modal");
+      if (!modal) return;
+      const focusables = $$('button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])', modal);
+      if (!focusables.length) { event.preventDefault(); return; }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      const inside = modal.contains(active);
+      if (event.shiftKey && (!inside || active === first || active === modal)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!inside || active === last)) {
+        event.preventDefault();
+        first.focus();
+      }
+      return;
+    }
+    const focusedTab = event.target.closest('.account-tab[role="tab"]');
+    if (focusedTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      const tabs = $$(".account-tablist .account-tab");
+      const index = tabs.indexOf(focusedTab);
+      const next = event.key === "Home" ? 0
+        : event.key === "End" ? tabs.length - 1
+        : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+      event.preventDefault();
+      const target = tabs[next].dataset.view;
+      viewAccount(target, false);
+      window.requestAnimationFrame(() => {
+        const node = document.getElementById(target === "all" ? "tab-all" : "tab-" + target);
+        if (node) node.focus();
+      });
+      return;
+    }
+    if (state.switcher && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+      const items = $$("#switcher .switcher-item");
+      if (!items.length) return;
+      const index = items.indexOf(document.activeElement);
+      const next = event.key === "Home" ? 0
+        : event.key === "End" ? items.length - 1
+        : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      event.preventDefault();
+      items[next].focus();
+      return;
+    }
+    if (event.key === "Escape") {
+      if (state.modal) { state.modal = null; render(); }
+      else if (state.switcher) { state.switcher = false; render(); }
+      else if (state.menu) { state.menu = null; render(); }
+    }
+  });
+
+  /* ---------- fit the 1180x760 window into the review column ---------- */
+  function fit() {
+    const wrap = $("#window-wrap");
+    const app = $("#app-window");
+    const scale = Math.min(1, wrap.clientWidth / 1180);
+    app.style.transform = "scale(" + scale + ")";
+    wrap.style.height = (760 * scale) + "px";
+  }
+  window.addEventListener("resize", fit);
+
+  fit();
+  render();
+})();
+</script>
+</body>
+</html>

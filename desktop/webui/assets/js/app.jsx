@@ -8,7 +8,7 @@ const THEME_KEYS = ["white", "paper", "mist", "apricot"];
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, collapsed }) => (
+const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, collapsed, onSwitcher, switcherOpen }) => (
   <aside className="side">
     {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
       <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
@@ -23,9 +23,11 @@ const Sidebar = ({ page, onPage, account, avatar, onLogs, onQuit, brandHidden, c
       <button type="button" className="nav-item" onClick={onLogs} aria-label="查看日志" title="查看日志"><Icon name="folder" /><span>查看日志</span></button>
       <button type="button" className="nav-item" onClick={onQuit} aria-label="退出应用" title="退出应用"><Icon name="power" /><span>退出应用</span></button>
     </nav>
-    <button type="button" className="sidebar-account" onClick={() => onPage("account")} title="账号管理">
+    <button type="button" className="sidebar-account" onClick={onSwitcher} title="切换账号"
+      aria-haspopup="menu" aria-expanded={Boolean(switcherOpen)}>
       <span className="sidebar-avatar">{avatar ? <img src={avatar} alt="" /> : Array.from(account.name || "?")[0]}</span>
-      <span className="sidebar-account-text"><strong>{account.name || (account.signed_in ? "等待验证" : "尚未登录")}</strong></span>
+      <span className="sidebar-account-text"><strong>{account.name || (account.signed_in ? "等待验证" : "尚未登录")}</strong>
+        <small>{account.subtitle || ""}</small></span>
     </button>
   </aside>
 );
@@ -125,6 +127,7 @@ function App() {
   const [accountAvatar, setAccountAvatar] = useState("");
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
+  const [switcher, setSwitcher] = useState(false);
   const latest = useRef(EMPTY_SNAPSHOT);
   const selectionInitialized = useRef(false);
   const alive = useRef(true);
@@ -211,22 +214,30 @@ function App() {
     };
   }, [receiveSnapshot, toast]);
 
+  const accounts = snap.accounts || [];
+  const activeId = snap.active_account_id || "";
+  const viewId = snap.view_account_id || "all";
+  const isAllView = viewId === "all" || !viewId;
+  // The top level stays the running account; a different account carries its
+  // own snapshot so stale data is never shown as live.
+  const viewed = (!isAllView && viewId !== activeId && snap.view) ? snap.view : snap;
+
   useEffect(() => {
-    const rows = snap.rows || [];
+    const rows = viewed.rows || [];
     if (!selectionInitialized.current && rows.length) {
       selectionInitialized.current = true;
       setSelectedId(rows[0].room);
     } else if (selectedId !== null && !rows.some((row) => row.room === selectedId)) setSelectedId(null);
-  }, [snap.rows, selectedId]);
+  }, [viewed.rows, selectedId]);
 
   useEffect(() => {
-    if (!connected || !snap.accountInfo?.signed_in) return;
+    if (!connected || !viewed.accountInfo?.signed_in) return;
     const now = Date.now();
-    for (const row of snap.rows || []) {
+    for (const row of viewed.rows || []) {
       if (!row.uid || images[row.uid] || avatarPending.current.has(row.uid)) continue;
       if (now < (avatarRetry.current[row.uid] || 0)) continue;
       avatarPending.current.add(row.uid);
-      call("avatar", row.uid).then((result) => {
+      call("avatar", row.uid, "", viewId === "all" ? "" : viewId).then((result) => {
         avatarPending.current.delete(row.uid);
         if (result?.ok && result.data_uri && alive.current) {
           delete avatarRetry.current[row.uid];
@@ -241,11 +252,11 @@ function App() {
         avatarRetry.current[row.uid] = Date.now() + 60000;
       });
     }
-  }, [snap.rows, connected, images]);
+  }, [viewed.rows, connected, images, viewId]);
 
-  const rooms = (snap.rows || []).map((row) => toRoom(row, snap));
+  const rooms = (viewed.rows || []).map((row) => toRoom(row, viewed));
   const selected = rooms.find((room) => room.room === selectedId);
-  const account = snap.accountInfo || EMPTY_SNAPSHOT.accountInfo;
+  const account = viewed.accountInfo || EMPTY_SNAPSHOT.accountInfo;
   const closing = Boolean(snap.closing);
 
   // The account avatar is resolved by Python from the signed-in profile; a
@@ -256,7 +267,7 @@ function App() {
     let live = true;
     let retry = 0;
     const load = () => {
-      call("account_avatar").then((result) => {
+      call("account_avatar", viewId === "all" ? "" : viewId).then((result) => {
         if (!live) return;
         if (result?.ok && result.data_uri) setAccountAvatar(result.data_uri);
         else if (result?.error) retry = window.setTimeout(load, 60000);
@@ -266,7 +277,7 @@ function App() {
     };
     load();
     return () => { live = false; window.clearTimeout(retry); };
-  }, [connected, account.signed_in, account.name, avatarVersion]);
+  }, [connected, account.signed_in, account.name, avatarVersion, viewId]);
 
   const invoke = async (method, args = [], success = "") => {
     try {
@@ -278,10 +289,10 @@ function App() {
     } catch { toast("无法完成操作，稍后重试", "error"); return { ok: false }; }
   };
 
-  const control = async (method, success = "") => {
+  const control = async (method, args = [], success = "") => {
     if (controlBusy || closing) return;
     setControlBusy(true);
-    try { await invoke(method, [], success); await refresh(); }
+    try { await invoke(method, args, success); await refresh(); }
     finally { if (alive.current) setControlBusy(false); }
   };
 
@@ -304,7 +315,7 @@ function App() {
     setSnap((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
     settingsQueue.current = settingsQueue.current.catch(() => {}).then(async () => {
       try {
-        await invoke("save_settings", [{ [key]: value }]);
+        await invoke("save_settings", [{ [key]: value }, viewId === "all" ? "" : viewId]);
         delete settingOverrides.current[key];
         await refresh();
       } finally {
@@ -320,16 +331,19 @@ function App() {
     call("qr_cancel").catch(() => {});
   };
 
-  const openQr = async () => {
+  const openQr = async (accountId = "") => {
     qrOpen.current = true;
     const request = ++qrRequest.current;
-    setMenu(null); setPage("account"); setQr({ state: "starting" });
+    setMenu(null); setPage("account"); setQr({ state: "starting", account_id: accountId });
     try {
-      const result = await call("qr_start");
+      const result = await call("qr_start", accountId || "");
       if (!alive.current || !qrOpen.current || request !== qrRequest.current) return;
-      setQr(result?.ok ? { ...result, state: "waiting" } : { state: "error", message: result?.error || "无法生成二维码，稍后重试" });
+      setQr(result?.ok ? { ...result, state: "waiting" }
+        : { state: "error", account_id: accountId, message: result?.error || "无法生成二维码，稍后重试" });
     } catch {
-      if (qrOpen.current && request === qrRequest.current) setQr({ state: "error", message: "无法连接登录服务，稍后重试" });
+      if (qrOpen.current && request === qrRequest.current) {
+        setQr({ state: "error", account_id: accountId, message: "无法连接登录服务，稍后重试" });
+      }
     }
   };
 
@@ -396,6 +410,16 @@ function App() {
     } finally { if (alive.current) setDialogBusy(false); }
   };
 
+  /* Changing the running account is explicit: the switcher only changes the
+     viewed account, so a second account never steals the running slot. */
+  const requestSwitch = (accountId) => {
+    const target = accounts.find((item) => item.id === accountId);
+    if (!target) return;
+    if (!target.signed_in || target.status === "needs_login") { openQr(accountId); return; }
+    if (target.status === "blocked") { setDialog({ type: "protection", account: target }); return; }
+    setDialog({ type: "switch", account: target });
+  };
+
   const confirmAction = async () => {
     if (dialogBusy) return;
     const kind = dialog?.type;
@@ -403,23 +427,33 @@ function App() {
     try {
       let result;
       if (kind === "remove") result = await invoke("remove_member", [dialog.room.room], `已移除 ${dialog.room.name}`);
-      else if (kind === "logout") { closeQr(); result = await invoke("logout", [], "已退出登录"); }
+      else if (kind === "logout") { closeQr(); result = await invoke("logout", [dialog.account?.id || ""], "已退出登录"); }
       else if (kind === "safety") result = await invoke("resume_safety");
       else if (kind === "quit") result = await invoke("quit");
+      else if (kind === "protection") result = { ok: true };
+      else if (kind === "switch") {
+        result = await invoke("switch_account", [dialog.account.id]);
+        if (result?.ok) { selectionInitialized.current = false; setSelectedId(null); }
+      }
+      else if (kind === "removeAccount") {
+        result = await invoke("remove_account", [dialog.account.id]);
+        if (result?.ok) { selectionInitialized.current = false; setSelectedId(null); }
+      }
       if (result?.ok) { setDialog(null); if (kind !== "quit") await refresh(); }
     } finally { if (alive.current) setDialogBusy(false); }
   };
 
   const recover = async () => {
-    const route = snap.recovery || {};
-    if (route.action === "login") openQr();
+    const route = viewed.recovery || {};
+    if (route.action === "login") openQr(viewId === "all" ? "" : viewId);
     else if (route.action === "resume") control("toggle_pause");
+    else if (route.action === "switch") { setPage("monitor"); }
     else if (route.action === "safety") {
-      if (snap.safety?.kind === "auth" || snap.safety?.kind === "credentials") openQr();
-      else if (snap.safety?.until > Date.now() / 1000) { setPage("account"); }
+      if (viewed.safety?.kind === "auth" || viewed.safety?.kind === "credentials") openQr(viewId === "all" ? "" : viewId);
+      else if (viewed.safety?.until > Date.now() / 1000) { setPage("account"); }
       else setDialog({ type: "safety" });
     } else if (route.action === "room") { setPage("monitor"); setSelectedId(route.room); }
-    else if (route.action === "logs") invoke("open_logs");
+    else if (route.action === "logs") invoke("open_logs", [viewId === "all" ? "" : viewId]);
     else if (route.action === "refresh") control("refresh");
     else control("check_now");
   };
@@ -431,18 +465,44 @@ function App() {
   const onContextMenu = (event, id) => {
     event.preventDefault(); select(id); setMenu({ room: id, x: event.clientX, y: event.clientY });
   };
+
+  const viewAccount = async (accountId) => {
+    setSwitcher(false);
+    if (accountId === "all") { await invoke("set_view_account", ["all"]); await refresh(); return; }
+    await invoke("set_view_account", [accountId]);
+    selectionInitialized.current = false;
+    setSelectedId(null);
+    await refresh();
+  };
+
   const dialogCopy = {
     remove: { title: "移除主播？", desc: `不再对「${dialog?.room?.name || ""}」执行挂机与每日任务。可随时重新添加。`, confirmLabel: "移除主播", danger: true },
-    logout: { title: "退出 B 站账号？", desc: "将停止当前账号的挂机任务，并清除本机登录凭证。当天进度与发送额度会保留。", confirmLabel: "退出登录" },
+    logout: { title: "退出这个账号的登录？", desc: "会停止此账号的挂机并删除本机登录凭证；关注列表、任务进度、额度与保护记录保留。其他账号不受影响。", confirmLabel: "退出登录", danger: true },
     safety: { title: "恢复账号操作？", desc: "先在 B 站完成验证并确认限制已解除。恢复后会重新检查账号，当天发送额度不会重置。", confirmLabel: "确认并恢复" },
-    quit: { title: "退出 ビリ推し？", desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。", confirmLabel: "退出应用" }
+    quit: { title: "退出 ビリ推し？", desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。", confirmLabel: "退出应用", danger: true },
+    switch: { title: "切换挂机账号？", desc: "连接会短暂中断；任务进度与今日额度保留，不需要重新扫码。", confirmLabel: "切换并挂机" },
+    removeAccount: { title: "移除这个账号？", desc: "会删除本机登录凭证并移出账号列表。关注列表、任务进度、额度与保护记录会保留，重新添加同一账号后可继续使用。", confirmLabel: "移除账号", danger: true },
+    protection: { title: "账号保护暂停", desc: "收到验证或异常拒绝，账号操作已暂停。重新扫码不会解除，需要先在平台处理。", confirmLabel: "知道了" }
+  };
+
+  const sidebarAccount = {
+    ...account,
+    subtitle: isAllView
+      ? (snap.global_paused ? "挂机：全局暂停中" : accounts.filter((item) => item.running).length
+        ? `挂机：${accounts.filter((item) => item.running).map((item) => item.name).join("、")}`
+        : "挂机：无")
+      : (viewed.inactive ? "此账号未运行" : "当前挂机")
   };
 
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
-      <Sidebar page={page} onPage={setPage} account={account} avatar={accountAvatar}
-        onLogs={() => invoke("open_logs")}
-        onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} />
+      <Sidebar page={page} onPage={setPage} account={sidebarAccount} avatar={accountAvatar}
+        onLogs={() => invoke("open_logs", [viewId === "all" ? "" : viewId])}
+        onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed}
+        onSwitcher={() => setSwitcher((value) => !value)} switcherOpen={switcher} />
+      <window.AccountSwitcher open={switcher} accounts={accounts} viewId={viewId} activeId={activeId}
+        onSelect={viewAccount} onManage={() => { setSwitcher(false); setPage("account"); }}
+        onAdd={() => { setSwitcher(false); openQr(""); }} onClose={() => setSwitcher(false)} />
       <main className="main" aria-busy={!connected}>
         <header className="chrome pywebview-drag-region">
           <SidebarToggle collapsed={collapsed} onToggle={toggleSidebar} />
@@ -452,37 +512,75 @@ function App() {
           <h1 className="chrome-title">{pageTitles[page]}</h1>
           <span className="spacer" />
           <div className="chrome-actions">
-            {page === "monitor" && <window.OverviewActions paused={snap.paused} onTogglePause={() => control("toggle_pause")}
-              onCheck={() => control("check_now")} checking={snap.checking}
-              controlBusy={controlBusy} closing={closing} />}
+            {page === "monitor" && !isAllView && <window.OverviewActions paused={viewed.paused}
+              onTogglePause={() => control("toggle_pause")}
+              onCheck={() => control("check_now")} checking={viewed.checking}
+              controlBusy={controlBusy} closing={closing} inactive={Boolean(viewed.inactive)} />}
+            {page === "monitor" && isAllView && accounts.length > 0 && <>
+              <button type="button" className="btn" onClick={() => control("check_now")} disabled={controlBusy || closing}>
+                <Icon name="refresh" size={13} />全部检查</button>
+              {snap.global_paused
+                ? <button type="button" className="btn primary" onClick={() => control("set_global_paused", [false])} disabled={controlBusy || closing}>
+                  <Icon name="play" size={13} />恢复全部</button>
+                : <button type="button" className="btn" onClick={() => control("set_global_paused", [true])} disabled={controlBusy || closing}>
+                  <Icon name="pause" size={13} />全部暂停</button>}
+            </>}
           </div>
           <WindowButtons key={page} />
         </header>
-        <div className="page">
-        {page === "monitor" && <window.Overview rooms={rooms} selectedId={selectedId} onSelect={select}
-          paused={snap.paused}
+        {page === "monitor" && <window.AccountTabs accounts={accounts} viewId={viewId} activeId={activeId}
+          onView={viewAccount} onAdd={() => openQr("")} />}
+        <div className="page" id="monitor-body">
+        {page === "monitor" && isAllView && <window.AccountDashboard accounts={accounts}
+          globalPaused={Boolean(snap.global_paused)} onView={viewAccount} onSwitch={requestSwitch}
+          onCheckAll={() => control("check_now")} onPauseAll={() => control("set_global_paused", [true])}
+          onResumeAll={() => control("set_global_paused", [false])}
+          onRelogin={(id) => openQr(id)} onProtection={(id) => setDialog({ type: "protection", account: accounts.find((item) => item.id === id) })}
+          busy={controlBusy || closing} />}
+        {page === "monitor" && !isAllView && <window.Overview rooms={rooms} selectedId={selectedId} onSelect={select}
+          paused={viewed.paused}
           onAction={roomAction} onOpen={(id) => invoke("open_room", [id])} onAddMember={openAdd} onSyncMedals={openMedals}
           onRemove={remove} onContextMenu={onContextMenu} busyRoom={busyRoom} controlBusy={controlBusy}
-          error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
-          interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
-          images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected} />}
-        {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
-          pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme} />}
-        {page === "account" && <window.AccountPage account={account} avatar={accountAvatar} onScan={openQr}
-          onLogout={() => setDialog({ type: "logout" })} onResumeSafety={() => setDialog({ type: "safety" })}
-          onCheck={() => control("check_now")} busy={controlBusy || closing} version={snap.version} />}
+          error={viewed.error || viewed.ui_error} recovery={viewed.recovery} onRecovery={recover}
+          interval={viewed.settings?.check_minutes || 5} lastCheck={viewed.last_check} checking={viewed.checking}
+          images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected}
+          accountName={accounts.find((item) => item.id === viewId)?.name || ""}
+          inactive={Boolean(viewed.inactive)}
+          onSwitch={() => requestSwitch(viewId)} />}
+        {page === "automation" && <window.SettingsPage settings={viewed.settings || DEFAULT_SETTINGS} onSetting={setSetting}
+          pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme}
+          scope={accounts.find((item) => item.id === viewId) || null} scopeAll={isAllView} />}
+        {page === "account" && <window.AccountPage accounts={accounts} activeId={activeId} viewId={viewId}
+          account={account} avatar={accountAvatar} onScan={openQr}
+          onView={viewAccount} onSwitch={requestSwitch}
+          onLogout={(id) => setDialog({ type: "logout", account: accounts.find((item) => item.id === id) })}
+          onRemove={(id) => setDialog({ type: "removeAccount", account: accounts.find((item) => item.id === id) })}
+          onProtection={(id) => setDialog({ type: "protection", account: accounts.find((item) => item.id === id) })}
+          onResumeSafety={() => setDialog({ type: "safety" })}
+          onCheck={() => control("check_now")} busy={controlBusy || closing}
+          inactive={Boolean(viewed.inactive)} version={snap.version} />}
         </div>
       </main>
       <div className="toasts" aria-live="polite">{toasts.map((item) => <div key={item.id} className={`toast ${item.tone}`}>
         <Icon name={item.tone === "info" ? "check" : "alert"} size={14} /><span>{item.text}</span></div>)}</div>
-      {qr && <window.QrModal qr={qr} onClose={closeQr} onRetry={openQr} />}
+      {qr && <window.QrModal qr={qr} onClose={closeQr} onRetry={() => openQr(qr.account_id || "")} />}
       {dialog === "add" && <window.AddMemberModal query={query} onQuery={onQuery} result={searchResult} loading={searching}
         adding={dialogBusy} onSearch={search} onAdd={add} onClose={closeDialog} />}
       {dialog === "medals" && <window.MedalsModal data={medals.data} loading={medals.loading} error={medals.error}
         selected={medalSelection} onToggle={(uid) => setMedalSelection((current) => { const next = new Set(current);
           if (next.has(uid)) next.delete(uid); else next.add(uid); return next; })}
         onImport={importMedals} importing={dialogBusy} onClose={closeDialog} onRetry={openMedals} />}
-      {dialog?.type && <window.ConfirmModal {...dialogCopy[dialog.type]} onConfirm={confirmAction} onClose={closeDialog} busy={dialogBusy} />}
+      {dialog?.type && dialogCopy[dialog.type] && <window.ConfirmModal {...dialogCopy[dialog.type]}
+        body={dialog.type === "switch" || dialog.type === "logout" || dialog.type === "removeAccount"
+          ? <div className="account-preview">
+              <window.AccountAvatar account={dialog.account} size="lg" />
+              <div className="account-preview-main">
+                <strong>{dialog.account?.name}</strong>
+                <span>UID {dialog.account?.uid} · 关注 {dialog.account?.room_count} 位主播</span>
+              </div>
+            </div>
+          : null}
+        onConfirm={confirmAction} onClose={closeDialog} busy={dialogBusy} />}
       {menu && <window.RoomMenu menu={menu} room={rooms.find((room) => room.room === menu.room)} onClose={() => setMenu(null)}
         onOpen={(id) => invoke("open_room", [id])} onAction={roomAction} onRemove={remove} />}
     </div>

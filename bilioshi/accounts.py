@@ -8,6 +8,7 @@ This module is intentionally independent from ``desktop``; the desktop host and
 the bridge consume the plain dictionaries returned here.
 """
 
+import copy
 import json
 import logging
 import re
@@ -128,14 +129,21 @@ class AccountStore:
         data_dir = row.get("data_dir", _data_dir(account_id))
         if data_dir != _data_dir(account_id):
             raise AccountStoreError("账号目录越界")
+
+        def timestamp(key):
+            try:
+                return int(row.get(key) or 0)
+            except (TypeError, ValueError):
+                raise AccountStoreError("账号时间戳损坏") from None
+
         return {
             "id": account_id,
             "uid": uid,
             "name": name.strip() or f"账号 {uid}",
             "face": face,
-            "created_at": int(row.get("created_at") or 0),
-            "last_used_at": int(row.get("last_used_at") or 0),
-            "last_checked_at": int(row.get("last_checked_at") or 0),
+            "created_at": timestamp("created_at"),
+            "last_used_at": timestamp("last_used_at"),
+            "last_checked_at": timestamp("last_checked_at"),
             "status": status,
             "watch_enabled": bool(row.get("watch_enabled", False)),
             "credential_token": str(row.get("credential_token") or ""),
@@ -234,8 +242,14 @@ class AccountStore:
                 if self.path.exists():
                     raw = self._read_file(self.path)
                     if raw is None:
-                        raise AccountStoreError("账号注册表无法读取")
-                    state = self._clean_state(raw)
+                        # A damaged primary must not make the recovered backup
+                        # read-only; load() already prefers the valid backup.
+                        state = copy.deepcopy(self.load(force=True))
+                    else:
+                        try:
+                            state = self._clean_state(raw)
+                        except AccountStoreError:
+                            state = copy.deepcopy(self.load(force=True))
                 else:
                     state = self._empty()
                 state = self._clean_state(change(state))
@@ -352,7 +366,9 @@ class AccountStore:
                     row["name"] = str(name).strip() or row["name"]
                     row["face"] = str(face or row["face"])
                     row["last_used_at"] = now
-                    row["status"] = status
+                    # A public profile refresh must not clear a platform hold.
+                    if row["status"] != "blocked":
+                        row["status"] = status
                     row["credential_token"] = self.credential_token(account_id)
                     return state
             state["accounts"].append({
@@ -430,6 +446,19 @@ class AccountStore:
 
         def change(state):
             state["mode"] = mode
+            return state
+
+        self._mutate(change)
+
+    def set_active_view(self, account_id):
+        """Persist the running and viewed account in one registry write."""
+        account_id = _validate_account_id(account_id)
+        if not self.has(account_id):
+            raise UnknownAccount("未知账号")
+
+        def change(state):
+            state["active"] = account_id
+            state["view"] = account_id
             return state
 
         self._mutate(change)
@@ -515,16 +544,20 @@ class AccountStore:
                     key: val for key, val in value.items() if key != fingerprint
                 }, {})
         if self.has(account_id):
-            self.update(account_id, status="needs_login", credential_token="")
+            status = "blocked" if self.get(account_id)["status"] == "blocked" else "needs_login"
+            self.update(account_id, status=status, credential_token="")
 
     def mark_needs_login(self, account_id):
+        row = self.get(account_id)
         self.update(
             account_id,
-            status="needs_login",
+            status="blocked" if row["status"] == "blocked" else "needs_login",
             credential_token=self.credential_token(account_id),
         )
 
     def mark_ok(self, account_id):
+        if self.get(account_id)["status"] == "blocked":
+            return
         self.update(account_id, status="ok", credential_token=self.credential_token(account_id))
 
     # ---------- lifecycle ----------

@@ -128,10 +128,26 @@ class AccountStoreTests(unittest.TestCase):
         recovered = AccountStore(self.root)
         self.assertTrue(recovered.global_paused)
         self.assertEqual(len(recovered.accounts()), 1)
+        recovered.set_global_paused(False)
+        self.assertFalse(AccountStore(self.root).global_paused)
 
+        self.store.path.write_text("{not json", encoding="utf-8")
         self.store.backup_path.write_text("{also broken", encoding="utf-8")
         with self.assertRaises(AccountStoreError):
             AccountStore(self.root).load()
+
+    def test_corrupt_timestamp_uses_backup(self):
+        self.make_account()
+        self.store.set_global_paused(True)
+        self.store.set_global_paused(False)
+        state = json.loads(self.store.path.read_text())
+        state["accounts"][0]["created_at"] = "not-a-time"
+        self.store.path.write_text(json.dumps(state), encoding="utf-8")
+
+        recovered = AccountStore(self.root)
+
+        self.assertEqual(len(recovered.accounts()), 1)
+        self.assertEqual(recovered.accounts()[0]["id"], "uid-123")
 
 
 if __name__ == "__main__":

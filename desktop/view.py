@@ -5,6 +5,7 @@ from .interaction import action_reason, recovery_route
 from desktop.dispatch import Dispatcher
 import os
 import logging
+from pathlib import Path
 import queue
 import threading
 import time
@@ -26,8 +27,9 @@ from .dialogs import AddMemberDialog, SyncMedalsDialog
 
 class TrayUI:
 
-    def __init__(self, engine, show=False):
+    def __init__(self, engine, show=False, *, commands_root=None):
         self.engine = engine
+        self.commands_root = Path(commands_root) if commands_root is not None else engine.root
         self.commands = queue.Queue()
         self.rows_cache = {}
         self.room_actions = {}
@@ -314,7 +316,10 @@ class TrayUI:
                 self.tray.stop()
 
     def _read_commands(self):
-        for path in (self.engine.root / "commands").glob("*.json"):
+        commands_root = self.__dict__.get("commands_root") if hasattr(self, "__dict__") else None
+        if not isinstance(commands_root, (str, os.PathLike)):
+            commands_root = self.engine.root
+        for path in (Path(commands_root) / "commands").glob("*.json"):
             try:
                 request = read_json(path, {})
                 if not isinstance(request, dict):
@@ -391,7 +396,9 @@ class TrayUI:
                 if cmd == "exit":
                     from desktop.supervisor import request_stop
 
-                    request_stop(self.engine.root)
+                    commands_root = self.__dict__.get("commands_root") if hasattr(self, "__dict__") else None
+                    request_stop(Path(commands_root) if isinstance(commands_root, (str, os.PathLike))
+                                else self.engine.root)
                 self.closing = True
                 for panel in self.workbench.settings_pages.values():
                     panel.deactivate()

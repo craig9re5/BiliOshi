@@ -12,7 +12,7 @@ import threading
 import time
 from pathlib import Path
 
-from bilioshi.accounts import AccountStore, UnknownAccount
+from bilioshi.accounts import ALL_ACCOUNTS, AccountStore, UnknownAccount
 from bilioshi.members import load_account_members
 from bilioshi.runtime import FileLock, read_json, update_json
 from desktop.engine import Engine
@@ -72,10 +72,11 @@ class AccountHost:
             return
         engine = self._ensure_engine(account_id)
         engine.start()
-        if self.global_paused or row["status"] != "ok":
-            if self.global_paused and not engine.paused:
-                self._resume_ids = [account_id]
-            engine.suspend("global_paused" if self.global_paused else "account_unavailable")
+        if self.global_paused and not engine.paused:
+            self._resume_ids = [account_id]
+            engine.suspend("global_paused")
+        elif row["status"] != "ok":
+            engine.suspend("account_unavailable")
 
     def _start_health(self):
         self.health_thread = threading.Thread(
@@ -187,7 +188,7 @@ class AccountHost:
             return self.engines.get(account_id)
 
     def view(self, account_id):
-        if account_id is not None:
+        if account_id is not None and account_id != ALL_ACCOUNTS:
             self.store.get(account_id)
         self.store.set_view(account_id)
         self.view_id = account_id
@@ -228,10 +229,19 @@ class AccountHost:
                     except Exception:
                         logging.exception("Cannot roll back account %s", old_id)
                 raise
+            try:
+                self.store.set_active_view(account_id)
+            except Exception:
+                try:
+                    if target is not old_engine:
+                        target.suspend("switch_failed")
+                    if old_engine is not None and old_id != account_id:
+                        old_engine.activate()
+                except Exception:
+                    logging.exception("Cannot roll back a failed account switch")
+                raise
             self.active_id = account_id
             self.view_id = account_id
-            self.store.set_active(account_id)
-            self.store.set_view(account_id)
             target.check_now()
             return account_id
 
@@ -259,7 +269,10 @@ class AccountHost:
                         running.append(account_id)
                 self._resume_ids = running
                 engine = self.active_engine()
-                if engine is not None and not engine.suspended:
+                if engine is not None and not engine.suspended and not engine.paused:
+                    # An individually paused account was not running, so it
+                    # must stay active-and-paused rather than becoming a
+                    # suspended engine that no switch can revive.
                     engine.suspend("global_paused")
             self.global_paused = paused
             self.store.set_global_paused(paused)
@@ -267,7 +280,11 @@ class AccountHost:
                 resume = list(self._resume_ids)
                 self._resume_ids = []
                 for account_id in resume:
-                    row = self.store.get(account_id)
+                    try:
+                        row = self.store.get(account_id)
+                    except UnknownAccount:
+                        # The account was removed while globally paused.
+                        continue
                     if row["status"] != "ok" or not self.store.has_credentials(account_id):
                         continue
                     engine = self.engines.get(account_id)
@@ -315,10 +332,10 @@ class AccountHost:
             and row["status"] == "ok"
         )
         paused = bool(engine.paused) if engine is not None else bool(settings.get("paused"))
-        if row["status"] == "needs_login" or not self.store.has_credentials(account_id):
-            state = "needs_login"
-        elif row["status"] == "blocked":
+        if row["status"] == "blocked":
             state = "protection"
+        elif row["status"] == "needs_login" or not self.store.has_credentials(account_id):
+            state = "needs_login"
         elif self.global_paused:
             state = "global_paused"
         elif running:
@@ -332,14 +349,23 @@ class AccountHost:
             1 for item in rows
             if isinstance(item, dict) and item.get("live_status") == 1
         )
+        gain = None
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            value = item.get("intimacy_gain")
+            if isinstance(value, (int, float)):
+                gain = value if gain is None else gain + value
         return {
             **row,
             "signed_in": self.store.has_credentials(account_id),
             "running": running,
             "paused": paused,
+            "global_paused": self.global_paused,
             "state": state,
             "room_count": len(members),
             "live_room_count": live,
+            "gain": gain,
             "snapshot_at": status.get("updated", 0),
             "stale": bool(status.get("stale") or status.get("exited")),
             "safety": status.get("safety") or {"blocked": False},
@@ -364,15 +390,17 @@ class AccountHost:
                     engine.activate()
 
     def remove_account(self, account_id):
-        self.store.get(account_id)
-        was_active = self.active_id == account_id
-        self._close_engine(account_id)
-        if was_active:
-            self.active_id = None
-            self.store.set_active(None)
-        self.store.remove(account_id)
-        if self.view_id == account_id:
-            self.view_id = self.store.view_id
+        with self._switch_lock:
+            self.store.get(account_id)
+            was_active = self.active_id == account_id
+            self._close_engine(account_id)
+            self._resume_ids = [item for item in self._resume_ids if item != account_id]
+            if was_active:
+                self.active_id = None
+                self.store.set_active(None)
+            self.store.remove(account_id)
+            if self.view_id == account_id:
+                self.view_id = self.store.view_id
 
     # ---------- shutdown ----------
 

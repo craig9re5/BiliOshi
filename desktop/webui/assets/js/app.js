@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"8c4c25ab1537fe6dc399141c1de495be603c85140e577b7cc8e5b1c4c3d67976","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"d7c2c892207f01f6d14a001c77234cc033096619b294c1c12dad06e0d3f4ec8c"} */
+/* BiliOshi JSX {"code_sha256":"1d47aa20b6229eb92728e5c3a09c70a3b681137501521f47966b5ba8232a8663","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"36107caaf12be9a7d4d75a182486dd6683f88caf83bd744f54306756e83b38e9"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -50,7 +50,9 @@ const Sidebar = ({
   onLogs,
   onQuit,
   brandHidden,
-  collapsed
+  collapsed,
+  onSwitcher,
+  switcherOpen
 }) => /*#__PURE__*/React.createElement("aside", {
   className: "side"
 }, !brandHidden && /*#__PURE__*/React.createElement("div", {
@@ -100,8 +102,10 @@ const Sidebar = ({
 }), /*#__PURE__*/React.createElement("span", null, "\u9000\u51FA\u5E94\u7528"))), /*#__PURE__*/React.createElement("button", {
   type: "button",
   className: "sidebar-account",
-  onClick: () => onPage("account"),
-  title: "\u8D26\u53F7\u7BA1\u7406"
+  onClick: onSwitcher,
+  title: "\u5207\u6362\u8D26\u53F7",
+  "aria-haspopup": "menu",
+  "aria-expanded": Boolean(switcherOpen)
 }, /*#__PURE__*/React.createElement("span", {
   className: "sidebar-avatar"
 }, avatar ? /*#__PURE__*/React.createElement("img", {
@@ -109,7 +113,7 @@ const Sidebar = ({
   alt: ""
 }) : Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("span", {
   className: "sidebar-account-text"
-}, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")))));
+}, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")), /*#__PURE__*/React.createElement("small", null, account.subtitle || ""))));
 const pageTitles = {
   monitor: "直播总览",
   automation: "挂机设置",
@@ -311,6 +315,7 @@ function App() {
   const [accountAvatar, setAccountAvatar] = useState("");
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
+  const [switcher, setSwitcher] = useState(false);
   const latest = useRef(EMPTY_SNAPSHOT);
   const selectionInitialized = useRef(false);
   const alive = useRef(true);
@@ -419,21 +424,28 @@ function App() {
       toastTimers.current.forEach(timer => window.clearTimeout(timer));
     };
   }, [receiveSnapshot, toast]);
+  const accounts = snap.accounts || [];
+  const activeId = snap.active_account_id || "";
+  const viewId = snap.view_account_id || "all";
+  const isAllView = viewId === "all" || !viewId;
+  // The top level stays the running account; a different account carries its
+  // own snapshot so stale data is never shown as live.
+  const viewed = !isAllView && viewId !== activeId && snap.view ? snap.view : snap;
   useEffect(() => {
-    const rows = snap.rows || [];
+    const rows = viewed.rows || [];
     if (!selectionInitialized.current && rows.length) {
       selectionInitialized.current = true;
       setSelectedId(rows[0].room);
     } else if (selectedId !== null && !rows.some(row => row.room === selectedId)) setSelectedId(null);
-  }, [snap.rows, selectedId]);
+  }, [viewed.rows, selectedId]);
   useEffect(() => {
-    if (!connected || !snap.accountInfo?.signed_in) return;
+    if (!connected || !viewed.accountInfo?.signed_in) return;
     const now = Date.now();
-    for (const row of snap.rows || []) {
+    for (const row of viewed.rows || []) {
       if (!row.uid || images[row.uid] || avatarPending.current.has(row.uid)) continue;
       if (now < (avatarRetry.current[row.uid] || 0)) continue;
       avatarPending.current.add(row.uid);
-      call("avatar", row.uid).then(result => {
+      call("avatar", row.uid, "", viewId === "all" ? "" : viewId).then(result => {
         avatarPending.current.delete(row.uid);
         if (result?.ok && result.data_uri && alive.current) {
           delete avatarRetry.current[row.uid];
@@ -451,10 +463,10 @@ function App() {
         avatarRetry.current[row.uid] = Date.now() + 60000;
       });
     }
-  }, [snap.rows, connected, images]);
-  const rooms = (snap.rows || []).map(row => toRoom(row, snap));
+  }, [viewed.rows, connected, images, viewId]);
+  const rooms = (viewed.rows || []).map(row => toRoom(row, viewed));
   const selected = rooms.find(room => room.room === selectedId);
-  const account = snap.accountInfo || EMPTY_SNAPSHOT.accountInfo;
+  const account = viewed.accountInfo || EMPTY_SNAPSHOT.accountInfo;
   const closing = Boolean(snap.closing);
 
   // The account avatar is resolved by Python from the signed-in profile; a
@@ -468,7 +480,7 @@ function App() {
     let live = true;
     let retry = 0;
     const load = () => {
-      call("account_avatar").then(result => {
+      call("account_avatar", viewId === "all" ? "" : viewId).then(result => {
         if (!live) return;
         if (result?.ok && result.data_uri) setAccountAvatar(result.data_uri);else if (result?.error) retry = window.setTimeout(load, 60000);
       }).catch(() => {
@@ -480,7 +492,7 @@ function App() {
       live = false;
       window.clearTimeout(retry);
     };
-  }, [connected, account.signed_in, account.name, avatarVersion]);
+  }, [connected, account.signed_in, account.name, avatarVersion, viewId]);
   const invoke = async (method, args = [], success = "") => {
     try {
       const result = await call(method, ...args);
@@ -499,11 +511,11 @@ function App() {
       };
     }
   };
-  const control = async (method, success = "") => {
+  const control = async (method, args = [], success = "") => {
     if (controlBusy || closing) return;
     setControlBusy(true);
     try {
-      await invoke(method, [], success);
+      await invoke(method, args, success);
       await refresh();
     } finally {
       if (alive.current) setControlBusy(false);
@@ -539,7 +551,7 @@ function App() {
       try {
         await invoke("save_settings", [{
           [key]: value
-        }]);
+        }, viewId === "all" ? "" : viewId]);
         delete settingOverrides.current[key];
         await refresh();
       } finally {
@@ -557,29 +569,34 @@ function App() {
     setQr(null);
     call("qr_cancel").catch(() => {});
   };
-  const openQr = async () => {
+  const openQr = async (accountId = "") => {
     qrOpen.current = true;
     const request = ++qrRequest.current;
     setMenu(null);
     setPage("account");
     setQr({
-      state: "starting"
+      state: "starting",
+      account_id: accountId
     });
     try {
-      const result = await call("qr_start");
+      const result = await call("qr_start", accountId || "");
       if (!alive.current || !qrOpen.current || request !== qrRequest.current) return;
       setQr(result?.ok ? {
         ...result,
         state: "waiting"
       } : {
         state: "error",
+        account_id: accountId,
         message: result?.error || "无法生成二维码，稍后重试"
       });
     } catch {
-      if (qrOpen.current && request === qrRequest.current) setQr({
-        state: "error",
-        message: "无法连接登录服务，稍后重试"
-      });
+      if (qrOpen.current && request === qrRequest.current) {
+        setQr({
+          state: "error",
+          account_id: accountId,
+          message: "无法连接登录服务，稍后重试"
+        });
+      }
     }
   };
   const closeDialog = () => {
@@ -676,6 +693,28 @@ function App() {
       if (alive.current) setDialogBusy(false);
     }
   };
+
+  /* Changing the running account is explicit: the switcher only changes the
+     viewed account, so a second account never steals the running slot. */
+  const requestSwitch = accountId => {
+    const target = accounts.find(item => item.id === accountId);
+    if (!target) return;
+    if (!target.signed_in || target.status === "needs_login") {
+      openQr(accountId);
+      return;
+    }
+    if (target.status === "blocked") {
+      setDialog({
+        type: "protection",
+        account: target
+      });
+      return;
+    }
+    setDialog({
+      type: "switch",
+      account: target
+    });
+  };
   const confirmAction = async () => {
     if (dialogBusy) return;
     const kind = dialog?.type;
@@ -684,8 +723,22 @@ function App() {
       let result;
       if (kind === "remove") result = await invoke("remove_member", [dialog.room.room], `已移除 ${dialog.room.name}`);else if (kind === "logout") {
         closeQr();
-        result = await invoke("logout", [], "已退出登录");
-      } else if (kind === "safety") result = await invoke("resume_safety");else if (kind === "quit") result = await invoke("quit");
+        result = await invoke("logout", [dialog.account?.id || ""], "已退出登录");
+      } else if (kind === "safety") result = await invoke("resume_safety");else if (kind === "quit") result = await invoke("quit");else if (kind === "protection") result = {
+        ok: true
+      };else if (kind === "switch") {
+        result = await invoke("switch_account", [dialog.account.id]);
+        if (result?.ok) {
+          selectionInitialized.current = false;
+          setSelectedId(null);
+        }
+      } else if (kind === "removeAccount") {
+        result = await invoke("remove_account", [dialog.account.id]);
+        if (result?.ok) {
+          selectionInitialized.current = false;
+          setSelectedId(null);
+        }
+      }
       if (result?.ok) {
         setDialog(null);
         if (kind !== "quit") await refresh();
@@ -695,9 +748,11 @@ function App() {
     }
   };
   const recover = async () => {
-    const route = snap.recovery || {};
-    if (route.action === "login") openQr();else if (route.action === "resume") control("toggle_pause");else if (route.action === "safety") {
-      if (snap.safety?.kind === "auth" || snap.safety?.kind === "credentials") openQr();else if (snap.safety?.until > Date.now() / 1000) {
+    const route = viewed.recovery || {};
+    if (route.action === "login") openQr(viewId === "all" ? "" : viewId);else if (route.action === "resume") control("toggle_pause");else if (route.action === "switch") {
+      setPage("monitor");
+    } else if (route.action === "safety") {
+      if (viewed.safety?.kind === "auth" || viewed.safety?.kind === "credentials") openQr(viewId === "all" ? "" : viewId);else if (viewed.safety?.until > Date.now() / 1000) {
         setPage("account");
       } else setDialog({
         type: "safety"
@@ -705,7 +760,7 @@ function App() {
     } else if (route.action === "room") {
       setPage("monitor");
       setSelectedId(route.room);
-    } else if (route.action === "logs") invoke("open_logs");else if (route.action === "refresh") control("refresh");else control("check_now");
+    } else if (route.action === "logs") invoke("open_logs", [viewId === "all" ? "" : viewId]);else if (route.action === "refresh") control("refresh");else control("check_now");
   };
   handlers.current = {
     openQr,
@@ -733,6 +788,18 @@ function App() {
       y: event.clientY
     });
   };
+  const viewAccount = async accountId => {
+    setSwitcher(false);
+    if (accountId === "all") {
+      await invoke("set_view_account", ["all"]);
+      await refresh();
+      return;
+    }
+    await invoke("set_view_account", [accountId]);
+    selectionInitialized.current = false;
+    setSelectedId(null);
+    await refresh();
+  };
   const dialogCopy = {
     remove: {
       title: "移除主播？",
@@ -741,9 +808,10 @@ function App() {
       danger: true
     },
     logout: {
-      title: "退出 B 站账号？",
-      desc: "将停止当前账号的挂机任务，并清除本机登录凭证。当天进度与发送额度会保留。",
-      confirmLabel: "退出登录"
+      title: "退出这个账号的登录？",
+      desc: "会停止此账号的挂机并删除本机登录凭证；关注列表、任务进度、额度与保护记录保留。其他账号不受影响。",
+      confirmLabel: "退出登录",
+      danger: true
     },
     safety: {
       title: "恢复账号操作？",
@@ -753,22 +821,60 @@ function App() {
     quit: {
       title: "退出 ビリ推し？",
       desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。",
-      confirmLabel: "退出应用"
+      confirmLabel: "退出应用",
+      danger: true
+    },
+    switch: {
+      title: "切换挂机账号？",
+      desc: "连接会短暂中断；任务进度与今日额度保留，不需要重新扫码。",
+      confirmLabel: "切换并挂机"
+    },
+    removeAccount: {
+      title: "移除这个账号？",
+      desc: "会删除本机登录凭证并移出账号列表。关注列表、任务进度、额度与保护记录会保留，重新添加同一账号后可继续使用。",
+      confirmLabel: "移除账号",
+      danger: true
+    },
+    protection: {
+      title: "账号保护暂停",
+      desc: "收到验证或异常拒绝，账号操作已暂停。重新扫码不会解除，需要先在平台处理。",
+      confirmLabel: "知道了"
     }
+  };
+  const sidebarAccount = {
+    ...account,
+    subtitle: isAllView ? snap.global_paused ? "挂机：全局暂停中" : accounts.filter(item => item.running).length ? `挂机：${accounts.filter(item => item.running).map(item => item.name).join("、")}` : "挂机：无" : viewed.inactive ? "此账号未运行" : "当前挂机"
   };
   return /*#__PURE__*/React.createElement("div", {
     className: `app ${collapsed ? "side-collapsed" : ""}`
   }, /*#__PURE__*/React.createElement(Sidebar, {
     page: page,
     onPage: setPage,
-    account: account,
+    account: sidebarAccount,
     avatar: accountAvatar,
-    onLogs: () => invoke("open_logs"),
+    onLogs: () => invoke("open_logs", [viewId === "all" ? "" : viewId]),
     onQuit: () => setDialog({
       type: "quit"
     }),
     brandHidden: true,
-    collapsed: collapsed
+    collapsed: collapsed,
+    onSwitcher: () => setSwitcher(value => !value),
+    switcherOpen: switcher
+  }), /*#__PURE__*/React.createElement(window.AccountSwitcher, {
+    open: switcher,
+    accounts: accounts,
+    viewId: viewId,
+    activeId: activeId,
+    onSelect: viewAccount,
+    onManage: () => {
+      setSwitcher(false);
+      setPage("account");
+    },
+    onAdd: () => {
+      setSwitcher(false);
+      openQr("");
+    },
+    onClose: () => setSwitcher(false)
   }), /*#__PURE__*/React.createElement("main", {
     className: "main",
     "aria-busy": !connected
@@ -794,22 +900,68 @@ function App() {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("div", {
     className: "chrome-actions"
-  }, page === "monitor" && /*#__PURE__*/React.createElement(window.OverviewActions, {
-    paused: snap.paused,
+  }, page === "monitor" && !isAllView && /*#__PURE__*/React.createElement(window.OverviewActions, {
+    paused: viewed.paused,
     onTogglePause: () => control("toggle_pause"),
     onCheck: () => control("check_now"),
-    checking: snap.checking,
+    checking: viewed.checking,
     controlBusy: controlBusy,
-    closing: closing
-  })), /*#__PURE__*/React.createElement(WindowButtons, {
+    closing: closing,
+    inactive: Boolean(viewed.inactive)
+  }), page === "monitor" && isAllView && accounts.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn",
+    onClick: () => control("check_now"),
+    disabled: controlBusy || closing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "refresh",
+    size: 13
+  }), "\u5168\u90E8\u68C0\u67E5"), snap.global_paused ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn primary",
+    onClick: () => control("set_global_paused", [false]),
+    disabled: controlBusy || closing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "play",
+    size: 13
+  }), "\u6062\u590D\u5168\u90E8") : /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn",
+    onClick: () => control("set_global_paused", [true]),
+    disabled: controlBusy || closing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "pause",
+    size: 13
+  }), "\u5168\u90E8\u6682\u505C"))), /*#__PURE__*/React.createElement(WindowButtons, {
     key: page
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "page"
-  }, page === "monitor" && /*#__PURE__*/React.createElement(window.Overview, {
+  })), page === "monitor" && /*#__PURE__*/React.createElement(window.AccountTabs, {
+    accounts: accounts,
+    viewId: viewId,
+    activeId: activeId,
+    onView: viewAccount,
+    onAdd: () => openQr("")
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "page",
+    id: "monitor-body"
+  }, page === "monitor" && isAllView && /*#__PURE__*/React.createElement(window.AccountDashboard, {
+    accounts: accounts,
+    globalPaused: Boolean(snap.global_paused),
+    onView: viewAccount,
+    onSwitch: requestSwitch,
+    onCheckAll: () => control("check_now"),
+    onPauseAll: () => control("set_global_paused", [true]),
+    onResumeAll: () => control("set_global_paused", [false]),
+    onRelogin: id => openQr(id),
+    onProtection: id => setDialog({
+      type: "protection",
+      account: accounts.find(item => item.id === id)
+    }),
+    busy: controlBusy || closing
+  }), page === "monitor" && !isAllView && /*#__PURE__*/React.createElement(window.Overview, {
     rooms: rooms,
     selectedId: selectedId,
     onSelect: select,
-    paused: snap.paused,
+    paused: viewed.paused,
     onAction: roomAction,
     onOpen: id => invoke("open_room", [id]),
     onAddMember: openAdd,
@@ -818,34 +970,54 @@ function App() {
     onContextMenu: onContextMenu,
     busyRoom: busyRoom,
     controlBusy: controlBusy,
-    error: snap.error || snap.ui_error,
-    recovery: snap.recovery,
+    error: viewed.error || viewed.ui_error,
+    recovery: viewed.recovery,
     onRecovery: recover,
-    interval: snap.settings?.check_minutes || 5,
-    lastCheck: snap.last_check,
-    checking: snap.checking,
+    interval: viewed.settings?.check_minutes || 5,
+    lastCheck: viewed.last_check,
+    checking: viewed.checking,
     images: images,
     signedIn: account.signed_in,
     closing: closing,
-    bridgeConnected: connected
+    bridgeConnected: connected,
+    accountName: accounts.find(item => item.id === viewId)?.name || "",
+    inactive: Boolean(viewed.inactive),
+    onSwitch: () => requestSwitch(viewId)
   }), page === "automation" && /*#__PURE__*/React.createElement(window.SettingsPage, {
-    settings: snap.settings || DEFAULT_SETTINGS,
+    settings: viewed.settings || DEFAULT_SETTINGS,
     onSetting: setSetting,
     pendingSettings: pendingSettings,
     theme: theme,
-    onTheme: chooseTheme
+    onTheme: chooseTheme,
+    scope: accounts.find(item => item.id === viewId) || null,
+    scopeAll: isAllView
   }), page === "account" && /*#__PURE__*/React.createElement(window.AccountPage, {
+    accounts: accounts,
+    activeId: activeId,
+    viewId: viewId,
     account: account,
     avatar: accountAvatar,
     onScan: openQr,
-    onLogout: () => setDialog({
-      type: "logout"
+    onView: viewAccount,
+    onSwitch: requestSwitch,
+    onLogout: id => setDialog({
+      type: "logout",
+      account: accounts.find(item => item.id === id)
+    }),
+    onRemove: id => setDialog({
+      type: "removeAccount",
+      account: accounts.find(item => item.id === id)
+    }),
+    onProtection: id => setDialog({
+      type: "protection",
+      account: accounts.find(item => item.id === id)
     }),
     onResumeSafety: () => setDialog({
       type: "safety"
     }),
     onCheck: () => control("check_now"),
     busy: controlBusy || closing,
+    inactive: Boolean(viewed.inactive),
     version: snap.version
   }))), /*#__PURE__*/React.createElement("div", {
     className: "toasts",
@@ -859,7 +1031,7 @@ function App() {
   }), /*#__PURE__*/React.createElement("span", null, item.text)))), qr && /*#__PURE__*/React.createElement(window.QrModal, {
     qr: qr,
     onClose: closeQr,
-    onRetry: openQr
+    onRetry: () => openQr(qr.account_id || "")
   }), dialog === "add" && /*#__PURE__*/React.createElement(window.AddMemberModal, {
     query: query,
     onQuery: onQuery,
@@ -883,7 +1055,15 @@ function App() {
     importing: dialogBusy,
     onClose: closeDialog,
     onRetry: openMedals
-  }), dialog?.type && /*#__PURE__*/React.createElement(window.ConfirmModal, _extends({}, dialogCopy[dialog.type], {
+  }), dialog?.type && dialogCopy[dialog.type] && /*#__PURE__*/React.createElement(window.ConfirmModal, _extends({}, dialogCopy[dialog.type], {
+    body: dialog.type === "switch" || dialog.type === "logout" || dialog.type === "removeAccount" ? /*#__PURE__*/React.createElement("div", {
+      className: "account-preview"
+    }, /*#__PURE__*/React.createElement(window.AccountAvatar, {
+      account: dialog.account,
+      size: "lg"
+    }), /*#__PURE__*/React.createElement("div", {
+      className: "account-preview-main"
+    }, /*#__PURE__*/React.createElement("strong", null, dialog.account?.name), /*#__PURE__*/React.createElement("span", null, "UID ", dialog.account?.uid, " \xB7 \u5173\u6CE8 ", dialog.account?.room_count, " \u4F4D\u4E3B\u64AD"))) : null,
     onConfirm: confirmAction,
     onClose: closeDialog,
     busy: dialogBusy

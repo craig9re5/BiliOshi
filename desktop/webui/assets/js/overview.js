@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"98e22e65e429ab52e0b83981b52dec89ed259aa3a83d7d4fd05eaa546aaaad8b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"6265a55563f3d186e73b05e8f024495444e112efeadf385f9303cf989c39766a"} */
+/* BiliOshi JSX {"code_sha256":"c6e1a5ed5e7afe1e238ea8d155be28e68ae74a42febbcfcd02cb726257c8785e","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"c97ad1f76e644c6607db3cc70b1176eccb1fe5858faef8c23b843b335e1362a2"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -223,12 +223,13 @@ const OverviewActions = ({
   onCheck,
   checking,
   controlBusy,
-  closing
+  closing,
+  inactive
 }) => /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
   type: "button",
   className: "btn",
   onClick: onCheck,
-  disabled: checking || controlBusy || closing
+  disabled: checking || controlBusy || closing || inactive
 }, /*#__PURE__*/React.createElement(Icon, {
   name: "refresh",
   size: 13,
@@ -237,7 +238,7 @@ const OverviewActions = ({
   type: "button",
   className: `btn ${paused ? "primary" : ""}`,
   onClick: onTogglePause,
-  disabled: controlBusy || closing
+  disabled: controlBusy || closing || inactive
 }, /*#__PURE__*/React.createElement(Icon, {
   name: paused ? "play" : "pause",
   size: 13
@@ -264,16 +265,30 @@ const Overview = ({
   images,
   signedIn,
   closing,
-  bridgeConnected
+  bridgeConnected,
+  accountName,
+  inactive,
+  onSwitch
 }) => {
   const selected = rooms.find(room => room.room === selectedId);
   const healthy = rooms.filter(room => room.healthy).length;
   const unknown = rooms.filter(room => room.live_status == null).length;
-  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : paused ? "已暂停挂机" : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
+  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : inactive ? "此账号未运行" : paused ? "已暂停挂机" : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.
   const cadence = `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
-  return /*#__PURE__*/React.createElement(React.Fragment, null, (error || recovery?.action === "login") && /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement(React.Fragment, null, inactive && /*#__PURE__*/React.createElement("div", {
+    className: "banner neutral",
+    role: "status"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "info",
+    size: 14
+  }), /*#__PURE__*/React.createElement("span", null, "\u300C", accountName || "此账号", "\u300D\u5F53\u524D\u672A\u6302\u673A\uFF0C\u663E\u793A\u7684\u662F\u4E0A\u6B21\u8FD0\u884C\u7684\u6570\u636E\u3002\u5207\u6362\u540E\u624D\u4F1A\u5F00\u59CB\u68C0\u67E5\u3002"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onSwitch,
+    disabled: closing
+  }, "\u5207\u6362\u5E76\u6302\u673A")), (error || recovery?.action === "login") && !inactive && /*#__PURE__*/React.createElement("div", {
     className: "banner",
     role: "status"
   }, /*#__PURE__*/React.createElement(Icon, {
@@ -294,13 +309,15 @@ const Overview = ({
     className: "list-title"
   }, "\u5173\u6CE8\u7684\u76F4\u64AD\u95F4"), /*#__PURE__*/React.createElement("span", {
     className: "list-count"
-  }, rooms.length), /*#__PURE__*/React.createElement("span", {
+  }, rooms.length), accountName && /*#__PURE__*/React.createElement("span", {
+    className: "list-context"
+  }, accountName), /*#__PURE__*/React.createElement("span", {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn ghost sm",
     onClick: onAddMember,
-    disabled: closing
+    disabled: closing || inactive
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "plus",
     size: 12
@@ -308,7 +325,7 @@ const Overview = ({
     type: "button",
     className: "btn ghost sm",
     onClick: onSyncMedals,
-    disabled: closing
+    disabled: closing || inactive
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "medal",
     size: 12
@@ -331,7 +348,8 @@ const Overview = ({
   }), /*#__PURE__*/React.createElement("strong", null, "\u8FD8\u6CA1\u6709\u5173\u6CE8\u4E3B\u64AD"), /*#__PURE__*/React.createElement("span", null, "\u6DFB\u52A0\u4E3B\u64AD\u6216\u540C\u6B65\u5DF2\u6709\u7C89\u4E1D\u724C\uFF0C\u5F00\u64AD\u540E\u81EA\u52A8\u5F00\u59CB"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn",
-    onClick: onAddMember
+    onClick: onAddMember,
+    disabled: inactive
   }, "\u6DFB\u52A0\u4E3B\u64AD")))), /*#__PURE__*/React.createElement(DetailPanel, {
     room: selected,
     busy: busyRoom === selected?.room,

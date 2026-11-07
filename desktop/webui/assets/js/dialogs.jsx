@@ -43,9 +43,12 @@ const QrModal = ({ qr, onClose, onRetry }) => {
     starting: "正在生成二维码…", waiting: "等待扫码", scanned: "已扫码，在手机上确认登录",
     confirmed: "登录已确认", expired: "二维码已过期，刷新后重新扫描", error: qr.message || "无法连接登录服务，稍后重试"
   };
+  const relogin = Boolean(qr.account_id);
   return (
-    <Modal title={qr.state === "confirmed" ? "已登录" : "扫码登录 B 站"}
-      desc={qr.state === "confirmed" ? qr.account : "使用 B 站 App 扫码，并在手机上确认"} onClose={onClose}
+    <Modal title={qr.state === "confirmed" ? "已登录" : relogin ? "重新登录这个账号" : "扫码登录 B 站"}
+      desc={qr.state === "confirmed" ? qr.account
+        : relogin ? "只会更新这个账号的登录凭证，其他账号继续运行；以后切换账号不用重新扫码。"
+          : "使用 B 站 App 扫码，并在手机上确认"} onClose={onClose}
       actions={<>
         <button type="button" className="btn" onClick={onClose}>{qr.state === "confirmed" ? "完成" : "取消"}</button>
         {qr.state !== "confirmed" && <button type="button" className="btn primary" onClick={onRetry} disabled={qr.state === "starting"}>
@@ -102,12 +105,14 @@ const MedalsModal = ({ data, selected, onToggle, onImport, onClose, loading, imp
   </Modal>
 );
 
-const ConfirmModal = ({ title, desc, confirmLabel, danger, onConfirm, onClose, busy }) => (
+const ConfirmModal = ({ title, desc, confirmLabel, danger, onConfirm, onClose, busy, body }) => (
   <Modal title={title} desc={desc} onClose={onClose} actions={<>
     <button type="button" className="btn" onClick={onClose} disabled={busy}>取消</button>
     <button type="button" className={`btn ${danger ? "danger" : "primary"}`} onClick={onConfirm} disabled={busy}>
       {busy ? "正在处理…" : confirmLabel}</button>
-  </>} />
+  </>}>
+    {body}
+  </Modal>
 );
 
 const RoomMenu = ({ menu, room, onClose, onOpen, onAction, onRemove }) => {

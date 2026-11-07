@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"94050bd50ad68351b359d3209650e6b7ba076035b5440f78fe030fec9699097f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"bridge.jsx","source_sha256":"f854fd91c07a286e44a7ecebd1477420e9b74585e6501ef3af05e59252a3797b"} */
+/* BiliOshi JSX {"code_sha256":"78de1f55fcb5bdb17d85a0c348c51106236eada246637f7f273d75cdebdfddb7","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"bridge.jsx","source_sha256":"ddc440f0039f304f59d4fb29eb3e613a77c55c9b250e8bdc28f0ddbf3ccf75b1"} */
 (function () {
 "use strict";
 /* Transport and presentation adapters. Business decisions stay in Python. */
@@ -66,8 +66,11 @@ function colorFor(room) {
 function toRoom(row, snap) {
   const paused = Boolean(snap.paused);
   const protectedAccount = Boolean(snap.safety?.blocked);
-  const live = row.live_status === 1;
-  const healthy = Boolean(row.heartbeat_healthy && !paused && !protectedAccount);
+  // A viewed account that is not running shows its last known state; it must
+  // never look like a live connection.
+  const inactive = Boolean(row.inactive || snap.inactive);
+  const live = !inactive && row.live_status === 1;
+  const healthy = Boolean(row.heartbeat_healthy && !paused && !protectedAccount && !inactive);
   const tasks = [{
     key: "danmaku",
     name: "弹幕",
@@ -90,7 +93,7 @@ function toRoom(row, snap) {
   });
   let state = "未开播",
     tone = "muted";
-  if (paused) state = "已暂停";else if (protectedAccount) {
+  if (inactive) state = "上次直播中";else if (paused) state = "已暂停";else if (protectedAccount) {
     state = "保护暂停";
     tone = "warn";
   } else if (row.reconnecting) state = "正在重连";else if (row.heartbeat_stale || row.connection_warning) {
@@ -126,7 +129,8 @@ function toRoom(row, snap) {
     },
     operation: row.operation || {},
     paused,
-    protectedAccount
+    protectedAccount,
+    inactive
   };
 }
 Object.assign(window, {

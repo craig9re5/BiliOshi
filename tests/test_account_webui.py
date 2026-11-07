@@ -4,9 +4,10 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from bilioshi.accounts import AccountStore
+from bilioshi.qr_login import PollResult
 from bilioshi.runtime import save_login
 from bilioshi.secret_store import FORMAT
 from desktop.host import AccountHost
@@ -171,6 +172,46 @@ class AccountWebUiTests(unittest.TestCase):
         self.assertEqual(self.store.view_id, "uid-3")
         self.assertEqual(len(self.store.accounts()), 3)
         self.assertTrue(self.store.has_credentials("uid-3"))
+
+    def test_qr_start_add_account_accepts_empty_target(self):
+        session = Mock()
+        session.generate.return_value = "https://example.invalid/qr"
+        session.poll.return_value = PollResult("waiting")
+        with patch("bilioshi.qr_login.QrLoginSession", return_value=session), \
+                patch("desktop.webui.api._qr_data_uri", return_value="data:image/png;base64,AA"):
+            result = self.api.qr_start("")
+            self.api.qr_cancel()
+
+        self.assertTrue(result["ok"])
+        self.assertIsNone(result["account_id"])
+
+    def test_inactive_view_blocks_active_account_operations(self):
+        self.api.set_view_account("uid-2")
+        with patch.object(FakeEngine, "check_now") as check:
+            self.assertFalse(self.api.add_member("99")["ok"])
+            self.assertFalse(self.api.check_now()["ok"])
+            self.assertFalse(self.api.set_paused(True)["ok"])
+            check.assert_not_called()
+        self.assertFalse(self.host.engine_for("uid-1").paused)
+
+    def test_all_accounts_view_can_check_the_running_account(self):
+        self.api.set_view_account("all")
+        with patch.object(FakeEngine, "check_now") as check:
+            result = self.api.check_now()
+
+        self.assertTrue(result["ok"])
+        check.assert_called_once()
+
+    def test_logout_preserves_platform_protection_status(self):
+        self.store.update("uid-2", status="blocked")
+
+        self.assertTrue(self.api.logout("uid-2")["ok"])
+        self.assertEqual(self.store.get("uid-2")["status"], "blocked")
+
+        self.api._complete_login(
+            2, "账号2", {"uid": 2, "face": ""},
+            {"SESSDATA": "sess-2b", "bili_jct": "csrf-2b"}, None, "uid-2")
+        self.assertEqual(self.store.get("uid-2")["status"], "blocked")
 
     def test_logout_only_affects_target_account(self):
         result = self.api.logout("uid-2")

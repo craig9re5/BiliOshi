@@ -98,6 +98,18 @@ class WebHost:
             return
         engine.notify_callback = lambda name, title: self._commands.put(("notify", name, title))
 
+    def _sync_engine(self):
+        """Follow the host's active Engine after a switch or startup."""
+        if self._host is None:
+            return
+        engine = self._host.active_engine()
+        if engine is self._engine:
+            return
+        if self._engine is not None:
+            self._engine.notify_callback = None
+        self._engine = engine
+        self._bind_notify()
+
     def _on_loaded(self):
         # loaded/shown can fire before React has created window.LS. The pump
         # checks the actual handlers; ready() also verifies them before pushing.
@@ -321,6 +333,7 @@ class WebHost:
         next_snapshot = 0.0
         while not self._stop.is_set():
             try:
+                self._sync_engine()
                 self._read_commands()
                 if not self._ready.is_set():
                     self.renderer_ready()

@@ -64,8 +64,11 @@ function colorFor(room) {
 function toRoom(row, snap) {
   const paused = Boolean(snap.paused);
   const protectedAccount = Boolean(snap.safety?.blocked);
-  const live = row.live_status === 1;
-  const healthy = Boolean(row.heartbeat_healthy && !paused && !protectedAccount);
+  // A viewed account that is not running shows its last known state; it must
+  // never look like a live connection.
+  const inactive = Boolean(row.inactive || snap.inactive);
+  const live = !inactive && row.live_status === 1;
+  const healthy = Boolean(row.heartbeat_healthy && !paused && !protectedAccount && !inactive);
   const tasks = [
     { key: "danmaku", name: "弹幕", ...taskPair(row, ["弹幕"]) },
     { key: "like", name: "点赞", ...taskPair(row, ["点赞"]) },
@@ -75,7 +78,8 @@ function toRoom(row, snap) {
   tasks.push({ key: "light", name: "粉丝牌", done: lightKnown && row.is_lighted === 1,
     text: lightKnown ? row.is_lighted === 1 ? "已点亮" : "未点亮" : "待更新" });
   let state = "未开播", tone = "muted";
-  if (paused) state = "已暂停";
+  if (inactive) state = "上次直播中";
+  else if (paused) state = "已暂停";
   else if (protectedAccount) { state = "保护暂停"; tone = "warn"; }
   else if (row.reconnecting) state = "正在重连";
   else if (row.heartbeat_stale || row.connection_warning) { state = "连接异常"; tone = "warn"; }
@@ -94,7 +98,7 @@ function toRoom(row, snap) {
     color: colorFor(row.room),
     actions: row.actions || { open: "", redo: fallback, reconnect: fallback, wear: fallback },
     operation: row.operation || {},
-    paused, protectedAccount
+    paused, protectedAccount, inactive
   };
 }
 

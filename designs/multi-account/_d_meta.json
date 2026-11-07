@@ -1,0 +1,23 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "多账号交互设计稿": {
+      "versions": [
+        {
+          "path": "Multi-Account.html",
+          "createdAt": "2026-11-05T16:57:34.004Z",
+          "status": "needs-review",
+          "subtitle": "账号切换 · 每账号总览 · 全局暂停 · 同时挂机",
+          "viewport": {
+            "width": 1180,
+            "height": 760
+          }
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-11-05T16:57:34.010Z",
+  "updatedAt": "2026-11-05T17:41:23.760Z"
+}

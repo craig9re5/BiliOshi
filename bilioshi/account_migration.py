@@ -55,17 +55,19 @@ def _cached_uid(credentials, legacy_root):
     """Recover the UID without a network call when the old state already knows it."""
     if not isinstance(credentials, dict):
         return 0
+    # The QR context belongs to the current SESSDATA; a stale top-level
+    # DedeUserID can survive a re-login and must not win over it.
+    context = credentials.get("qr_login_context")
+    cookies = context.get("cookies") if isinstance(context, dict) else None
+    value = cookies.get("DedeUserID") if isinstance(cookies, dict) else None
+    if isinstance(value, str) and value.isascii() and value.isdigit() and int(value) > 0:
+        return int(value)
     for key in ("DedeUserID", "dedeuserid", "uid", "mid"):
         value = credentials.get(key)
         if isinstance(value, str) and value.isascii() and value.isdigit():
             return int(value)
         if type(value) is int and value > 0:
             return value
-    context = credentials.get("qr_login_context")
-    cookies = context.get("cookies") if isinstance(context, dict) else None
-    value = cookies.get("DedeUserID") if isinstance(cookies, dict) else None
-    if isinstance(value, str) and value.isascii() and value.isdigit() and int(value) > 0:
-        return int(value)
 
     candidates = set()
     try:
@@ -238,6 +240,27 @@ def ensure_account_store(root, *, validator=None):
         if not store.marker_path.exists():
             _write_marker(store, store.active_id)
         return MigrationResult(store=store, migrated=False, legacy_mode=False)
+
+    # A missing registry after migration must not replay stale legacy data over
+    # live account roots. Recover the last valid backup when one exists.
+    if store.marker_path.exists() or store.backup_path.exists():
+        backup = store._read_file(store.backup_path)
+        if backup is not None:
+            try:
+                state = store._clean_state(backup)
+            except Exception:
+                state = None
+            if state is not None:
+                store.save(state)
+                _write_marker(store, store.active_id)
+                return MigrationResult(
+                    store=store, migrated=False, legacy_mode=False,
+                    reason="已从备份恢复账号注册表",
+                )
+        return MigrationResult(
+            store=store, migrated=False, legacy_mode=True,
+            reason="账号注册表丢失且没有可用备份，请从备份恢复",
+        )
 
     credentials_path = root / "credentials.json"
     if not credentials_path.exists():

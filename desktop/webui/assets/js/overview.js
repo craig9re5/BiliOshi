@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"86fe44f4b4c19781039862fca8b54b7766bbd891969e8cf79475344307f8a56f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"7581386172c8f06be775218770c79994fb8c6f6ea1dade279a70335649cec53f"} */
+/* BiliOshi JSX {"code_sha256":"2fe9c78091aaa39b23099864b2e86bd88b26d0c2581f2fa5ab1770a32c77d593","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"a3df2db3a113ae05ab4710a00fdc111d36e842ea728820052ea3e80bde2aa5ce"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -28,17 +28,26 @@ const RoomRow = ({
   selected,
   onSelect,
   onContextMenu,
-  image
+  image,
+  managing,
+  checked,
+  onToggleCheck
 }) => /*#__PURE__*/React.createElement("button", {
   type: "button",
-  className: "room",
+  className: `room ${managing ? "managing" : ""} ${checked ? "batch-checked" : ""}`,
   role: "option",
-  "aria-selected": selected,
+  "aria-selected": managing ? checked : selected,
   "data-room": room.room,
-  onClick: () => onSelect(room.room),
-  onDoubleClick: () => window.call("open_room", room.room).catch(() => {}),
-  onContextMenu: event => onContextMenu(event, room.room)
-}, /*#__PURE__*/React.createElement(Avatar, {
+  onClick: () => managing ? onToggleCheck(room.room) : onSelect(room.room),
+  onDoubleClick: () => !managing && window.call("open_room", room.room).catch(() => {}),
+  onContextMenu: event => !managing && onContextMenu(event, room.room)
+}, managing && /*#__PURE__*/React.createElement("span", {
+  className: `room-check ${checked ? "checked" : ""}`,
+  "aria-hidden": "true"
+}, /*#__PURE__*/React.createElement(Icon, {
+  name: checked ? "check" : "circle",
+  size: 11
+})), /*#__PURE__*/React.createElement(Avatar, {
   room: room,
   image: image
 }), /*#__PURE__*/React.createElement("span", {
@@ -265,8 +274,29 @@ const Overview = ({
   signedIn,
   closing,
   bridgeConnected,
-  accountName
+  accountName,
+  onBatchRemove
 }) => {
+  const [managing, setManaging] = React.useState(false);
+  const [selectedBatch, setSelectedBatch] = React.useState(new Set());
+  const allChecked = rooms.length > 0 && rooms.every(r => selectedBatch.has(r.room));
+  const toggleAll = () => {
+    if (allChecked) setSelectedBatch(new Set());else setSelectedBatch(new Set(rooms.map(r => r.room)));
+  };
+  const toggleCheck = roomId => {
+    setSelectedBatch(current => {
+      const next = new Set(current);
+      if (next.has(roomId)) next.delete(roomId);else next.add(roomId);
+      return next;
+    });
+  };
+  const handleBatchRemove = () => {
+    if (selectedBatch.size === 0 || typeof onBatchRemove !== "function") return;
+    const targetRooms = rooms.filter(r => selectedBatch.has(r.room));
+    onBatchRemove(targetRooms);
+    setManaging(false);
+    setSelectedBatch(new Set());
+  };
   const selected = rooms.find(room => room.room === selectedId);
   const healthy = rooms.filter(room => room.healthy).length;
   const unknown = rooms.filter(room => room.live_status == null).length;
@@ -289,7 +319,7 @@ const Overview = ({
   }, /*#__PURE__*/React.createElement("section", {
     className: "list card",
     "aria-label": "\u5173\u6CE8\u7684\u76F4\u64AD\u95F4"
-  }, /*#__PURE__*/React.createElement("header", {
+  }, !managing ? /*#__PURE__*/React.createElement("header", {
     className: "list-head"
   }, /*#__PURE__*/React.createElement("span", {
     className: "list-title"
@@ -310,12 +340,39 @@ const Overview = ({
   }), "\u6DFB\u52A0\u4E3B\u64AD"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn ghost sm",
-    onClick: onSyncMedals,
-    disabled: closing
+    onClick: () => setManaging(true),
+    disabled: closing || !rooms.length
+  }, "\u6279\u91CF\u7BA1\u7406")) : /*#__PURE__*/React.createElement("header", {
+    className: "list-head managing-head"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "batch-all-btn",
+    onClick: toggleAll,
+    "aria-label": "\u5168\u9009"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: `room-check ${allChecked ? "checked" : ""}`,
+    "aria-hidden": "true"
   }, /*#__PURE__*/React.createElement(Icon, {
-    name: "medal",
+    name: allChecked ? "check" : "circle",
+    size: 11
+  })), /*#__PURE__*/React.createElement("span", null, "\u5168\u9009 (", selectedBatch.size, "/", rooms.length, ")")), /*#__PURE__*/React.createElement("span", {
+    className: "spacer"
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn danger sm",
+    disabled: selectedBatch.size === 0 || closing,
+    onClick: handleBatchRemove
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "trash",
     size: 12
-  }), "\u540C\u6B65\u7C89\u4E1D\u724C")), /*#__PURE__*/React.createElement("div", {
+  }), "\u6279\u91CF\u79FB\u9664 ", selectedBatch.size ? `(${selectedBatch.size})` : ""), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn ghost sm",
+    onClick: () => {
+      setManaging(false);
+      setSelectedBatch(new Set());
+    }
+  }, "\u5B8C\u6210")), /*#__PURE__*/React.createElement("div", {
     className: "rooms",
     role: "listbox",
     "aria-label": "\u76F4\u64AD\u95F4\u5217\u8868"
@@ -325,7 +382,10 @@ const Overview = ({
     selected: room.room === selectedId,
     image: images[room.uid],
     onSelect: onSelect,
-    onContextMenu: onContextMenu
+    onContextMenu: onContextMenu,
+    managing: managing,
+    checked: selectedBatch.has(room.room),
+    onToggleCheck: toggleCheck
   })) : /*#__PURE__*/React.createElement("div", {
     className: "empty list-empty"
   }, /*#__PURE__*/React.createElement(Icon, {

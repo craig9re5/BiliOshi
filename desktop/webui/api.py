@@ -49,7 +49,7 @@ _PENDING_MESSAGES = {
 }
 # These operations always touch the active Engine. A view of another account
 # must stay read-only rather than silently mutating the running account.
-_ACTIVE_VIEW_ONLY = {"add", "import", "resolve", "medals", "check", "pause", "safety"}
+_ACTIVE_VIEW_ONLY = {"add", "import", "resolve", "medals", "check", "pause", "safety", "remove"}
 
 
 def _public(value):
@@ -848,6 +848,32 @@ class Api:
             return {"ok": True}
 
         return self._room_action(room, "remove", remove)
+
+    def remove_members(self, rooms):
+        if not isinstance(rooms, (list, tuple, set)):
+            return {"ok": False, "error": "请选择要移除的主播。"}
+        clean = []
+        for r in rooms:
+            try:
+                clean.append(_positive_id(r))
+            except Exception:
+                pass
+        if not clean:
+            return {"ok": False, "error": "没有有效的主播房间号。"}
+
+        def remove_all():
+            removed = 0
+            for room in clean:
+                try:
+                    self._engine.application.remove_member(room)
+                    removed += 1
+                except Exception:
+                    logging.exception("Removing member failed: %s", room)
+            self._ui.apply_settings()
+            self._engine.check_now()
+            return {"ok": True, "count": removed}
+
+        return self._run(remove_all, kind="remove")
 
     def open_room(self, room):
         try:

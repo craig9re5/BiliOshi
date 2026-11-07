@@ -8,11 +8,15 @@ const Avatar = ({ room, image }) => (
   </span>
 );
 
-const RoomRow = ({ room, selected, onSelect, onContextMenu, image }) => (
-  <button type="button" className="room" role="option" aria-selected={selected}
-    data-room={room.room} onClick={() => onSelect(room.room)}
-    onDoubleClick={() => window.call("open_room", room.room).catch(() => {})}
-    onContextMenu={(event) => onContextMenu(event, room.room)}>
+const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, checked, onToggleCheck }) => (
+  <button type="button" className={`room ${managing ? "managing" : ""} ${checked ? "batch-checked" : ""}`} role="option"
+    aria-selected={managing ? checked : selected}
+    data-room={room.room} onClick={() => (managing ? onToggleCheck(room.room) : onSelect(room.room))}
+    onDoubleClick={() => !managing && window.call("open_room", room.room).catch(() => {})}
+    onContextMenu={(event) => !managing && onContextMenu(event, room.room)}>
+    {managing && <span className={`room-check ${checked ? "checked" : ""}`} aria-hidden="true">
+      <Icon name={checked ? "check" : "circle"} size={11} />
+    </span>}
     <Avatar room={room} image={image} />
     <span className="room-main">
       <span className="room-name">
@@ -147,7 +151,31 @@ const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy
 const Overview = ({ rooms, selectedId, onSelect, paused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, busyRoom, controlBusy,
   error, recovery, onRecovery, interval, lastCheck, checking, images, signedIn, closing, bridgeConnected,
-  accountName }) => {
+  accountName, onBatchRemove }) => {
+  const [managing, setManaging] = React.useState(false);
+  const [selectedBatch, setSelectedBatch] = React.useState(new Set());
+
+  const allChecked = rooms.length > 0 && rooms.every((r) => selectedBatch.has(r.room));
+  const toggleAll = () => {
+    if (allChecked) setSelectedBatch(new Set());
+    else setSelectedBatch(new Set(rooms.map((r) => r.room)));
+  };
+  const toggleCheck = (roomId) => {
+    setSelectedBatch((current) => {
+      const next = new Set(current);
+      if (next.has(roomId)) next.delete(roomId);
+      else next.add(roomId);
+      return next;
+    });
+  };
+  const handleBatchRemove = () => {
+    if (selectedBatch.size === 0 || typeof onBatchRemove !== "function") return;
+    const targetRooms = rooms.filter((r) => selectedBatch.has(r.room));
+    onBatchRemove(targetRooms);
+    setManaging(false);
+    setSelectedBatch(new Set());
+  };
+
   const selected = rooms.find((room) => room.room === selectedId);
   const healthy = rooms.filter((room) => room.healthy).length;
   const unknown = rooms.filter((room) => room.live_status == null).length;
@@ -166,17 +194,36 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
     </div>}
     <div className="workspace">
       <section className="list card" aria-label="关注的直播间">
-        <header className="list-head"><span className="list-title">关注的直播间</span><span className="list-count">{rooms.length}</span>
-          {accountName && <span className="list-context">{accountName}</span>}
-          <span className="spacer" />
-          <button type="button" className="btn ghost sm" onClick={onAddMember} disabled={closing}>
-            <Icon name="plus" size={12} />添加主播</button>
-          <button type="button" className="btn ghost sm" onClick={onSyncMedals} disabled={closing}>
-            <Icon name="medal" size={12} />同步粉丝牌</button>
-        </header>
+        {!managing ? (
+          <header className="list-head">
+            <span className="list-title">关注的直播间</span><span className="list-count">{rooms.length}</span>
+            {accountName && <span className="list-context">{accountName}</span>}
+            <span className="spacer" />
+            <button type="button" className="btn ghost sm" onClick={onAddMember} disabled={closing}>
+              <Icon name="plus" size={12} />添加主播</button>
+            <button type="button" className="btn ghost sm" onClick={() => setManaging(true)} disabled={closing || !rooms.length}>
+              批量管理</button>
+          </header>
+        ) : (
+          <header className="list-head managing-head">
+            <button type="button" className="batch-all-btn" onClick={toggleAll} aria-label="全选">
+              <span className={`room-check ${allChecked ? "checked" : ""}`} aria-hidden="true">
+                <Icon name={allChecked ? "check" : "circle"} size={11} />
+              </span>
+              <span>全选 ({selectedBatch.size}/{rooms.length})</span>
+            </button>
+            <span className="spacer" />
+            <button type="button" className="btn danger sm" disabled={selectedBatch.size === 0 || closing}
+              onClick={handleBatchRemove}>
+              <Icon name="trash" size={12} />批量移除 {selectedBatch.size ? `(${selectedBatch.size})` : ""}</button>
+            <button type="button" className="btn ghost sm" onClick={() => { setManaging(false); setSelectedBatch(new Set()); }}>
+              完成</button>
+          </header>
+        )}
         <div className="rooms" role="listbox" aria-label="直播间列表">
           {rooms.length ? rooms.map((room) => <RoomRow key={room.room} room={room} selected={room.room === selectedId}
-            image={images[room.uid]} onSelect={onSelect} onContextMenu={onContextMenu} />)
+            image={images[room.uid]} onSelect={onSelect} onContextMenu={onContextMenu}
+            managing={managing} checked={selectedBatch.has(room.room)} onToggleCheck={toggleCheck} />)
             : <div className="empty list-empty"><Icon name="monitor" size={24} /><strong>还没有关注主播</strong>
               <span>添加主播或同步已有粉丝牌，开播后自动开始</span>
               <button type="button" className="btn" onClick={onAddMember}>添加主播</button></div>}

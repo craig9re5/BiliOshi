@@ -156,10 +156,8 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
   }
 
   const recordedRooms = rooms.filter((room) =>
-    (room.recorded_days || 0) > 0 || (cellAt(room, todayIndex).recorded && cellAt(room, todayIndex).value > 0)
+    room.tracked && ((room.recorded_total || 0) > 0 || (cellAt(room, todayIndex).value || 0) > 0)
   );
-  const tracked = recordedRooms.filter((room) => room.tracked);
-  const untracked = recordedRooms.filter((room) => !room.tracked);
   const compareRooms = (left, right) => {
     const a = cellAt(left, todayIndex);
     const b = cellAt(right, todayIndex);
@@ -168,8 +166,7 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
     if (!b.recorded) return -1;
     return b.value - a.value;
   };
-  const trackedRows = tracked.slice().sort(compareRooms);
-  const untrackedRows = untracked.slice().sort(compareRooms);
+  const trackedRows = recordedRooms.slice().sort(compareRooms);
 
   let maxMini = 1;
   for (const room of recordedRooms) {
@@ -268,20 +265,7 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
     );
   };
 
-  const rowNodes = [];
-  const firstMissing = trackedRows.findIndex((room) => !cellAt(room, todayIndex).recorded);
-  trackedRows.forEach((room, index) => {
-    if (firstMissing > 0 && index === firstMissing) {
-      rowNodes.push(
-        <div className="growth-group" key="missing-today">今日未记录 · {trackedRows.length - firstMissing} 间</div>);
-    }
-    rowNodes.push(roomRow(room));
-  });
-  if (untrackedRows.length) {
-    rowNodes.push(
-      <div className="growth-group" key="removed">已移除 · {untrackedRows.length} 间</div>);
-    untrackedRows.forEach((room) => rowNodes.push(roomRow(room)));
-  }
+  const rowNodes = trackedRows.map((room) => roomRow(room));
 
   return (
     <div className="growth-page">

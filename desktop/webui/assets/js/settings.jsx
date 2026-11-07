@@ -115,7 +115,7 @@ const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", o
   return (<>
     <div className="settings" data-screen-label="设置"><div className="settings-inner">
       <section className="group card">
-        <header className="group-head">每日任务<small>开播后，按 B 站的任务进度自动完成</small></header>
+        <header className="group-head">每日任务</header>
         <SettingRow name="点亮粉丝牌" desc="粉丝牌熄灭时发送弹幕，点亮后停止">
           <Switch label="点亮粉丝牌" checked={settings.auto_revive} disabled={disabled("auto_revive")}
             onChange={(value) => onSetting("auto_revive", value)} />
@@ -165,22 +165,12 @@ const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogo
   const state = window.accountStateLabel(account);
   const needsLogin = !account.signed_in || account.status === "needs_login";
   const protection = account.status === "blocked";
-  let action = null;
-  if (protection) {
-    action = <button type="button" className="btn sm" onClick={() => onProtection(account.id)}>查看原因</button>;
-  } else if (needsLogin) {
-    action = <button type="button" className="btn sm primary" onClick={() => onScan(account.id)}>
-      <Icon name="qr" size={12} />重新扫码</button>;
-  } else if (isActive) {
-    action = <button type="button" className="btn sm" onClick={() => onView(account.id)}>查看总览</button>;
-  } else {
-    action = <button type="button" className="btn sm primary" onClick={() => onSwitch(account.id)}>
-      <Icon name="play" size={12} />切换账号</button>;
-  }
-  const note = protection ? (account.safety?.reason || "账号操作已暂停，重新扫码不会解除")
-    : needsLogin ? "登录已失效，其他账号不受影响"
-      : isActive ? (account.paused ? "已暂停挂机，关注与今日额度已保留" : "当前使用中 · 上次检查 " + relativeTime(account.snapshot_at))
-        : "点击切换账号后即可使用此账号挂机";
+  const issueText = protection
+    ? (account.safety?.reason || "账号操作已暂停，需在平台处理")
+    : needsLogin
+      ? "登录已失效，请重新扫码"
+      : null;
+
   return (
     <div className={`account-item ${isActive ? "current" : ""}`}>
       <window.AccountAvatar account={account} size="lg" image={image} />
@@ -192,17 +182,34 @@ const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogo
           {needsLogin && <span className="mini-tag warn">需要重新扫码</span>}
           {protection && <span className="mini-tag warn">需在平台处理</span>}
         </div>
-        <div className="account-item-meta">UID {account.uid} · 关注 {account.room_count} · {account.live_room_count || 0} 个直播 · 今日 {account.gain === null || account.gain === undefined ? "—" : "+" + numberLabel(account.gain)}</div>
-        <div className={`account-item-sub ${needsLogin || protection ? "warn" : ""}`}>{note}</div>
+        <div className="account-item-meta">UID {account.uid}</div>
+        {issueText && <div className="account-item-sub warn">{issueText}</div>}
       </div>
       <div className="account-item-actions">
-        {action}
-        <button type="button" className="btn ghost sm icon-only" onClick={() => onLogout(account.id)}
+        {protection && (
+          <button type="button" className="btn sm" onClick={() => onProtection(account.id)}>
+            查看原因
+          </button>
+        )}
+        {needsLogin && (
+          <button type="button" className="btn sm primary" onClick={() => onScan(account.id)}>
+            <Icon name="qr" size={12} />重新扫码
+          </button>
+        )}
+        {!isActive && !needsLogin && !protection && (
+          <button type="button" className="btn sm primary" onClick={() => onSwitch(account.id)} disabled={busy}>
+            <Icon name="play" size={12} />切换账号
+          </button>
+        )}
+        <button type="button" className="btn ghost sm" onClick={() => onLogout(account.id)}
           disabled={busy || needsLogin} title="退出此账号登录" aria-label={`退出 ${account.name} 的登录`}>
-          <Icon name="power" size={13} /></button>
-        <button type="button" className="btn ghost sm icon-only" onClick={() => onRemove(account.id)}
+          <Icon name="power" size={13} />
+          <span>退出登录</span>
+        </button>
+        <button type="button" className="btn ghost sm danger" onClick={() => onRemove(account.id)}
           disabled={busy} title="移除账号" aria-label={`移除 ${account.name}`}>
-          <Icon name="more" size={15} /></button>
+          <span>移除</span>
+        </button>
       </div>
     </div>
   );
@@ -217,34 +224,43 @@ const AccountPage = ({ accounts, activeId, account, avatar, onScan, onView, onSw
   const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "检查状态";
   return (<>
     <div className="settings" data-screen-label="账号"><div className="settings-inner">
+      {hold.blocked && (
+        <section className="group card card-warn">
+          <header className="group-head">账号异常保护</header>
+          <div className="account-alert-body">
+            <div className="account-alert-icon">
+              <Icon name="shield" size={18} />
+            </div>
+            <div className="account-alert-main">
+              <strong>操作已暂停</strong>
+              <p>{hold.reason || "账号出现异常，已暂停互动操作"}</p>
+              {cooldown && <small>最早恢复时间：{absoluteTime(hold.until)}</small>}
+            </div>
+            {action && (
+              <button type="button" className="btn sm primary" onClick={() => action?.()} disabled={busy}>
+                <Icon name={needsLogin ? "qr" : "shield"} size={13} />{actionLabel}
+              </button>
+            )}
+          </div>
+        </section>
+      )}
       <section className="group card">
-        <header className="group-head with-action">
-          <div>B 站账号<small>每个账号独立保存登录凭证、关注列表和任务进度</small></div>
+        <header className="group-head group-head-action">
+          <span className="group-head-title">B 站账号</span>
           <button type="button" className="btn primary sm" onClick={() => onScan("")} disabled={busy}>
-            <Icon name="plus" size={13} />添加账号</button>
+            <Icon name="plus" size={13} />添加账号
+          </button>
         </header>
         {accounts.length ? accounts.map((item) => <AccountRow key={item.id} account={item}
           isActive={item.id === activeId}
           image={item.id === activeId ? avatar : undefined}
           onView={onView} onSwitch={onSwitch} onScan={onScan} onLogout={onLogout} onRemove={onRemove} onProtection={onProtection}
           busy={busy} />)
-          : <div className="empty list-empty"><Icon name="user" size={24} />
+          : <div className="empty list-empty"><Icon name="user" size={28} />
             <strong>尚未添加 B 站账号</strong>
-            <span>扫码添加账号后，可以在这里管理登录状态与挂机策略。</span>
             <button type="button" className="btn primary sm" onClick={() => onScan("")}>
               <Icon name="qr" size={12} />扫码添加账号</button></div>}
       </section>
-      <section className="group card">
-        <header className="group-head">账号保护</header>
-        <SettingRow name={hold.blocked ? "操作已暂停" : account.signed_in ? "未触发保护" : "等待登录"}
-          desc={hold.blocked ? hold.reason || "账号出现异常，已暂停互动操作" : "遇到账号异常或请求结果不确定时，自动暂停互动"}>
-          <button type="button" className="btn sm" onClick={() => action?.()} disabled={!action || busy}>
-            <Icon name={needsLogin ? "qr" : "shield"} size={13} />{actionLabel}
-          </button>
-        </SettingRow>
-        {cooldown && <p className="settings-note inside">最早恢复时间：{absoluteTime(hold.until)}。冷却结束后会自动检查。</p>}
-      </section>
-      <p className="settings-note">ビリ推し {version || ""} · 关闭窗口后继续在托盘运行 · 切换账号无需重新扫码</p>
     </div></div>
   </>);
 };

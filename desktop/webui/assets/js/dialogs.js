@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"038489100cc9542af4c43b32018122c2ca9f37c4b690853a4fcf09a8e38077b0","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"abe6c8bf65b2523924ea5a3c37d12803d1da59cf47ba2b270251111950931669"} */
+/* BiliOshi JSX {"code_sha256":"f50dd996cdb8eb80cd749a8b836af630a273f1253e503a720f969324d35e1823","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"d8c9bff9d72735415909470160a8a5b3b45d64043b3d470f7fdfc996557e941e"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -119,7 +119,8 @@ const AddMemberModal = ({
   adding,
   onSearch,
   onAdd,
-  onClose
+  onClose,
+  onSyncMedals
 }) => /*#__PURE__*/React.createElement(Modal, {
   title: "\u6DFB\u52A0\u4E3B\u64AD",
   desc: "\u901A\u8FC7\u76F4\u64AD\u95F4\u53F7\u3001UID \u6216\u76F4\u64AD\u95F4\u94FE\u63A5\u67E5\u627E",
@@ -163,7 +164,23 @@ const AddMemberModal = ({
 }, "\u76F4\u64AD\u95F4 ", result.member.room, " \xB7 UID ", result.member.uid))), result && !result.ok && /*#__PURE__*/React.createElement("div", {
   className: "field-error",
   role: "alert"
-}, result.error));
+}, result.error), onSyncMedals && /*#__PURE__*/React.createElement("div", {
+  className: "field-note",
+  style: {
+    marginTop: "12px",
+    textAlign: "center"
+  }
+}, /*#__PURE__*/React.createElement("span", null, "\u60F3\u6279\u91CF\u5BFC\u5165\uFF1F"), /*#__PURE__*/React.createElement("button", {
+  type: "button",
+  className: "link-btn",
+  onClick: () => {
+    onClose();
+    onSyncMedals();
+  },
+  style: {
+    marginLeft: "6px"
+  }
+}, "\u4ECE B \u7AD9\u7C89\u4E1D\u724C\u540C\u6B65\u5BFC\u5165\u4E3B\u64AD \u2192")));
 const MedalsModal = ({
   data,
   selected,

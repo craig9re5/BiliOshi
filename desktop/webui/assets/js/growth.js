@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"24873860edc7ae7c48d71c4c42acc70ba3931df26a23643f2e6de9e12f19cbe2","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"5bd35d9b037a99733213503819ba5d58fb0e1f55470b764dc61fad6d396cf61b"} */
+/* BiliOshi JSX {"code_sha256":"70242ee56ab4054ad95637a912d40abee356fdd27610a13d0b2a1f66e6af920f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"b9026ab8646517aaf78f77db005e8319daf29186bccf4416a1602aa3ffda2aeb"} */
 (function () {
 "use strict";
 /* Growth page: daily fan-medal intimacy per room, from Api.growth.
@@ -181,9 +181,7 @@ function GrowthPage({
       if (index === todayIndex) todayLast = Math.max(todayLast, cell.last_at);
     });
   }
-  const recordedRooms = rooms.filter(room => (room.recorded_days || 0) > 0 || cellAt(room, todayIndex).recorded && cellAt(room, todayIndex).value > 0);
-  const tracked = recordedRooms.filter(room => room.tracked);
-  const untracked = recordedRooms.filter(room => !room.tracked);
+  const recordedRooms = rooms.filter(room => room.tracked && ((room.recorded_total || 0) > 0 || (cellAt(room, todayIndex).value || 0) > 0));
   const compareRooms = (left, right) => {
     const a = cellAt(left, todayIndex);
     const b = cellAt(right, todayIndex);
@@ -192,8 +190,7 @@ function GrowthPage({
     if (!b.recorded) return -1;
     return b.value - a.value;
   };
-  const trackedRows = tracked.slice().sort(compareRooms);
-  const untrackedRows = untracked.slice().sort(compareRooms);
+  const trackedRows = recordedRooms.slice().sort(compareRooms);
   let maxMini = 1;
   for (const room of recordedRooms) {
     for (const cell of room.cells) {
@@ -294,24 +291,7 @@ function GrowthPage({
       className: `growth-room-total${room.recorded_days ? "" : " missing"}`
     }, totalLabel));
   };
-  const rowNodes = [];
-  const firstMissing = trackedRows.findIndex(room => !cellAt(room, todayIndex).recorded);
-  trackedRows.forEach((room, index) => {
-    if (firstMissing > 0 && index === firstMissing) {
-      rowNodes.push(/*#__PURE__*/React.createElement("div", {
-        className: "growth-group",
-        key: "missing-today"
-      }, "\u4ECA\u65E5\u672A\u8BB0\u5F55 \xB7 ", trackedRows.length - firstMissing, " \u95F4"));
-    }
-    rowNodes.push(roomRow(room));
-  });
-  if (untrackedRows.length) {
-    rowNodes.push(/*#__PURE__*/React.createElement("div", {
-      className: "growth-group",
-      key: "removed"
-    }, "\u5DF2\u79FB\u9664 \xB7 ", untrackedRows.length, " \u95F4"));
-    untrackedRows.forEach(room => rowNodes.push(roomRow(room)));
-  }
+  const rowNodes = trackedRows.map(room => roomRow(room));
   return /*#__PURE__*/React.createElement("div", {
     className: "growth-page"
   }, /*#__PURE__*/React.createElement("div", {

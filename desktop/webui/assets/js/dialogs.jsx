@@ -64,7 +64,7 @@ const QrModal = ({ qr, onClose, onRetry }) => {
   );
 };
 
-const AddMemberModal = ({ query, onQuery, result, loading, adding, onSearch, onAdd, onClose }) => (
+const AddMemberModal = ({ query, onQuery, result, loading, adding, onSearch, onAdd, onClose, onSyncMedals }) => (
   <Modal title="添加主播" desc="通过直播间号、UID 或直播间链接查找" onClose={onClose}
     actions={<>
       <button type="button" className="btn" onClick={onClose}>取消</button>
@@ -80,6 +80,12 @@ const AddMemberModal = ({ query, onQuery, result, loading, adding, onSearch, onA
       <div><div className="account-name">{result.member.name}</div>
         <div className="account-meta">直播间 {result.member.room} · UID {result.member.uid}</div></div></div>}
     {result && !result.ok && <div className="field-error" role="alert">{result.error}</div>}
+    {onSyncMedals && <div className="field-note" style={{ marginTop: "12px", textAlign: "center" }}>
+      <span>想批量导入？</span>
+      <button type="button" className="link-btn" onClick={() => { onClose(); onSyncMedals(); }} style={{ marginLeft: "6px" }}>
+        从 B 站粉丝牌同步导入主播 →
+      </button>
+    </div>}
   </Modal>
 );
 

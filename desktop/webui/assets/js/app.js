@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"f70bcaa336d62f88ef3b1024095751e5c38baa4d8989d797760ef2a5a75a5366","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"1aa39f87a1af4126db167255a455a38da545d12e6c7cff901e9f9641a9abbc38"} */
+/* BiliOshi JSX {"code_sha256":"f1172270c22f08b8fa2c2037a2e7e0a5156e1788a1f9fb9fd6169dbd14ce4162","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"ffc19fc9fb6ca5a466a0350f43ba3ddd1996baa38c44d8610a8ff461d0f3c8f8"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -49,9 +49,7 @@ const Sidebar = ({
   avatar,
   onQuit,
   brandHidden,
-  collapsed,
-  onSwitcher,
-  switcherOpen
+  collapsed
 }) => /*#__PURE__*/React.createElement("aside", {
   className: "side"
 }, !brandHidden && /*#__PURE__*/React.createElement("div", {
@@ -93,10 +91,9 @@ const Sidebar = ({
 }), /*#__PURE__*/React.createElement("span", null, "\u9000\u51FA\u5E94\u7528"))), /*#__PURE__*/React.createElement("button", {
   type: "button",
   className: "sidebar-account",
-  onClick: onSwitcher,
-  title: "\u5207\u6362\u8D26\u53F7",
-  "aria-haspopup": "menu",
-  "aria-expanded": Boolean(switcherOpen)
+  onClick: () => onPage("account"),
+  title: "\u8D26\u53F7\u7BA1\u7406",
+  "aria-label": "\u8D26\u53F7\u7BA1\u7406"
 }, /*#__PURE__*/React.createElement("span", {
   className: "sidebar-avatar"
 }, avatar ? /*#__PURE__*/React.createElement("img", {
@@ -104,7 +101,7 @@ const Sidebar = ({
   alt: ""
 }) : Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("span", {
   className: "sidebar-account-text"
-}, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")), /*#__PURE__*/React.createElement("small", null, account.subtitle || ""))));
+}, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")))));
 const pageTitles = {
   monitor: "直播总览",
   growth: "成长记录",
@@ -307,7 +304,6 @@ function App() {
   const [accountAvatar, setAccountAvatar] = useState("");
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
-  const [switcher, setSwitcher] = useState(false);
   const latest = useRef(EMPTY_SNAPSHOT);
   const selectionInitialized = useRef(false);
   const alive = useRef(true);
@@ -684,7 +680,6 @@ function App() {
     }
   };
   const switchAccount = async accountId => {
-    setSwitcher(false);
     if (!accountId || accountId === activeId) return;
     const target = accounts.find(item => item.id === accountId);
     if (!target) return;
@@ -730,6 +725,13 @@ function App() {
           selectionInitialized.current = false;
           setSelectedId(null);
         }
+      } else if (kind === "batchRemove") {
+        const ids = (dialog.rooms || []).map(r => r.room || r);
+        result = await invoke("remove_members", [ids], `已批量移除 ${ids.length} 位主播`);
+        if (result?.ok) {
+          selectionInitialized.current = false;
+          setSelectedId(null);
+        }
       }
       if (result?.ok) {
         setDialog(null);
@@ -771,6 +773,13 @@ function App() {
       room
     });
   };
+  const batchRemove = roomList => {
+    setMenu(null);
+    setDialog({
+      type: "batchRemove",
+      rooms: roomList
+    });
+  };
   const onContextMenu = (event, id) => {
     event.preventDefault();
     select(id);
@@ -785,6 +794,12 @@ function App() {
       title: "移除主播？",
       desc: `不再对「${dialog?.room?.name || ""}」执行挂机与每日任务。可随时重新添加。`,
       confirmLabel: "移除主播",
+      danger: true
+    },
+    batchRemove: {
+      title: `批量移除 ${dialog?.rooms?.length || 0} 位主播？`,
+      desc: "将不再对选中的主播执行挂机与每日任务。可随时重新添加。",
+      confirmLabel: "确认批量移除",
       danger: true
     },
     logout: {
@@ -821,38 +836,18 @@ function App() {
       confirmLabel: "知道了"
     }
   };
-  const sidebarAccount = {
-    ...account,
-    subtitle: account.signed_in ? snap.paused ? "已暂停挂机" : "当前挂机中" : "未登录"
-  };
   return /*#__PURE__*/React.createElement("div", {
     className: `app ${collapsed ? "side-collapsed" : ""}`
   }, /*#__PURE__*/React.createElement(Sidebar, {
     page: page,
     onPage: setPage,
-    account: sidebarAccount,
+    account: account,
     avatar: accountAvatar,
     onQuit: () => setDialog({
       type: "quit"
     }),
     brandHidden: true,
-    collapsed: collapsed,
-    onSwitcher: () => setSwitcher(value => !value),
-    switcherOpen: switcher
-  }), /*#__PURE__*/React.createElement(window.AccountSwitcher, {
-    open: switcher,
-    accounts: accounts,
-    activeId: activeId,
-    onSelect: switchAccount,
-    onManage: () => {
-      setSwitcher(false);
-      setPage("account");
-    },
-    onAdd: () => {
-      setSwitcher(false);
-      openQr("");
-    },
-    onClose: () => setSwitcher(false)
+    collapsed: collapsed
   }), /*#__PURE__*/React.createElement("main", {
     className: "main",
     "aria-busy": !connected
@@ -918,7 +913,8 @@ function App() {
     signedIn: account.signed_in,
     closing: closing,
     bridgeConnected: connected,
-    accountName: account.name || ""
+    accountName: account.name || "",
+    onBatchRemove: batchRemove
   }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
     viewId: activeId,
     images: images,
@@ -982,7 +978,8 @@ function App() {
     adding: dialogBusy,
     onSearch: search,
     onAdd: add,
-    onClose: closeDialog
+    onClose: closeDialog,
+    onSyncMedals: openMedals
   }), dialog === "medals" && /*#__PURE__*/React.createElement(window.MedalsModal, {
     data: medals.data,
     loading: medals.loading,

@@ -8,7 +8,7 @@ const THEME_KEYS = ["white", "paper", "mist", "apricot"];
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, avatar, onQuit, brandHidden, collapsed, onSwitcher, switcherOpen }) => (
+const Sidebar = ({ page, onPage, account, avatar, onQuit, brandHidden, collapsed }) => (
   <aside className="side">
     {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
       <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
@@ -22,11 +22,10 @@ const Sidebar = ({ page, onPage, account, avatar, onQuit, brandHidden, collapsed
     <nav className="nav nav-bottom" aria-label="应用操作">
       <button type="button" className="nav-item" onClick={onQuit} aria-label="退出应用" title="退出应用"><Icon name="power" /><span>退出应用</span></button>
     </nav>
-    <button type="button" className="sidebar-account" onClick={onSwitcher} title="切换账号"
-      aria-haspopup="menu" aria-expanded={Boolean(switcherOpen)}>
+    <button type="button" className="sidebar-account" onClick={() => onPage("account")} title="账号管理"
+      aria-label="账号管理">
       <span className="sidebar-avatar">{avatar ? <img src={avatar} alt="" /> : Array.from(account.name || "?")[0]}</span>
-      <span className="sidebar-account-text"><strong>{account.name || (account.signed_in ? "等待验证" : "尚未登录")}</strong>
-        <small>{account.subtitle || ""}</small></span>
+      <span className="sidebar-account-text"><strong>{account.name || (account.signed_in ? "等待验证" : "尚未登录")}</strong></span>
     </button>
   </aside>
 );
@@ -126,7 +125,6 @@ function App() {
   const [accountAvatar, setAccountAvatar] = useState("");
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
-  const [switcher, setSwitcher] = useState(false);
   const latest = useRef(EMPTY_SNAPSHOT);
   const selectionInitialized = useRef(false);
   const alive = useRef(true);
@@ -409,7 +407,6 @@ function App() {
   };
 
   const switchAccount = async (accountId) => {
-    setSwitcher(false);
     if (!accountId || accountId === activeId) return;
     const target = accounts.find((item) => item.id === accountId);
     if (!target) return;
@@ -449,6 +446,11 @@ function App() {
         result = await invoke("remove_account", [dialog.account.id]);
         if (result?.ok) { selectionInitialized.current = false; setSelectedId(null); }
       }
+      else if (kind === "batchRemove") {
+        const ids = (dialog.rooms || []).map((r) => r.room || r);
+        result = await invoke("remove_members", [ids], `已批量移除 ${ids.length} 位主播`);
+        if (result?.ok) { selectionInitialized.current = false; setSelectedId(null); }
+      }
       if (result?.ok) { setDialog(null); if (kind !== "quit") await refresh(); }
     } finally { if (alive.current) setDialogBusy(false); }
   };
@@ -472,12 +474,17 @@ function App() {
 
   const select = (id) => { userSelected.current = id; setSelectedId(id); };
   const remove = (room) => { setMenu(null); setDialog({ type: "remove", room }); };
+  const batchRemove = (roomList) => {
+    setMenu(null);
+    setDialog({ type: "batchRemove", rooms: roomList });
+  };
   const onContextMenu = (event, id) => {
     event.preventDefault(); select(id); setMenu({ room: id, x: event.clientX, y: event.clientY });
   };
 
   const dialogCopy = {
     remove: { title: "移除主播？", desc: `不再对「${dialog?.room?.name || ""}」执行挂机与每日任务。可随时重新添加。`, confirmLabel: "移除主播", danger: true },
+    batchRemove: { title: `批量移除 ${dialog?.rooms?.length || 0} 位主播？`, desc: "将不再对选中的主播执行挂机与每日任务。可随时重新添加。", confirmLabel: "确认批量移除", danger: true },
     logout: { title: "退出这个账号的登录？", desc: "会停止此账号的挂机并删除本机登录凭证；关注列表、任务进度、额度与保护记录保留。其他账号不受影响。", confirmLabel: "退出登录", danger: true },
     safety: { title: "恢复账号操作？", desc: "先在 B 站完成验证并确认限制已解除。恢复后会重新检查账号，当天发送额度不会重置。", confirmLabel: "确认并恢复" },
     quit: { title: "退出 ビリ推し？", desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。", confirmLabel: "退出应用", danger: true },
@@ -486,21 +493,10 @@ function App() {
     protection: { title: "账号保护暂停", desc: "收到验证或异常拒绝，账号操作已暂停。重新扫码不会解除，需要先在平台处理。", confirmLabel: "知道了" }
   };
 
-  const sidebarAccount = {
-    ...account,
-    subtitle: account.signed_in
-      ? (snap.paused ? "已暂停挂机" : "当前挂机中")
-      : "未登录"
-  };
-
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
-      <Sidebar page={page} onPage={setPage} account={sidebarAccount} avatar={accountAvatar}
-        onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed}
-        onSwitcher={() => setSwitcher((value) => !value)} switcherOpen={switcher} />
-      <window.AccountSwitcher open={switcher} accounts={accounts} activeId={activeId}
-        onSelect={switchAccount} onManage={() => { setSwitcher(false); setPage("account"); }}
-        onAdd={() => { setSwitcher(false); openQr(""); }} onClose={() => setSwitcher(false)} />
+      <Sidebar page={page} onPage={setPage} account={account} avatar={accountAvatar}
+        onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} />
       <main className="main" aria-busy={!connected}>
         <header className="chrome pywebview-drag-region">
           <SidebarToggle collapsed={collapsed} onToggle={toggleSidebar} />
@@ -527,7 +523,7 @@ function App() {
           error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
           interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
           images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected}
-          accountName={account.name || ""} />}
+          accountName={account.name || ""} onBatchRemove={batchRemove} />}
         {page === "growth" && <window.GrowthPage viewId={activeId} images={images} onNeedAvatar={fetchAvatar}
           onOpenAccount={() => setPage("account")} onOpenMonitor={() => setPage("monitor")} />}
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
@@ -549,7 +545,7 @@ function App() {
         <Icon name={item.tone === "info" ? "check" : "alert"} size={14} /><span>{item.text}</span></div>)}</div>
       {qr && <window.QrModal qr={qr} onClose={closeQr} onRetry={() => openQr(qr.account_id || "")} />}
       {dialog === "add" && <window.AddMemberModal query={query} onQuery={onQuery} result={searchResult} loading={searching}
-        adding={dialogBusy} onSearch={search} onAdd={add} onClose={closeDialog} />}
+        adding={dialogBusy} onSearch={search} onAdd={add} onClose={closeDialog} onSyncMedals={openMedals} />}
       {dialog === "medals" && <window.MedalsModal data={medals.data} loading={medals.loading} error={medals.error}
         selected={medalSelection} onToggle={(uid) => setMedalSelection((current) => { const next = new Set(current);
           if (next.has(uid)) next.delete(uid); else next.add(uid); return next; })}

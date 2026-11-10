@@ -138,7 +138,7 @@ const RoomMenu = ({ menu, room, onClose, onOpen, onAction, onRemove }) => {
     <button type="button" role="menuitem" disabled={Boolean(room.actions.reconnect) || room.operation.pending}
       title={room.actions.reconnect} onClick={() => invoke(() => onAction("reconnect", room.room))}>重新连接</button>
     <button type="button" role="menuitem" disabled={Boolean(room.actions.redo) || room.operation.pending}
-      title={room.actions.redo} onClick={() => invoke(() => onAction("redo", room.room))}>补齐任务</button>
+      title={room.actions.redo} onClick={() => invoke(() => onAction("redo", room.room))}>补齐今日任务</button>
     <button type="button" role="menuitem" disabled={Boolean(room.actions.wear) || room.operation.pending}
       title={room.actions.wear} onClick={() => invoke(() => onAction("wear", room.room))}>佩戴粉丝牌</button>
     <div className="menu-divider" />

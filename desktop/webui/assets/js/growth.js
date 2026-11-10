@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"70242ee56ab4054ad95637a912d40abee356fdd27610a13d0b2a1f66e6af920f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"b9026ab8646517aaf78f77db005e8319daf29186bccf4416a1602aa3ffda2aeb"} */
+/* BiliOshi JSX {"code_sha256":"f4cb91ebc6bdad7887a4cca1f2253b628b7dedfc572417ea05a4fa54042b6b80","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"2c3ca0dc5d446b6aa2c4ee0cc5735396fbee6539ff9e9481f5058355f5c8ee78"} */
 (function () {
 "use strict";
 /* Growth page: daily fan-medal intimacy per room, from Api.growth.
@@ -140,11 +140,7 @@ function GrowthPage({
     }, /*#__PURE__*/React.createElement("span", {
       className: "growth-sr",
       "aria-live": "polite"
-    }, announcement), /*#__PURE__*/React.createElement("div", {
-      className: "growth-head"
-    }, /*#__PURE__*/React.createElement("p", {
-      className: "growth-meta"
-    }, "\u7C89\u4E1D\u724C\u4ECA\u65E5\u4EB2\u5BC6\u5EA6 \xB7 \u6BCF\u65E5 00:00 \u91CD\u7F6E")), error ? /*#__PURE__*/React.createElement(GrowthState, {
+    }, announcement), error ? /*#__PURE__*/React.createElement(GrowthState, {
       icon: "alert",
       title: "\u6210\u957F\u8BB0\u5F55\u6682\u65F6\u65E0\u6CD5\u8BFB\u53D6",
       text: error,

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"f1172270c22f08b8fa2c2037a2e7e0a5156e1788a1f9fb9fd6169dbd14ce4162","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"ffc19fc9fb6ca5a466a0350f43ba3ddd1996baa38c44d8610a8ff461d0f3c8f8"} */
+/* BiliOshi JSX {"code_sha256":"fc45207da828abcceaa98ca362408f356f4ae5fc181116e116cdb38f204af679","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"95482c8a9fced0889c75285404f5afa705de24c66b8cb6aa4cad5ba59b420b4c"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -305,6 +305,19 @@ function App() {
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
   const latest = useRef(EMPTY_SNAPSHOT);
+  const titleRef = useRef(null);
+  // Moving focus to the page title lets keyboard and screen-reader users hear
+  // where a nav click landed instead of staying on the old nav button.
+  const firstPage = useRef(true);
+  useEffect(() => {
+    if (firstPage.current) {
+      firstPage.current = false;
+      return;
+    }
+    titleRef.current?.focus({
+      preventScroll: true
+    });
+  }, [page]);
   const selectionInitialized = useRef(false);
   const alive = useRef(true);
   const handlers = useRef({});
@@ -680,7 +693,12 @@ function App() {
     }
   };
   const switchAccount = async accountId => {
-    if (!accountId || accountId === activeId) return;
+    if (!accountId) return;
+    if (accountId === activeId) {
+      // Silent no-ops read as a broken control; say why nothing changed.
+      toast("当前已是这个账号");
+      return;
+    }
     const target = accounts.find(item => item.id === accountId);
     if (!target) return;
     if (!target.signed_in || target.status === "needs_login") {
@@ -868,7 +886,9 @@ function App() {
     className: "chrome-divider",
     "aria-hidden": "true"
   }), /*#__PURE__*/React.createElement("h1", {
-    className: "chrome-title"
+    className: "chrome-title",
+    tabIndex: -1,
+    ref: titleRef
   }, pageTitles[page]), /*#__PURE__*/React.createElement("span", {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("div", {
@@ -891,6 +911,7 @@ function App() {
     className: "page",
     id: "monitor-body"
   }, page === "monitor" && /*#__PURE__*/React.createElement(window.Overview, {
+    key: activeId,
     rooms: rooms,
     selectedId: selectedId,
     onSelect: select,
@@ -913,7 +934,6 @@ function App() {
     signedIn: account.signed_in,
     closing: closing,
     bridgeConnected: connected,
-    accountName: account.name || "",
     onBatchRemove: batchRemove
   }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
     viewId: activeId,
@@ -955,7 +975,7 @@ function App() {
       type: "safety"
     }),
     onCheck: () => control("check_now"),
-    busy: controlBusy || closing,
+    busy: closing,
     version: snap.version
   }))), /*#__PURE__*/React.createElement("div", {
     className: "toasts",

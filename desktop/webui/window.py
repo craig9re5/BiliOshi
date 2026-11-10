@@ -159,10 +159,28 @@ class WebHost:
     def hide(self):
         try:
             self._window.hide()
+            self._notify_tray_hint()
             return True
         except Exception:
             logging.exception("Hiding window failed")
             return False
+
+    def _notify_tray_hint(self):
+        """Say once that closing the window keeps the app running in the tray.
+
+        Without this the window simply vanishes and the app looks quit while
+        the account keeps idling in the background.
+        """
+        marker = self._host_root / "state" / "tray-hint-shown"
+        try:
+            if marker.exists():
+                return
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("1", encoding="ascii")
+        except OSError:
+            return
+        self._notify("已最小化到系统托盘，挂机继续运行。双击托盘图标可重新打开。",
+                     "ビリ推し · 仍在运行")
 
     def show(self):
         try:

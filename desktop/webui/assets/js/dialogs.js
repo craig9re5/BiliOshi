@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"f50dd996cdb8eb80cd749a8b836af630a273f1253e503a720f969324d35e1823","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"d8c9bff9d72735415909470160a8a5b3b45d64043b3d470f7fdfc996557e941e"} */
+/* BiliOshi JSX {"code_sha256":"275f6b273e5b4941000c6aa5f55474ab73f42ecee965c101097a97bc48d39d06","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"8771605ec75f98107d8862d662e40e285a8704cc5053e29ea2bd1091747f7b3f"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -312,7 +312,7 @@ const RoomMenu = ({
     disabled: Boolean(room.actions.redo) || room.operation.pending,
     title: room.actions.redo,
     onClick: () => invoke(() => onAction("redo", room.room))
-  }, "\u8865\u9F50\u4EFB\u52A1"), /*#__PURE__*/React.createElement("button", {
+  }, "\u8865\u9F50\u4ECA\u65E5\u4EFB\u52A1"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     role: "menuitem",
     disabled: Boolean(room.actions.wear) || room.operation.pending,

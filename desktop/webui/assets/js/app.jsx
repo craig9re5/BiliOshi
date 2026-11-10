@@ -126,6 +126,14 @@ function App() {
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
   const latest = useRef(EMPTY_SNAPSHOT);
+  const titleRef = useRef(null);
+  // Moving focus to the page title lets keyboard and screen-reader users hear
+  // where a nav click landed instead of staying on the old nav button.
+  const firstPage = useRef(true);
+  useEffect(() => {
+    if (firstPage.current) { firstPage.current = false; return; }
+    titleRef.current?.focus({ preventScroll: true });
+  }, [page]);
   const selectionInitialized = useRef(false);
   const alive = useRef(true);
   const handlers = useRef({});
@@ -407,7 +415,12 @@ function App() {
   };
 
   const switchAccount = async (accountId) => {
-    if (!accountId || accountId === activeId) return;
+    if (!accountId) return;
+    if (accountId === activeId) {
+      // Silent no-ops read as a broken control; say why nothing changed.
+      toast("当前已是这个账号");
+      return;
+    }
     const target = accounts.find((item) => item.id === accountId);
     if (!target) return;
     if (!target.signed_in || target.status === "needs_login") {
@@ -503,7 +516,7 @@ function App() {
           <div className="chrome-brand"><span className="logo"><Pulse size={15} /></span>
             <span className="chrome-name">ビリ推し</span></div>
           <span className="chrome-divider" aria-hidden="true" />
-          <h1 className="chrome-title">{pageTitles[page]}</h1>
+          <h1 className="chrome-title" tabIndex={-1} ref={titleRef}>{pageTitles[page]}</h1>
           <span className="spacer" />
           <div className="chrome-actions">
             {page === "monitor" && <window.OverviewActions paused={snap.paused}
@@ -516,14 +529,16 @@ function App() {
         {page === "monitor" && accounts.length > 0 && <window.AccountTabs accounts={accounts} activeId={activeId}
           onSelect={switchAccount} onAdd={() => openQr("")} />}
         <div className="page" id="monitor-body">
-        {page === "monitor" && <window.Overview rooms={rooms} selectedId={selectedId} onSelect={select}
+        {/* Keyed by account: batch selections must never survive an account
+            switch, or they would apply to the other account's follow list. */}
+        {page === "monitor" && <window.Overview key={activeId} rooms={rooms} selectedId={selectedId} onSelect={select}
           paused={snap.paused}
           onAction={roomAction} onOpen={(id) => invoke("open_room", [id])} onAddMember={openAdd} onSyncMedals={openMedals}
           onRemove={remove} onContextMenu={onContextMenu} busyRoom={busyRoom} controlBusy={controlBusy}
           error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
           interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
           images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected}
-          accountName={account.name || ""} onBatchRemove={batchRemove} />}
+          onBatchRemove={batchRemove} />}
         {page === "growth" && <window.GrowthPage viewId={activeId} images={images} onNeedAvatar={fetchAvatar}
           onOpenAccount={() => setPage("account")} onOpenMonitor={() => setPage("monitor")} />}
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
@@ -537,7 +552,7 @@ function App() {
           onRemove={(id) => setDialog({ type: "removeAccount", account: accounts.find((item) => item.id === id) })}
           onProtection={(id) => setDialog({ type: "protection", account: accounts.find((item) => item.id === id) })}
           onResumeSafety={() => setDialog({ type: "safety" })}
-          onCheck={() => control("check_now")} busy={controlBusy || closing}
+          onCheck={() => control("check_now")} busy={closing}
           version={snap.version} />}
         </div>
       </main>

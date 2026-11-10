@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"fd59a35f1bf4e0458b420776052cd1b20084cb3279ec97f67d226cc4a2d217ce","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"a224f49fad13bdf88f77ba65aa7bf066c45fcac82a57745afd35f603e02fde22"} */
+/* BiliOshi JSX {"code_sha256":"b6b60095e3c80e13a4564f5d07abc0ef01f12b36046929113abef9b3355ad083","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"2814bdf67402125c21dc1a3647ac0e0cf171ce14a212aa9f1cc78a7ac095593b"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -196,7 +196,7 @@ const SettingsPage = ({
     className: "group-head"
   }, "\u6BCF\u65E5\u4EFB\u52A1"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u70B9\u4EAE\u7C89\u4E1D\u724C",
-    desc: "\u7C89\u4E1D\u724C\u7184\u706D\u65F6\u53D1\u9001\u5F39\u5E55\uFF0C\u70B9\u4EAE\u540E\u505C\u6B62"
+    desc: "\u724C\u5B50\u7184\u706D\u65F6\u53D1\u9001\u5F39\u5E55\u91CD\u65B0\u70B9\u4EAE"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u70B9\u4EAE\u7C89\u4E1D\u724C",
     checked: settings.auto_revive,
@@ -204,7 +204,7 @@ const SettingsPage = ({
     onChange: value => onSetting("auto_revive", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5B8C\u6210\u5F39\u5E55\u4EFB\u52A1",
-    desc: "\u53EA\u8865\u9F50\u5269\u4F59\u5F39\u5E55\uFF0C\u5B8C\u6210\u540E\u505C\u6B62"
+    desc: "\u81EA\u52A8\u8865\u9F50\u6BCF\u65E5\u5F39\u5E55\u4EB2\u5BC6\u5EA6\u4EFB\u52A1"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5B8C\u6210\u5F39\u5E55\u4EFB\u52A1",
     checked: settings.auto_danmaku_intimacy,
@@ -212,7 +212,7 @@ const SettingsPage = ({
     onChange: value => onSetting("auto_danmaku_intimacy", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u76F4\u64AD\u70B9\u8D5E",
-    desc: "\u81EA\u52A8\u70B9\u8D5E\u5E76\u68C0\u67E5\u4EFB\u52A1\u8FDB\u5EA6\uFF0C\u9ED8\u8BA4\u5173\u95ED"
+    desc: "\u8FDB\u5165\u5F00\u64AD\u76F4\u64AD\u95F4\u540E\u81EA\u52A8\u5B8C\u6210\u70B9\u8D5E"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u76F4\u64AD\u70B9\u8D5E",
     checked: settings.auto_like,
@@ -224,7 +224,7 @@ const SettingsPage = ({
     className: "group-head"
   }, "\u8FD0\u884C\u4E0E\u542F\u52A8"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5F00\u64AD\u901A\u77E5",
-    desc: "\u5173\u6CE8\u7684\u4E3B\u64AD\u5F00\u64AD\u65F6\uFF0C\u901A\u8FC7\u7CFB\u7EDF\u901A\u77E5\u63D0\u9192"
+    desc: "\u5173\u6CE8\u7684\u4E3B\u64AD\u5F00\u64AD\u65F6\u5F39\u51FA\u7CFB\u7EDF\u63D0\u9192"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5F00\u64AD\u901A\u77E5",
     checked: settings.notify_on_live,
@@ -232,7 +232,7 @@ const SettingsPage = ({
     onChange: value => onSetting("notify_on_live", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5F00\u673A\u542F\u52A8",
-    desc: "\u767B\u5F55 Windows \u540E\u5728\u6258\u76D8\u8FD0\u884C\uFF0C\u4E0D\u6253\u5F00\u4E3B\u7A97\u53E3"
+    desc: "\u767B\u5F55\u7CFB\u7EDF\u540E\u5728\u6258\u76D8\u9759\u9ED8\u8FD0\u884C"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5F00\u673A\u542F\u52A8",
     checked: settings.autostart,
@@ -240,7 +240,7 @@ const SettingsPage = ({
     onChange: value => onSetting("autostart", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u6A21\u5F0F",
-    desc: "\u7A33\u5065\uFF1A5 \u5206\u949F\u67E5\u5F00\u64AD\u300160 \u79D2\u7EED\u70B9\u8D5E\uFF1B\u6FC0\u8FDB\uFF1A1 \u5206\u949F\u67E5\u5F00\u64AD\u300120 \u79D2\u7EED\u70B9\u8D5E"
+    desc: "\u7A33\u5065\u6A21\u5F0F\u63A8\u8350\u65E5\u5E38\u6302\u673A\uFF1B\u6FC0\u8FDB\u6A21\u5F0F\u68C0\u6D4B\u66F4\u9891\u7E41"
   }, /*#__PURE__*/React.createElement(Choice, {
     label: "\u8FD0\u884C\u6A21\u5F0F",
     value: runMode,
@@ -255,7 +255,7 @@ const SettingsPage = ({
     onChange: value => onSetting("run_mode", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u65E5\u5FD7",
-    desc: "\u5728\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668\u4E2D\u6253\u5F00\u5F53\u524D\u8D26\u53F7\u7684\u65E5\u5FD7\u76EE\u5F55\uFF0C\u6392\u67E5\u5F02\u5E38\u6216\u67E5\u770B\u8FD0\u884C\u8BB0\u5F55"
+    desc: "\u6253\u5F00\u65E5\u5FD7\u6587\u4EF6\u6240\u5728\u76EE\u5F55\uFF0C\u4FBF\u4E8E\u6392\u969C"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm",
@@ -269,13 +269,11 @@ const SettingsPage = ({
     className: "group-head"
   }, "\u5916\u89C2"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u754C\u9762\u4E3B\u9898",
-    desc: "\u9009\u62E9\u754C\u9762\u8868\u9762\u989C\u8272\uFF0C\u5207\u6362\u540E\u7ACB\u5373\u751F\u6548\u5E76\u8BB0\u4F4F\u9009\u62E9\uFF08\u5168\u5E94\u7528\uFF0C\u4E0D\u968F\u8D26\u53F7\u5207\u6362\uFF09"
+    desc: "\u81EA\u5B9A\u4E49\u5E94\u7528\u914D\u8272\u98CE\u683C"
   }, /*#__PURE__*/React.createElement(ThemeOptions, {
     value: theme,
     onChange: onTheme
-  }))), /*#__PURE__*/React.createElement("p", {
-    className: "settings-note"
-  }, "\u8FD0\u884C\u6A21\u5F0F\u4FDD\u5B58\u540E\u7ACB\u5373\u751F\u6548\u3002\u5F53\u5929\u7684\u5DF2\u5B8C\u6210\u8FDB\u5EA6\u4E0E\u53D1\u9001\u989D\u5EA6\u4F1A\u4FDD\u7559\u3002\u4EFB\u52A1\u5F00\u5173\u4E0E\u8FD0\u884C\u6A21\u5F0F\u6309\u8D26\u53F7\u72EC\u7ACB\u4FDD\u5B58\u3002"))));
+  }))))));
 };
 const AccountRow = ({
   account,

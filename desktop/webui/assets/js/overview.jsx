@@ -91,7 +91,7 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore, dimmed }) => {
           </div>
           <div className="gain-value">{room.gain === null ? "—" : `+${numberLabel(room.gain)}`}</div>
           <div className="gain-foot">
-            <span>{room.gain === null ? "等待更新" : "已确认到账"}</span>
+            <span>{room.gain === null ? "等待更新" : "今日已获得"}</span>
             {room.day_limit > 0 && <span>每日上限 {numberLabel(room.day_limit)}</span>}
           </div>
           {knownExperience && <>
@@ -131,7 +131,7 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore, dimmed }) => {
             <Icon name="external" size={13} />打开直播间
           </button>
           <button type="button" className="btn primary" onClick={() => onAction("redo", room.room)}
-            disabled={pending || Boolean(reason)} title={reason || "发送弹幕、点赞并补足观看时长，只处理今日未完成的任务"}>
+            disabled={pending || Boolean(reason)} title={reason || "自动补齐今日未完成的互动任务"}>
             <Icon name={pending ? "refresh" : "check"} size={13} className={pending ? "spin" : ""} />
             {pending ? "正在处理…" : "补齐今日任务"}
           </button>
@@ -144,7 +144,7 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore, dimmed }) => {
 const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy, closing }) => (
   <>
     <button type="button" className="btn" onClick={onCheck}
-      title="重新查询直播状态，并刷新看播连接" disabled={checking || controlBusy || closing}>
+      title="检查开播状态与任务进度" disabled={checking || controlBusy || closing}>
       <Icon name="refresh" size={13} className={checking ? "spin" : ""} />{checking ? "检查中…" : "立即检查"}</button>
     <button type="button" className={`btn ${paused ? "primary" : ""}`} onClick={onTogglePause}
       disabled={controlBusy || closing}>
@@ -207,7 +207,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
   return (<>
     {(error || recovery?.action === "login") && <div className="banner" role="status">
       <Icon name={recovery?.action === "login" ? "user" : "alert"} size={14} />
-      <span>{!signedIn ? "登录 B 站，开始自动挂机与每日任务" : error || recovery?.message}</span>
+      <span>{!signedIn ? "请先登录 B 站账号以开始挂机" : error || recovery?.message}</span>
       {recovery?.action && <button type="button" className="btn sm" onClick={onRecovery}>{recovery.label || "查看详情"}</button>}
     </div>}
     <div className="workspace">
@@ -244,7 +244,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
             image={images[room.uid]} onSelect={onSelect} onContextMenu={onContextMenu}
             managing={managing} checked={selectedBatch.has(room.room)} onToggleCheck={toggleCheck} />)
             : <div className="empty list-empty"><Icon name="monitor" size={24} /><strong>还没有关注主播</strong>
-              <span>添加主播或同步已有粉丝牌，开播后自动开始</span>
+              <span>添加主播或同步粉丝牌后即可自动挂机</span>
               <button type="button" className="btn" onClick={onAddMember}>添加主播</button></div>}
         </div>
       </section>

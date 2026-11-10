@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"f4cb91ebc6bdad7887a4cca1f2253b628b7dedfc572417ea05a4fa54042b6b80","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"2c3ca0dc5d446b6aa2c4ee0cc5735396fbee6539ff9e9481f5058355f5c8ee78"} */
+/* BiliOshi JSX {"code_sha256":"f88b98b54a4886809f4b412882861922533fec424a3ff24115235531d81a2ada","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"47ae88478e3ca23f8c82d718866b5375e5a8ca7e28348268ff570e74753c2521"} */
 (function () {
 "use strict";
 /* Growth page: daily fan-medal intimacy per room, from Api.growth.
@@ -208,31 +208,31 @@ function GrowthPage({
   let banner = null;
   if (data.status === "needs_login") {
     banner = {
-      text: "此账号需要重新登录，历史仍可查看。",
-      action: "去账号页",
+      text: "当前账号登录已失效，历史记录仍可查看。",
+      action: "前往重新登录",
       run: onOpenAccount
     };
   } else if (data.status === "protection") {
     banner = {
-      text: "账号处于保护暂停，历史仍可查看；请先完成平台验证。",
-      action: "去账号页",
+      text: "账号已暂停互动，请先在平台完成安全验证。",
+      action: "前往查看",
       run: onOpenAccount
     };
   } else if (!data.running && data.status === "global_paused") {
     banner = {
-      text: `全部挂机已暂停，${lastSample ? `数据停在 ${chinaClock(lastSample)}。` : ""}恢复后继续记录。`,
+      text: "全部挂机已暂停，恢复后将继续记录成长。",
       action: "去直播总览",
       run: onOpenMonitor
     };
   } else if (!data.running && data.paused) {
     banner = {
-      text: `此账号已暂停，${lastSample ? `数据停在 ${chinaClock(lastSample)}。` : ""}恢复挂机后继续记录。`,
+      text: "当前账号已暂停挂机，恢复后将继续记录成长。",
       action: "去直播总览",
       run: onOpenMonitor
     };
   } else if (!data.running) {
     banner = {
-      text: `此账号当前未挂机，${lastSample ? `数据停在 ${chinaClock(lastSample)}。` : ""}恢复挂机后继续记录。`,
+      text: "当前账号未挂机，开启挂机后将自动记录成长。",
       action: "去直播总览",
       run: onOpenMonitor
     };

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"fc45207da828abcceaa98ca362408f356f4ae5fc181116e116cdb38f204af679","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"95482c8a9fced0889c75285404f5afa705de24c66b8cb6aa4cad5ba59b420b4c"} */
+/* BiliOshi JSX {"code_sha256":"9851ac30fcf929fb6e74033688bef6b51d5de67209e19933f04ab73cd966dd67","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"befa55dc0e42bf553b42aa2536a8e447423575fc48052913135dfa1f226f5155"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -810,47 +810,47 @@ function App() {
   const dialogCopy = {
     remove: {
       title: "移除主播？",
-      desc: `不再对「${dialog?.room?.name || ""}」执行挂机与每日任务。可随时重新添加。`,
+      desc: `将从关注列表中移除「${dialog?.room?.name || ""}」，后续可随时重新添加。`,
       confirmLabel: "移除主播",
       danger: true
     },
     batchRemove: {
       title: `批量移除 ${dialog?.rooms?.length || 0} 位主播？`,
-      desc: "将不再对选中的主播执行挂机与每日任务。可随时重新添加。",
+      desc: "将从关注列表中移除所选主播，后续可随时重新添加。",
       confirmLabel: "确认批量移除",
       danger: true
     },
     logout: {
-      title: "退出这个账号的登录？",
-      desc: "会停止此账号的挂机并删除本机登录凭证；关注列表、任务进度、额度与保护记录保留。其他账号不受影响。",
+      title: "退出当前账号？",
+      desc: "退出后将停止挂机并清除登录凭证，关注列表与记录仍会保留。",
       confirmLabel: "退出登录",
       danger: true
     },
     safety: {
       title: "恢复账号操作？",
-      desc: "先在 B 站完成验证并确认限制已解除。恢复后会重新检查账号，当天发送额度不会重置。",
+      desc: "请先在 B 站确认账号状态正常。恢复后将重新检查并继续运行。",
       confirmLabel: "确认并恢复"
     },
     quit: {
       title: "退出 ビリ推し？",
-      desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。",
+      desc: "将停止所有任务并退出程序。如需后台挂机，直接关闭窗口即可。",
       confirmLabel: "退出应用",
       danger: true
     },
     switch: {
       title: "切换挂机账号？",
-      desc: "连接会短暂中断；任务进度与今日额度保留，不需要重新扫码。",
+      desc: "切换后将使用新账号开始挂机，当前任务进度会自动保存。",
       confirmLabel: "切换并挂机"
     },
     removeAccount: {
       title: "移除这个账号？",
-      desc: "会删除本机登录凭证并移出账号列表。关注列表、任务进度、额度与保护记录会保留，重新添加同一账号后可继续使用。",
+      desc: "将从列表中移除此账号并清除凭证，关注列表与记录仍会保留。",
       confirmLabel: "移除账号",
       danger: true
     },
     protection: {
       title: "账号保护暂停",
-      desc: "收到验证或异常拒绝，账号操作已暂停。重新扫码不会解除，需要先在平台处理。",
+      desc: "检测到平台安全验证或限制，互动操作已暂停。请先在 B 站完成验证。",
       confirmLabel: "知道了"
     }
   };

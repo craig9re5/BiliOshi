@@ -1,18 +1,12 @@
-/* BiliOshi JSX {"code_sha256":"d1f7154b717c68326d08f7959b1df6ce05a87062c94fef36cdf3771d2959482b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"9b95debc4ae06f7cb69018fcaaeabf26f30c8f376ab25cabf761f22b99e85db8"} */
+/* BiliOshi JSX {"code_sha256":"83455b5db0a126f012efa0dd6297cd7584ded8805959c11c19d4400548096f90","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"ef82f96237a941714071cd848426fbda55f895491825dbbd43b923b0316aaa09"} */
 (function () {
 "use strict";
-/* Account tabs and the account switcher.
-   One account is displayed and active at a time; switching is instant. */
+/* Account tabs. One account is displayed and active at a time; switching is
+   instant, so a tab click also has to say what will happen. */
 
 const {
-  Icon,
-  relativeTime,
-  numberLabel
+  Icon
 } = window;
-const {
-  useEffect,
-  useRef
-} = React;
 const ACCOUNT_COLORS = ["#3d7a6c", "#6a5f8f", "#8a7b62", "#7a6270", "#4f6f8a", "#7d6a4f"];
 function accountColor(id) {
   let hash = 0;
@@ -102,6 +96,9 @@ const AccountTabs = ({
   }, accounts.map((account, index) => {
     const selected = activeId === account.id;
     const state = accountStateLabel(account);
+    const live = account.live_room_count || 0;
+    const countLabel = live ? `，${live} 个直播间直播中` : "";
+    const action = selected ? "当前账号" : "切换到此账号并开始挂机";
     return /*#__PURE__*/React.createElement("button", {
       type: "button",
       key: account.id,
@@ -111,7 +108,8 @@ const AccountTabs = ({
       "aria-controls": "monitor-body",
       tabIndex: selected ? 0 : -1,
       className: `account-tab ${selected ? "active" : ""}`,
-      title: state.label,
+      title: `${account.name}：${state.label}${countLabel}（${action}）`,
+      "aria-label": `${account.name}，${state.label}${countLabel}。${action}`,
       onClick: () => onSelect(account.id),
       onKeyDown: event => move(event, index)
     }, /*#__PURE__*/React.createElement("span", {
@@ -124,9 +122,10 @@ const AccountTabs = ({
     }, account.name), /*#__PURE__*/React.createElement("i", {
       className: `tab-state ${state.tone}`,
       "aria-hidden": "true"
-    }), /*#__PURE__*/React.createElement("span", {
-      className: "tab-count"
-    }, account.live_room_count || 0));
+    }), live > 0 && /*#__PURE__*/React.createElement("span", {
+      className: "tab-count",
+      title: "\u76F4\u64AD\u4E2D\u7684\u76F4\u64AD\u95F4\u6570"
+    }, live));
   }), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "account-tab add",
@@ -138,98 +137,8 @@ const AccountTabs = ({
     size: 15
   }))));
 };
-const AccountDashboard = () => null;
-const AccountSwitcher = ({
-  open,
-  accounts,
-  activeId,
-  onSelect,
-  onManage,
-  onAdd,
-  onClose
-}) => {
-  const menu = useRef(null);
-  const trigger = useRef(null);
-  const close = useRef(onClose);
-  close.current = onClose;
-  useEffect(() => {
-    if (!open) return undefined;
-    trigger.current = document.activeElement;
-    const focusTimer = window.setTimeout(() => {
-      const selected = menu.current?.querySelector('[aria-checked="true"]');
-      (selected || menu.current?.querySelector("button"))?.focus();
-    }, 0);
-    const keydown = event => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close.current();
-        return;
-      }
-      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-      event.preventDefault();
-      const items = Array.from(menu.current?.querySelectorAll("button") || []);
-      if (!items.length) return;
-      const index = items.indexOf(document.activeElement);
-      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : index < 0 ? 0 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
-      items[next].focus();
-    };
-    document.addEventListener("keydown", keydown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", keydown);
-      trigger.current?.focus?.();
-    };
-  }, [open]);
-  if (!open) return null;
-  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "switcher-scrim open",
-    onClick: onClose
-  }), /*#__PURE__*/React.createElement("div", {
-    className: "switcher open",
-    role: "menu",
-    "aria-label": "\u8D26\u53F7\u5207\u6362\u5668",
-    ref: menu
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "switcher-head"
-  }, /*#__PURE__*/React.createElement("strong", null, "\u5207\u6362\u8D26\u53F7"), /*#__PURE__*/React.createElement("span", null, "\u5171 ", accounts.length, " \u4E2A\u8D26\u53F7")), accounts.map(account => {
-    const state = accountStateLabel(account);
-    const selected = activeId === account.id;
-    return /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      key: account.id,
-      role: "menuitemradio",
-      "aria-checked": selected,
-      className: "switcher-item",
-      onClick: () => onSelect(account.id)
-    }, /*#__PURE__*/React.createElement(AccountAvatar, {
-      account: account,
-      size: "sm"
-    }), /*#__PURE__*/React.createElement("span", {
-      className: "switcher-item-main"
-    }, /*#__PURE__*/React.createElement("strong", null, account.name), /*#__PURE__*/React.createElement("small", {
-      className: state.tone === "warn" ? "warn" : ""
-    }, selected ? "当前使用 · 挂机中" : state.label)), selected && /*#__PURE__*/React.createElement(Icon, {
-      name: "check",
-      size: 13
-    }));
-  }), !accounts.length && /*#__PURE__*/React.createElement("p", {
-    className: "switcher-mode"
-  }, "\u5C1A\u672A\u6DFB\u52A0\u8D26\u53F7\u3002"), /*#__PURE__*/React.createElement("div", {
-    className: "switcher-foot"
-  }, /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    role: "menuitem",
-    onClick: onManage
-  }, "\u7BA1\u7406\u8D26\u53F7"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    role: "menuitem",
-    onClick: onAdd
-  }, "\u6DFB\u52A0\u8D26\u53F7"))));
-};
 Object.assign(window, {
   AccountTabs,
-  AccountDashboard,
-  AccountSwitcher,
   AccountAvatar,
   accountStateLabel,
   accountColor,

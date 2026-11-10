@@ -201,12 +201,13 @@ const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogo
             <Icon name="play" size={12} />切换账号
           </button>
         )}
-        <button type="button" className="btn ghost sm" onClick={() => onLogout(account.id)}
-          disabled={busy || needsLogin} title="退出此账号登录" aria-label={`退出 ${account.name} 的登录`}>
+        <button type="button" className="btn sm" onClick={() => onLogout(account.id)}
+          disabled={busy} title={needsLogin ? "清除本机保存的失效登录凭证" : "退出此账号登录"}
+          aria-label={`${needsLogin ? "清除" : "退出"} ${account.name} 的登录`}>
           <Icon name="power" size={13} />
-          <span>退出登录</span>
+          <span>{needsLogin ? "清除登录" : "退出登录"}</span>
         </button>
-        <button type="button" className="btn ghost sm danger" onClick={() => onRemove(account.id)}
+        <button type="button" className="btn ghost sm danger-hover" onClick={() => onRemove(account.id)}
           disabled={busy} title="移除账号" aria-label={`移除 ${account.name}`}>
           <span>移除</span>
         </button>
@@ -221,29 +222,9 @@ const AccountPage = ({ accounts, activeId, account, avatar, onScan, onView, onSw
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
   const action = !account.signed_in || needsLogin ? onScan : cooldown ? null : hold.blocked ? onResumeSafety : onCheck;
-  const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "检查状态";
+  const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "立即检查";
   return (<>
     <div className="settings" data-screen-label="账号"><div className="settings-inner">
-      {hold.blocked && (
-        <section className="group card card-warn">
-          <header className="group-head">账号异常保护</header>
-          <div className="account-alert-body">
-            <div className="account-alert-icon">
-              <Icon name="shield" size={18} />
-            </div>
-            <div className="account-alert-main">
-              <strong>操作已暂停</strong>
-              <p>{hold.reason || "账号出现异常，已暂停互动操作"}</p>
-              {cooldown && <small>最早恢复时间：{absoluteTime(hold.until)}</small>}
-            </div>
-            {action && (
-              <button type="button" className="btn sm primary" onClick={() => action?.()} disabled={busy}>
-                <Icon name={needsLogin ? "qr" : "shield"} size={13} />{actionLabel}
-              </button>
-            )}
-          </div>
-        </section>
-      )}
       <section className="group card">
         <header className="group-head group-head-action">
           <span className="group-head-title">B 站账号</span>
@@ -260,6 +241,25 @@ const AccountPage = ({ accounts, activeId, account, avatar, onScan, onView, onSw
             <strong>尚未添加 B 站账号</strong>
             <button type="button" className="btn primary sm" onClick={() => onScan("")}>
               <Icon name="qr" size={12} />扫码添加账号</button></div>}
+      </section>
+      <section className="group card">
+        <header className="group-head">账号安全</header>
+        <div className="safety-row">
+          <div className="safety-info">
+            <div className="safety-status">
+              <i className={`status-dot ${hold.blocked ? "warn" : "ok"}`} />
+              <strong>{hold.blocked ? "保护暂停中" : "状态正常"}</strong>
+              {hold.blocked && hold.reason && <span className="safety-reason">{hold.reason}</span>}
+            </div>
+            {cooldown && <small className="safety-time">最早恢复时间：{absoluteTime(hold.until)}</small>}
+          </div>
+          {action && (
+            <button type="button" className="btn sm" onClick={() => action()} disabled={busy}>
+              <Icon name={needsLogin ? "qr" : hold.blocked ? "shield" : "refresh"} size={13} />
+              <span>{actionLabel}</span>
+            </button>
+          )}
+        </div>
       </section>
     </div></div>
   </>);

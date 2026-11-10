@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"8d23ee88f4f26b0a798f2570de9e535a9bebd908d167448bdf2245e252f368c4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"ccd8655755d1c0f6dfd595a7f0f1840df97d97eb9535a9ecbcd6b8c77ee78797"} */
+/* BiliOshi JSX {"code_sha256":"fd59a35f1bf4e0458b420776052cd1b20084cb3279ec97f67d226cc4a2d217ce","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"a224f49fad13bdf88f77ba65aa7bf066c45fcac82a57745afd35f603e02fde22"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -338,17 +338,17 @@ const AccountRow = ({
     size: 12
   }), "\u5207\u6362\u8D26\u53F7"), /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn ghost sm",
+    className: "btn sm",
     onClick: () => onLogout(account.id),
-    disabled: busy || needsLogin,
-    title: "\u9000\u51FA\u6B64\u8D26\u53F7\u767B\u5F55",
-    "aria-label": `退出 ${account.name} 的登录`
+    disabled: busy,
+    title: needsLogin ? "清除本机保存的失效登录凭证" : "退出此账号登录",
+    "aria-label": `${needsLogin ? "清除" : "退出"} ${account.name} 的登录`
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "power",
     size: 13
-  }), /*#__PURE__*/React.createElement("span", null, "\u9000\u51FA\u767B\u5F55")), /*#__PURE__*/React.createElement("button", {
+  }), /*#__PURE__*/React.createElement("span", null, needsLogin ? "清除登录" : "退出登录")), /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn ghost sm danger",
+    className: "btn ghost sm danger-hover",
     onClick: () => onRemove(account.id),
     disabled: busy,
     title: "\u79FB\u9664\u8D26\u53F7",
@@ -375,34 +375,13 @@ const AccountPage = ({
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
   const action = !account.signed_in || needsLogin ? onScan : cooldown ? null : hold.blocked ? onResumeSafety : onCheck;
-  const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "检查状态";
+  const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "立即检查";
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8D26\u53F7"
   }, /*#__PURE__*/React.createElement("div", {
     className: "settings-inner"
-  }, hold.blocked && /*#__PURE__*/React.createElement("section", {
-    className: "group card card-warn"
-  }, /*#__PURE__*/React.createElement("header", {
-    className: "group-head"
-  }, "\u8D26\u53F7\u5F02\u5E38\u4FDD\u62A4"), /*#__PURE__*/React.createElement("div", {
-    className: "account-alert-body"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "account-alert-icon"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "shield",
-    size: 18
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "account-alert-main"
-  }, /*#__PURE__*/React.createElement("strong", null, "\u64CD\u4F5C\u5DF2\u6682\u505C"), /*#__PURE__*/React.createElement("p", null, hold.reason || "账号出现异常，已暂停互动操作"), cooldown && /*#__PURE__*/React.createElement("small", null, "\u6700\u65E9\u6062\u590D\u65F6\u95F4\uFF1A", absoluteTime(hold.until))), action && /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm primary",
-    onClick: () => action?.(),
-    disabled: busy
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: needsLogin ? "qr" : "shield",
-    size: 13
-  }), actionLabel))), /*#__PURE__*/React.createElement("section", {
+  }, /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head group-head-action"
@@ -440,7 +419,31 @@ const AccountPage = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "qr",
     size: 12
-  }), "\u626B\u7801\u6DFB\u52A0\u8D26\u53F7"))))));
+  }), "\u626B\u7801\u6DFB\u52A0\u8D26\u53F7"))), /*#__PURE__*/React.createElement("section", {
+    className: "group card"
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "group-head"
+  }, "\u8D26\u53F7\u5B89\u5168"), /*#__PURE__*/React.createElement("div", {
+    className: "safety-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "safety-info"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "safety-status"
+  }, /*#__PURE__*/React.createElement("i", {
+    className: `status-dot ${hold.blocked ? "warn" : "ok"}`
+  }), /*#__PURE__*/React.createElement("strong", null, hold.blocked ? "保护暂停中" : "状态正常"), hold.blocked && hold.reason && /*#__PURE__*/React.createElement("span", {
+    className: "safety-reason"
+  }, hold.reason)), cooldown && /*#__PURE__*/React.createElement("small", {
+    className: "safety-time"
+  }, "\u6700\u65E9\u6062\u590D\u65F6\u95F4\uFF1A", absoluteTime(hold.until))), action && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: () => action(),
+    disabled: busy
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: needsLogin ? "qr" : hold.blocked ? "shield" : "refresh",
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", null, actionLabel)))))));
 };
 Object.assign(window, {
   SettingsPage,

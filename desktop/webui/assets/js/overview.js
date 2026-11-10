@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"2fe9c78091aaa39b23099864b2e86bd88b26d0c2581f2fa5ab1770a32c77d593","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"a3df2db3a113ae05ab4710a00fdc111d36e842ea728820052ea3e80bde2aa5ce"} */
+/* BiliOshi JSX {"code_sha256":"6834de505fac9d839a36936c4f5f8a89ee4556af56ca68579271d8509be137cd","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"42f280b5e0df4d23284062f9637cd1733e3e633157adce5a8803365c2a99bea1"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -74,11 +74,14 @@ const DetailPanel = ({
   busy,
   onAction,
   onOpen,
-  onMore
+  onMore,
+  dimmed
 }) => {
+  const classes = `detail card${dimmed ? " detail-dim" : ""}`;
   if (!room) return /*#__PURE__*/React.createElement("aside", {
-    className: "detail card",
-    "aria-label": "\u76F4\u64AD\u95F4\u8BE6\u60C5"
+    className: classes,
+    "aria-label": "\u76F4\u64AD\u95F4\u8BE6\u60C5",
+    "aria-hidden": dimmed || undefined
   }, /*#__PURE__*/React.createElement("div", {
     className: "empty"
   }, /*#__PURE__*/React.createElement(Icon, {
@@ -95,8 +98,9 @@ const DetailPanel = ({
   const showStateRow = room.live || room.active || room.reconnecting || room.tone === "warn";
   const showReason = reason && (room.live || room.tone === "warn");
   return /*#__PURE__*/React.createElement("aside", {
-    className: "detail card",
+    className: classes,
     "aria-label": "\u76F4\u64AD\u95F4\u8BE6\u60C5",
+    "aria-hidden": dimmed || undefined,
     "data-screen-label": `详情 · ${room.name}`
   }, /*#__PURE__*/React.createElement("div", {
     className: "detail-scroll",
@@ -128,15 +132,15 @@ const DetailPanel = ({
     title: absoluteTime(room.last_heartbeat)
   }, room.healthy ? `已连接 ${durationLabel(room.minutes)}` : room.live ? "开播后自动建立连接" : "等待恢复正常", room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : "")), /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn sm",
+    className: "link-btn state-action",
     onClick: () => onAction("reconnect", room.room),
     disabled: pending || Boolean(room.actions.reconnect),
     title: room.actions.reconnect || "重新建立看播连接"
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "reconnect",
-    size: 12,
+    size: 11,
     className: room.reconnecting ? "spin" : ""
-  }), room.reconnecting ? "重连中…" : "重连")), /*#__PURE__*/React.createElement("div", {
+  }), room.reconnecting ? "重连中…" : "重新连接")), /*#__PURE__*/React.createElement("div", {
     className: "gain-card"
   }, /*#__PURE__*/React.createElement("div", {
     className: "gain-head"
@@ -219,12 +223,12 @@ const DetailPanel = ({
     className: "btn primary",
     onClick: () => onAction("redo", room.room),
     disabled: pending || Boolean(reason),
-    title: reason || "补齐今日未完成任务"
+    title: reason || "发送弹幕、点赞并补足观看时长，只处理今日未完成的任务"
   }, /*#__PURE__*/React.createElement(Icon, {
     name: pending ? "refresh" : "check",
     size: 13,
     className: pending ? "spin" : ""
-  }), pending ? "正在处理…" : "补齐任务"))));
+  }), pending ? "正在处理…" : "补齐今日任务"))));
 };
 const OverviewActions = ({
   paused,
@@ -237,6 +241,7 @@ const OverviewActions = ({
   type: "button",
   className: "btn",
   onClick: onCheck,
+  title: "\u91CD\u65B0\u67E5\u8BE2\u76F4\u64AD\u72B6\u6001\uFF0C\u5E76\u5237\u65B0\u770B\u64AD\u8FDE\u63A5",
   disabled: checking || controlBusy || closing
 }, /*#__PURE__*/React.createElement(Icon, {
   name: "refresh",
@@ -274,7 +279,6 @@ const Overview = ({
   signedIn,
   closing,
   bridgeConnected,
-  accountName,
   onBatchRemove
 }) => {
   const [managing, setManaging] = React.useState(false);
@@ -296,6 +300,17 @@ const Overview = ({
     onBatchRemove(targetRooms);
     setManaging(false);
     setSelectedBatch(new Set());
+  };
+  const onRoomKey = event => {
+    if (managing || !rooms.length) return;
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const focused = event.target.closest?.(".room");
+    const current = focused ? Number(focused.dataset.room) : selectedId;
+    const index = rooms.findIndex(room => room.room === current);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? rooms.length - 1 : index < 0 ? 0 : (index + (event.key === "ArrowDown" ? 1 : -1) + rooms.length) % rooms.length;
+    onSelect(rooms[next].room);
+    event.currentTarget.querySelector(`[data-room="${rooms[next].room}"]`)?.focus();
   };
   const selected = rooms.find(room => room.room === selectedId);
   const healthy = rooms.filter(room => room.healthy).length;
@@ -325,9 +340,7 @@ const Overview = ({
     className: "list-title"
   }, "\u5173\u6CE8\u7684\u76F4\u64AD\u95F4"), /*#__PURE__*/React.createElement("span", {
     className: "list-count"
-  }, rooms.length), accountName && /*#__PURE__*/React.createElement("span", {
-    className: "list-context"
-  }, accountName), /*#__PURE__*/React.createElement("span", {
+  }, rooms.length), /*#__PURE__*/React.createElement("span", {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -375,7 +388,8 @@ const Overview = ({
   }, "\u5B8C\u6210")), /*#__PURE__*/React.createElement("div", {
     className: "rooms",
     role: "listbox",
-    "aria-label": "\u76F4\u64AD\u95F4\u5217\u8868"
+    "aria-label": "\u76F4\u64AD\u95F4\u5217\u8868",
+    onKeyDown: onRoomKey
   }, rooms.length ? rooms.map(room => /*#__PURE__*/React.createElement(RoomRow, {
     key: room.room,
     room: room,
@@ -400,6 +414,7 @@ const Overview = ({
     busy: busyRoom === selected?.room,
     onAction: onAction,
     onOpen: onOpen,
+    dimmed: managing,
     onMore: event => {
       if (!selected) return;
       const rect = event.currentTarget.getBoundingClientRect();

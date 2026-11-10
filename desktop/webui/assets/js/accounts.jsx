@@ -1,8 +1,7 @@
-/* Account tabs and the account switcher.
-   One account is displayed and active at a time; switching is instant. */
+/* Account tabs. One account is displayed and active at a time; switching is
+   instant, so a tab click also has to say what will happen. */
 
-const { Icon, relativeTime, numberLabel } = window;
-const { useEffect, useRef } = React;
+const { Icon } = window;
 
 const ACCOUNT_COLORS = ["#3d7a6c", "#6a5f8f", "#8a7b62", "#7a6270", "#4f6f8a", "#7d6a4f"];
 
@@ -51,14 +50,19 @@ const AccountTabs = ({ accounts, activeId, onSelect, onAdd }) => {
         {accounts.map((account, index) => {
           const selected = activeId === account.id;
           const state = accountStateLabel(account);
+          const live = account.live_room_count || 0;
+          const countLabel = live ? `，${live} 个直播间直播中` : "";
+          const action = selected ? "当前账号" : "切换到此账号并开始挂机";
           return <button type="button" key={account.id} id={`account-tab-${account.id}`} role="tab"
             aria-selected={selected} aria-controls="monitor-body" tabIndex={selected ? 0 : -1}
-            className={`account-tab ${selected ? "active" : ""}`} title={state.label}
+            className={`account-tab ${selected ? "active" : ""}`}
+            title={`${account.name}：${state.label}${countLabel}（${action}）`}
+            aria-label={`${account.name}，${state.label}${countLabel}。${action}`}
             onClick={() => onSelect(account.id)} onKeyDown={(event) => move(event, index)}>
             <span className="tab-avatar" style={{ background: accountColor(account.id) }}>{accountInitial(account.name)}</span>
             <span className="tab-name">{account.name}</span>
             <i className={`tab-state ${state.tone}`} aria-hidden="true" />
-            <span className="tab-count">{account.live_room_count || 0}</span>
+            {live > 0 && <span className="tab-count" title="直播中的直播间数">{live}</span>}
           </button>;
         })}
         <button type="button" className="account-tab add" onClick={onAdd} title="添加账号" aria-label="添加账号">
@@ -69,77 +73,4 @@ const AccountTabs = ({ accounts, activeId, onSelect, onAdd }) => {
   );
 };
 
-const AccountDashboard = () => null;
-
-const AccountSwitcher = ({ open, accounts, activeId, onSelect, onManage, onAdd, onClose }) => {
-  const menu = useRef(null);
-  const trigger = useRef(null);
-  const close = useRef(onClose);
-  close.current = onClose;
-
-  useEffect(() => {
-    if (!open) return undefined;
-    trigger.current = document.activeElement;
-    const focusTimer = window.setTimeout(() => {
-      const selected = menu.current?.querySelector('[aria-checked="true"]');
-      (selected || menu.current?.querySelector("button"))?.focus();
-    }, 0);
-    const keydown = (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close.current();
-        return;
-      }
-      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-      event.preventDefault();
-      const items = Array.from(menu.current?.querySelectorAll("button") || []);
-      if (!items.length) return;
-      const index = items.indexOf(document.activeElement);
-      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
-        : index < 0 ? 0
-          : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
-      items[next].focus();
-    };
-    document.addEventListener("keydown", keydown);
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.removeEventListener("keydown", keydown);
-      trigger.current?.focus?.();
-    };
-  }, [open]);
-
-  if (!open) return null;
-  return (
-    <>
-      <div className="switcher-scrim open" onClick={onClose} />
-      <div className="switcher open" role="menu" aria-label="账号切换器" ref={menu}>
-        <div className="switcher-head">
-          <strong>切换账号</strong>
-          <span>共 {accounts.length} 个账号</span>
-        </div>
-        {accounts.map((account) => {
-          const state = accountStateLabel(account);
-          const selected = activeId === account.id;
-          return <button type="button" key={account.id} role="menuitemradio" aria-checked={selected}
-            className="switcher-item" onClick={() => onSelect(account.id)}>
-            <AccountAvatar account={account} size="sm" />
-            <span className="switcher-item-main">
-              <strong>{account.name}</strong>
-              <small className={state.tone === "warn" ? "warn" : ""}>
-                {selected ? "当前使用 · 挂机中" : state.label}
-              </small>
-            </span>
-            {selected && <Icon name="check" size={13} />}
-          </button>;
-        })}
-        {!accounts.length && <p className="switcher-mode">尚未添加账号。</p>}
-        <div className="switcher-foot">
-          <button type="button" role="menuitem" onClick={onManage}>管理账号</button>
-          <button type="button" role="menuitem" onClick={onAdd}>添加账号</button>
-        </div>
-      </div>
-    </>
-  );
-};
-
-Object.assign(window, { AccountTabs, AccountDashboard, AccountSwitcher, AccountAvatar, accountStateLabel, accountColor, accountInitial });
+Object.assign(window, { AccountTabs, AccountAvatar, accountStateLabel, accountColor, accountInitial });

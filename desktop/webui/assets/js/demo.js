@@ -27,13 +27,20 @@
     rows, paused: false, checking: false, last_check: now - 120, version: "2026.10.18.3",
     account: "示例账号", account_confirmed: true, account_checked_at: now - 120,
     active_account_id: "uid-demo", view_account_id: "all",
-    accounts: [{
-      id: "uid-demo", uid: 10001, name: "示例账号", status: "ok", state: "running",
-      signed_in: true, running: true, paused: false, global_paused: false,
-      room_count: rows.length, live_room_count: rows.filter((row) => row.live_status === 1).length,
-      gain: rows.reduce((total, row) => total + (row.intimacy_gain || 0), 0),
-      snapshot_at: now - 120
-    }],
+    accounts: [
+      {
+        id: "uid-demo", uid: 10001, name: "示例账号", status: "ok", state: "running",
+        signed_in: true, running: true, paused: false, global_paused: false,
+        room_count: rows.length, live_room_count: rows.filter((row) => row.live_status === 1).length,
+        gain: rows.reduce((total, row) => total + (row.intimacy_gain || 0), 0),
+        snapshot_at: now - 120
+      },
+      {
+        id: "uid-second", uid: 20002, name: "备用小号", status: "ok", state: "idle",
+        signed_in: true, running: false, paused: false, global_paused: false,
+        room_count: 2, live_room_count: 1, gain: 0, snapshot_at: now - 3600
+      }
+    ],
     safety: { blocked: false }, error: "", running: true,
     settings: { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false, notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false },
     accountInfo: { signed_in: true, name: "示例账号", confirmed: true, checked_at: now - 120, safety: { blocked: false } },
@@ -142,6 +149,8 @@
       state.recovery = { action: "login", label: "扫码登录" }; publish(); return { ok: true }; },
     resume_safety() { state.safety = { blocked: false }; publish(); return { ok: true }; },
     growth(days, accountId) { return JSON.parse(JSON.stringify(growth)); },
+    switch_account(id) { state.active_account_id = id; const a = state.accounts.find(x => x.id === id); if (a) state.account = a.name; publish(); return { ok: true }; },
+    remove_account(id) { state.accounts = state.accounts.filter(x => x.id !== id); publish(); return { ok: true }; },
     set_view_account(accountId) { state.view_account_id = accountId || "all"; publish(); return { ok: true }; },
     refresh() { publish(); return { ok: true }; },
     window() { return { ok: true, message: "预览模式不控制窗口" }; },

@@ -36,9 +36,10 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, che
   </button>
 );
 
-const DetailPanel = ({ room, busy, onAction, onOpen, onMore }) => {
+const DetailPanel = ({ room, busy, onAction, onOpen, onMore, dimmed }) => {
+  const classes = `detail card${dimmed ? " detail-dim" : ""}`;
   if (!room) return (
-    <aside className="detail card" aria-label="直播间详情">
+    <aside className={classes} aria-label="直播间详情" aria-hidden={dimmed || undefined}>
       <div className="empty">
         <Icon name="monitor" size={24} />
         <strong>选择一个直播间</strong>
@@ -56,7 +57,8 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore }) => {
   const showStateRow = room.live || room.active || room.reconnecting || room.tone === "warn";
   const showReason = reason && (room.live || room.tone === "warn");
   return (
-    <aside className="detail card" aria-label="直播间详情" data-screen-label={`详情 · ${room.name}`}>
+    <aside className={classes} aria-label="直播间详情" aria-hidden={dimmed || undefined}
+      data-screen-label={`详情 · ${room.name}`}>
       <div className="detail-scroll" key={room.room}>
         <div className="detail-heading">
           <div className="detail-identity">
@@ -75,10 +77,12 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore }) => {
               {room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : ""}
             </span>
           </span>
-          <button type="button" className="btn sm" onClick={() => onAction("reconnect", room.room)}
+          {/* A status line reads better with a quiet link than a button that
+              competes with the page actions at the bottom. */}
+          <button type="button" className="link-btn state-action" onClick={() => onAction("reconnect", room.room)}
             disabled={pending || Boolean(room.actions.reconnect)} title={room.actions.reconnect || "重新建立看播连接"}>
-            <Icon name="reconnect" size={12} className={room.reconnecting ? "spin" : ""} />
-            {room.reconnecting ? "重连中…" : "重连"}
+            <Icon name="reconnect" size={11} className={room.reconnecting ? "spin" : ""} />
+            {room.reconnecting ? "重连中…" : "重新连接"}
           </button>
         </div>}
         <div className="gain-card">
@@ -127,9 +131,9 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore }) => {
             <Icon name="external" size={13} />打开直播间
           </button>
           <button type="button" className="btn primary" onClick={() => onAction("redo", room.room)}
-            disabled={pending || Boolean(reason)} title={reason || "补齐今日未完成任务"}>
+            disabled={pending || Boolean(reason)} title={reason || "发送弹幕、点赞并补足观看时长，只处理今日未完成的任务"}>
             <Icon name={pending ? "refresh" : "check"} size={13} className={pending ? "spin" : ""} />
-            {pending ? "正在处理…" : "补齐任务"}
+            {pending ? "正在处理…" : "补齐今日任务"}
           </button>
         </div>
       </div>
@@ -140,7 +144,7 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore }) => {
 const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy, closing }) => (
   <>
     <button type="button" className="btn" onClick={onCheck}
-      disabled={checking || controlBusy || closing}>
+      title="重新查询直播状态，并刷新看播连接" disabled={checking || controlBusy || closing}>
       <Icon name="refresh" size={13} className={checking ? "spin" : ""} />{checking ? "检查中…" : "立即检查"}</button>
     <button type="button" className={`btn ${paused ? "primary" : ""}`} onClick={onTogglePause}
       disabled={controlBusy || closing}>
@@ -151,7 +155,7 @@ const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy
 const Overview = ({ rooms, selectedId, onSelect, paused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, busyRoom, controlBusy,
   error, recovery, onRecovery, interval, lastCheck, checking, images, signedIn, closing, bridgeConnected,
-  accountName, onBatchRemove }) => {
+  onBatchRemove }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
 
@@ -175,6 +179,20 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
     setManaging(false);
     setSelectedBatch(new Set());
   };
+  const onRoomKey = (event) => {
+    if (managing || !rooms.length) return;
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const focused = event.target.closest?.(".room");
+    const current = focused ? Number(focused.dataset.room) : selectedId;
+    const index = rooms.findIndex((room) => room.room === current);
+    const next = event.key === "Home" ? 0
+      : event.key === "End" ? rooms.length - 1
+        : index < 0 ? 0
+          : (index + (event.key === "ArrowDown" ? 1 : -1) + rooms.length) % rooms.length;
+    onSelect(rooms[next].room);
+    event.currentTarget.querySelector(`[data-room="${rooms[next].room}"]`)?.focus();
+  };
 
   const selected = rooms.find((room) => room.room === selectedId);
   const healthy = rooms.filter((room) => room.healthy).length;
@@ -197,7 +215,6 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
         {!managing ? (
           <header className="list-head">
             <span className="list-title">关注的直播间</span><span className="list-count">{rooms.length}</span>
-            {accountName && <span className="list-context">{accountName}</span>}
             <span className="spacer" />
             <button type="button" className="btn ghost sm" onClick={onAddMember} disabled={closing}>
               <Icon name="plus" size={12} />添加主播</button>
@@ -220,7 +237,9 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
               完成</button>
           </header>
         )}
-        <div className="rooms" role="listbox" aria-label="直播间列表">
+        {/* A listbox promises arrow-key movement; without it keyboard users
+            must Tab through every room. */}
+        <div className="rooms" role="listbox" aria-label="直播间列表" onKeyDown={onRoomKey}>
           {rooms.length ? rooms.map((room) => <RoomRow key={room.room} room={room} selected={room.room === selectedId}
             image={images[room.uid]} onSelect={onSelect} onContextMenu={onContextMenu}
             managing={managing} checked={selectedBatch.has(room.room)} onToggleCheck={toggleCheck} />)
@@ -229,7 +248,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
               <button type="button" className="btn" onClick={onAddMember}>添加主播</button></div>}
         </div>
       </section>
-      <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen}
+      <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen} dimmed={managing}
         onMore={(event) => {
           if (!selected) return;
           const rect = event.currentTarget.getBoundingClientRect();

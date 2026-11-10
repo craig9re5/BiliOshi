@@ -116,9 +116,6 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
       <div className="growth-page">
         <div className="growth-inner">
           <span className="growth-sr" aria-live="polite">{announcement}</span>
-          <div className="growth-head">
-            <p className="growth-meta">粉丝牌今日亲密度 · 每日 00:00 重置</p>
-          </div>
           {error
             ? <GrowthState icon="alert" title="成长记录暂时无法读取" text={error} action="重试" onAction={retry} />
             : <GrowthState icon="clock" title="正在读取成长记录…" />}

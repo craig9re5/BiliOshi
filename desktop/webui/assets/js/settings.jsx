@@ -116,35 +116,35 @@ const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", o
     <div className="settings" data-screen-label="设置"><div className="settings-inner">
       <section className="group card">
         <header className="group-head">每日任务</header>
-        <SettingRow name="点亮粉丝牌" desc="粉丝牌熄灭时发送弹幕，点亮后停止">
+        <SettingRow name="点亮粉丝牌" desc="牌子熄灭时发送弹幕重新点亮">
           <Switch label="点亮粉丝牌" checked={settings.auto_revive} disabled={disabled("auto_revive")}
             onChange={(value) => onSetting("auto_revive", value)} />
         </SettingRow>
-        <SettingRow name="完成弹幕任务" desc="只补齐剩余弹幕，完成后停止">
+        <SettingRow name="完成弹幕任务" desc="自动补齐每日弹幕亲密度任务">
           <Switch label="完成弹幕任务" checked={settings.auto_danmaku_intimacy} disabled={disabled("auto_danmaku_intimacy")}
             onChange={(value) => onSetting("auto_danmaku_intimacy", value)} />
         </SettingRow>
-        <SettingRow name="直播点赞" desc="自动点赞并检查任务进度，默认关闭">
+        <SettingRow name="直播点赞" desc="进入开播直播间后自动完成点赞">
           <Switch label="直播点赞" checked={settings.auto_like} disabled={disabled("auto_like")}
             onChange={(value) => onSetting("auto_like", value)} />
         </SettingRow>
       </section>
       <section className="group card">
         <header className="group-head">运行与启动</header>
-        <SettingRow name="开播通知" desc="关注的主播开播时，通过系统通知提醒">
+        <SettingRow name="开播通知" desc="关注的主播开播时弹出系统提醒">
           <Switch label="开播通知" checked={settings.notify_on_live} disabled={disabled("notify_on_live")}
             onChange={(value) => onSetting("notify_on_live", value)} />
         </SettingRow>
-        <SettingRow name="开机启动" desc="登录 Windows 后在托盘运行，不打开主窗口">
+        <SettingRow name="开机启动" desc="登录系统后在托盘静默运行">
           <Switch label="开机启动" checked={settings.autostart} disabled={disabled("autostart")}
             onChange={(value) => onSetting("autostart", value)} />
         </SettingRow>
-        <SettingRow name="运行模式" desc="稳健：5 分钟查开播、60 秒续点赞；激进：1 分钟查开播、20 秒续点赞">
+        <SettingRow name="运行模式" desc="稳健模式推荐日常挂机；激进模式检测更频繁">
           <Choice label="运行模式" value={runMode} disabled={disabled("run_mode")}
             options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
             onChange={(value) => onSetting("run_mode", value)} />
         </SettingRow>
-        <SettingRow name="运行日志" desc="在文件资源管理器中打开当前账号的日志目录，排查异常或查看运行记录">
+        <SettingRow name="运行日志" desc="打开日志文件所在目录，便于排障">
           <button type="button" className="btn sm" onClick={onLogs}>
             <Icon name="folder" size={13} />查看日志
           </button>
@@ -152,11 +152,10 @@ const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", o
       </section>
       <section className="group card">
         <header className="group-head">外观</header>
-        <SettingRow name="界面主题" desc="选择界面表面颜色，切换后立即生效并记住选择（全应用，不随账号切换）">
+        <SettingRow name="界面主题" desc="自定义应用配色风格">
           <ThemeOptions value={theme} onChange={onTheme} />
         </SettingRow>
       </section>
-      <p className="settings-note">运行模式保存后立即生效。当天的已完成进度与发送额度会保留。任务开关与运行模式按账号独立保存。</p>
     </div></div>
   </>);
 };

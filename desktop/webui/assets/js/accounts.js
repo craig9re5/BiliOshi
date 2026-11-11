@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"83455b5db0a126f012efa0dd6297cd7584ded8805959c11c19d4400548096f90","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"ef82f96237a941714071cd848426fbda55f895491825dbbd43b923b0316aaa09"} */
+/* BiliOshi JSX {"code_sha256":"38ab24cfe197a8370448fa25e8ca8f3964946c8a3d4fce326e9ddf617d20d8b9","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"281ad5a0e18349b4bfb693fed89a52e6fb41e8d2d0c3a37c5560ad9a1168eedf"} */
 (function () {
 "use strict";
 /* Account tabs. One account is displayed and active at a time; switching is
@@ -97,8 +97,8 @@ const AccountTabs = ({
     const selected = activeId === account.id;
     const state = accountStateLabel(account);
     const live = account.live_room_count || 0;
-    const countLabel = live ? `，${live} 个直播间直播中` : "";
-    const action = selected ? "当前账号" : "切换到此账号并开始挂机";
+    const liveText = live ? ` · ${live} 个开播` : "";
+    const actionText = selected ? "当前使用" : "点击切换";
     return /*#__PURE__*/React.createElement("button", {
       type: "button",
       key: account.id,
@@ -108,8 +108,8 @@ const AccountTabs = ({
       "aria-controls": "monitor-body",
       tabIndex: selected ? 0 : -1,
       className: `account-tab ${selected ? "active" : ""}`,
-      title: `${account.name}：${state.label}${countLabel}（${action}）`,
-      "aria-label": `${account.name}，${state.label}${countLabel}。${action}`,
+      title: `${account.name} · ${state.label}${liveText}（${actionText}）`,
+      "aria-label": `${account.name} · ${state.label}${liveText}`,
       onClick: () => onSelect(account.id),
       onKeyDown: event => move(event, index)
     }, /*#__PURE__*/React.createElement("span", {

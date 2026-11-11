@@ -45,10 +45,10 @@ const QrModal = ({ qr, onClose, onRetry }) => {
   };
   const relogin = Boolean(qr.account_id);
   return (
-    <Modal title={qr.state === "confirmed" ? "已登录" : relogin ? "重新登录这个账号" : "扫码登录 B 站"}
+    <Modal title={qr.state === "confirmed" ? "已登录" : relogin ? "重新登录" : "扫码登录 B 站"}
       desc={qr.state === "confirmed" ? qr.account
-        : relogin ? "只会更新这个账号的登录凭证，其他账号继续运行；以后切换账号不用重新扫码。"
-          : "使用 B 站 App 扫码，并在手机上确认"} onClose={onClose}
+        : relogin ? "重新扫码仅更新当前账号凭证，不影响其他账号。"
+          : "请使用哔哩哔哩客户端扫码"} onClose={onClose}
       actions={<>
         <button type="button" className="btn" onClick={onClose}>{qr.state === "confirmed" ? "完成" : "取消"}</button>
         {qr.state !== "confirmed" && <button type="button" className="btn primary" onClick={onRetry} disabled={qr.state === "starting"}>
@@ -81,16 +81,15 @@ const AddMemberModal = ({ query, onQuery, result, loading, adding, onSearch, onA
         <div className="account-meta">直播间 {result.member.room} · UID {result.member.uid}</div></div></div>}
     {result && !result.ok && <div className="field-error" role="alert">{result.error}</div>}
     {onSyncMedals && <div className="field-note" style={{ marginTop: "12px", textAlign: "center" }}>
-      <span>想批量导入？</span>
-      <button type="button" className="link-btn" onClick={() => { onClose(); onSyncMedals(); }} style={{ marginLeft: "6px" }}>
-        从 B 站粉丝牌同步导入主播 →
+      <button type="button" className="link-btn" onClick={() => { onClose(); onSyncMedals(); }}>
+        从已有粉丝牌批量同步 →
       </button>
     </div>}
   </Modal>
 );
 
 const MedalsModal = ({ data, selected, onToggle, onImport, onClose, loading, importing, error, onRetry }) => (
-  <Modal title="同步粉丝牌" desc="选择要关注的主播，已关注的主播会自动跳过" wide onClose={onClose}
+  <Modal title="同步粉丝牌" desc="选择要关注的主播（已关注的自动跳过）" wide onClose={onClose}
     actions={<>
       <button type="button" className="btn" onClick={onClose}>取消</button>
       <button type="button" className="btn primary" onClick={onImport} disabled={loading || importing || selected.size === 0 || Boolean(error)}>

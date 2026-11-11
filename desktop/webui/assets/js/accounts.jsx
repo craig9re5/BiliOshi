@@ -51,13 +51,13 @@ const AccountTabs = ({ accounts, activeId, onSelect, onAdd }) => {
           const selected = activeId === account.id;
           const state = accountStateLabel(account);
           const live = account.live_room_count || 0;
-          const countLabel = live ? `，${live} 个直播间直播中` : "";
-          const action = selected ? "当前账号" : "切换到此账号并开始挂机";
+          const liveText = live ? ` · ${live} 个开播` : "";
+          const actionText = selected ? "当前使用" : "点击切换";
           return <button type="button" key={account.id} id={`account-tab-${account.id}`} role="tab"
             aria-selected={selected} aria-controls="monitor-body" tabIndex={selected ? 0 : -1}
             className={`account-tab ${selected ? "active" : ""}`}
-            title={`${account.name}：${state.label}${countLabel}（${action}）`}
-            aria-label={`${account.name}，${state.label}${countLabel}。${action}`}
+            title={`${account.name} · ${state.label}${liveText}（${actionText}）`}
+            aria-label={`${account.name} · ${state.label}${liveText}`}
             onClick={() => onSelect(account.id)} onKeyDown={(event) => move(event, index)}>
             <span className="tab-avatar" style={{ background: accountColor(account.id) }}>{accountInitial(account.name)}</span>
             <span className="tab-name">{account.name}</span>

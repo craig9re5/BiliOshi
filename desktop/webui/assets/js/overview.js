@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"6834de505fac9d839a36936c4f5f8a89ee4556af56ca68579271d8509be137cd","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"42f280b5e0df4d23284062f9637cd1733e3e633157adce5a8803365c2a99bea1"} */
+/* BiliOshi JSX {"code_sha256":"67257b2b6ea478c990ba6dc436b4465d3a1d0a8050e5429ddfb68d3306e9ab91","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"d7380dfa4856786f8b5f583f02eef139bca8d2de8b6bcf028a107b932e49a8c3"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -152,7 +152,7 @@ const DetailPanel = ({
     className: "gain-value"
   }, room.gain === null ? "—" : `+${numberLabel(room.gain)}`), /*#__PURE__*/React.createElement("div", {
     className: "gain-foot"
-  }, /*#__PURE__*/React.createElement("span", null, room.gain === null ? "等待更新" : "已确认到账"), room.day_limit > 0 && /*#__PURE__*/React.createElement("span", null, "\u6BCF\u65E5\u4E0A\u9650 ", numberLabel(room.day_limit))), knownExperience && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, room.gain === null ? "等待更新" : "今日已获得"), room.day_limit > 0 && /*#__PURE__*/React.createElement("span", null, "\u6BCF\u65E5\u4E0A\u9650 ", numberLabel(room.day_limit))), knownExperience && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "bar thin",
     role: "progressbar",
     "aria-label": "\u7C89\u4E1D\u724C\u5347\u7EA7\u8FDB\u5EA6",
@@ -223,7 +223,7 @@ const DetailPanel = ({
     className: "btn primary",
     onClick: () => onAction("redo", room.room),
     disabled: pending || Boolean(reason),
-    title: reason || "发送弹幕、点赞并补足观看时长，只处理今日未完成的任务"
+    title: reason || "自动补齐今日未完成的互动任务"
   }, /*#__PURE__*/React.createElement(Icon, {
     name: pending ? "refresh" : "check",
     size: 13,
@@ -241,7 +241,7 @@ const OverviewActions = ({
   type: "button",
   className: "btn",
   onClick: onCheck,
-  title: "\u91CD\u65B0\u67E5\u8BE2\u76F4\u64AD\u72B6\u6001\uFF0C\u5E76\u5237\u65B0\u770B\u64AD\u8FDE\u63A5",
+  title: "\u68C0\u67E5\u5F00\u64AD\u72B6\u6001\u4E0E\u4EFB\u52A1\u8FDB\u5EA6",
   disabled: checking || controlBusy || closing
 }, /*#__PURE__*/React.createElement(Icon, {
   name: "refresh",
@@ -325,7 +325,7 @@ const Overview = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: recovery?.action === "login" ? "user" : "alert",
     size: 14
-  }), /*#__PURE__*/React.createElement("span", null, !signedIn ? "登录 B 站，开始自动挂机与每日任务" : error || recovery?.message), recovery?.action && /*#__PURE__*/React.createElement("button", {
+  }), /*#__PURE__*/React.createElement("span", null, !signedIn ? "请先登录 B 站账号以开始挂机" : error || recovery?.message), recovery?.action && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm",
     onClick: onRecovery
@@ -405,7 +405,7 @@ const Overview = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "monitor",
     size: 24
-  }), /*#__PURE__*/React.createElement("strong", null, "\u8FD8\u6CA1\u6709\u5173\u6CE8\u4E3B\u64AD"), /*#__PURE__*/React.createElement("span", null, "\u6DFB\u52A0\u4E3B\u64AD\u6216\u540C\u6B65\u5DF2\u6709\u7C89\u4E1D\u724C\uFF0C\u5F00\u64AD\u540E\u81EA\u52A8\u5F00\u59CB"), /*#__PURE__*/React.createElement("button", {
+  }), /*#__PURE__*/React.createElement("strong", null, "\u8FD8\u6CA1\u6709\u5173\u6CE8\u4E3B\u64AD"), /*#__PURE__*/React.createElement("span", null, "\u6DFB\u52A0\u4E3B\u64AD\u6216\u540C\u6B65\u7C89\u4E1D\u724C\u540E\u5373\u53EF\u81EA\u52A8\u6302\u673A"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn",
     onClick: onAddMember

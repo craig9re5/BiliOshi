@@ -195,22 +195,22 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
 
   let banner = null;
   if (data.status === "needs_login") {
-    banner = { text: "此账号需要重新登录，历史仍可查看。", action: "去账号页", run: onOpenAccount };
+    banner = { text: "当前账号登录已失效，历史记录仍可查看。", action: "前往重新登录", run: onOpenAccount };
   } else if (data.status === "protection") {
-    banner = { text: "账号处于保护暂停，历史仍可查看；请先完成平台验证。", action: "去账号页", run: onOpenAccount };
+    banner = { text: "账号已暂停互动，请先在平台完成安全验证。", action: "前往查看", run: onOpenAccount };
   } else if (!data.running && data.status === "global_paused") {
     banner = {
-      text: `全部挂机已暂停，${lastSample ? `数据停在 ${chinaClock(lastSample)}。` : ""}恢复后继续记录。`,
+      text: "全部挂机已暂停，恢复后将继续记录成长。",
       action: "去直播总览", run: onOpenMonitor,
     };
   } else if (!data.running && data.paused) {
     banner = {
-      text: `此账号已暂停，${lastSample ? `数据停在 ${chinaClock(lastSample)}。` : ""}恢复挂机后继续记录。`,
+      text: "当前账号已暂停挂机，恢复后将继续记录成长。",
       action: "去直播总览", run: onOpenMonitor,
     };
   } else if (!data.running) {
     banner = {
-      text: `此账号当前未挂机，${lastSample ? `数据停在 ${chinaClock(lastSample)}。` : ""}恢复挂机后继续记录。`,
+      text: "当前账号未挂机，开启挂机后将自动记录成长。",
       action: "去直播总览", run: onOpenMonitor,
     };
   }

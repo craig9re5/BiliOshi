@@ -496,14 +496,14 @@ function App() {
   };
 
   const dialogCopy = {
-    remove: { title: "移除主播？", desc: `不再对「${dialog?.room?.name || ""}」执行挂机与每日任务。可随时重新添加。`, confirmLabel: "移除主播", danger: true },
-    batchRemove: { title: `批量移除 ${dialog?.rooms?.length || 0} 位主播？`, desc: "将不再对选中的主播执行挂机与每日任务。可随时重新添加。", confirmLabel: "确认批量移除", danger: true },
-    logout: { title: "退出这个账号的登录？", desc: "会停止此账号的挂机并删除本机登录凭证；关注列表、任务进度、额度与保护记录保留。其他账号不受影响。", confirmLabel: "退出登录", danger: true },
-    safety: { title: "恢复账号操作？", desc: "先在 B 站完成验证并确认限制已解除。恢复后会重新检查账号，当天发送额度不会重置。", confirmLabel: "确认并恢复" },
-    quit: { title: "退出 ビリ推し？", desc: "将停止所有挂机连接。关闭窗口可继续在托盘运行。", confirmLabel: "退出应用", danger: true },
-    switch: { title: "切换挂机账号？", desc: "连接会短暂中断；任务进度与今日额度保留，不需要重新扫码。", confirmLabel: "切换并挂机" },
-    removeAccount: { title: "移除这个账号？", desc: "会删除本机登录凭证并移出账号列表。关注列表、任务进度、额度与保护记录会保留，重新添加同一账号后可继续使用。", confirmLabel: "移除账号", danger: true },
-    protection: { title: "账号保护暂停", desc: "收到验证或异常拒绝，账号操作已暂停。重新扫码不会解除，需要先在平台处理。", confirmLabel: "知道了" }
+    remove: { title: "移除主播？", desc: `将从关注列表中移除「${dialog?.room?.name || ""}」，后续可随时重新添加。`, confirmLabel: "移除主播", danger: true },
+    batchRemove: { title: `批量移除 ${dialog?.rooms?.length || 0} 位主播？`, desc: "将从关注列表中移除所选主播，后续可随时重新添加。", confirmLabel: "确认批量移除", danger: true },
+    logout: { title: "退出当前账号？", desc: "退出后将停止挂机并清除登录凭证，关注列表与记录仍会保留。", confirmLabel: "退出登录", danger: true },
+    safety: { title: "恢复账号操作？", desc: "请先在 B 站确认账号状态正常。恢复后将重新检查并继续运行。", confirmLabel: "确认并恢复" },
+    quit: { title: "退出 ビリ推し？", desc: "将停止所有任务并退出程序。如需后台挂机，直接关闭窗口即可。", confirmLabel: "退出应用", danger: true },
+    switch: { title: "切换挂机账号？", desc: "切换后将使用新账号开始挂机，当前任务进度会自动保存。", confirmLabel: "切换并挂机" },
+    removeAccount: { title: "移除这个账号？", desc: "将从列表中移除此账号并清除凭证，关注列表与记录仍会保留。", confirmLabel: "移除账号", danger: true },
+    protection: { title: "账号保护暂停", desc: "检测到平台安全验证或限制，互动操作已暂停。请先在 B 站完成验证。", confirmLabel: "知道了" }
   };
 
   return (

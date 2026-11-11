@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"275f6b273e5b4941000c6aa5f55474ab73f42ecee965c101097a97bc48d39d06","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"8771605ec75f98107d8862d662e40e285a8704cc5053e29ea2bd1091747f7b3f"} */
+/* BiliOshi JSX {"code_sha256":"1fe5af42d6a5a52f80821c1af260cee324d1892132776bee053fe05ea8bd504b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"3af109f769caa419dce8ad6643327241e5575599308476b391c9abf4b158b51b"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -82,8 +82,8 @@ const QrModal = ({
   };
   const relogin = Boolean(qr.account_id);
   return /*#__PURE__*/React.createElement(Modal, {
-    title: qr.state === "confirmed" ? "已登录" : relogin ? "重新登录这个账号" : "扫码登录 B 站",
-    desc: qr.state === "confirmed" ? qr.account : relogin ? "只会更新这个账号的登录凭证，其他账号继续运行；以后切换账号不用重新扫码。" : "使用 B 站 App 扫码，并在手机上确认",
+    title: qr.state === "confirmed" ? "已登录" : relogin ? "重新登录" : "扫码登录 B 站",
+    desc: qr.state === "confirmed" ? qr.account : relogin ? "重新扫码仅更新当前账号凭证，不影响其他账号。" : "请使用哔哩哔哩客户端扫码",
     onClose: onClose,
     actions: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
       type: "button",
@@ -170,17 +170,14 @@ const AddMemberModal = ({
     marginTop: "12px",
     textAlign: "center"
   }
-}, /*#__PURE__*/React.createElement("span", null, "\u60F3\u6279\u91CF\u5BFC\u5165\uFF1F"), /*#__PURE__*/React.createElement("button", {
+}, /*#__PURE__*/React.createElement("button", {
   type: "button",
   className: "link-btn",
   onClick: () => {
     onClose();
     onSyncMedals();
-  },
-  style: {
-    marginLeft: "6px"
   }
-}, "\u4ECE B \u7AD9\u7C89\u4E1D\u724C\u540C\u6B65\u5BFC\u5165\u4E3B\u64AD \u2192")));
+}, "\u4ECE\u5DF2\u6709\u7C89\u4E1D\u724C\u6279\u91CF\u540C\u6B65 \u2192")));
 const MedalsModal = ({
   data,
   selected,
@@ -193,7 +190,7 @@ const MedalsModal = ({
   onRetry
 }) => /*#__PURE__*/React.createElement(Modal, {
   title: "\u540C\u6B65\u7C89\u4E1D\u724C",
-  desc: "\u9009\u62E9\u8981\u5173\u6CE8\u7684\u4E3B\u64AD\uFF0C\u5DF2\u5173\u6CE8\u7684\u4E3B\u64AD\u4F1A\u81EA\u52A8\u8DF3\u8FC7",
+  desc: "\u9009\u62E9\u8981\u5173\u6CE8\u7684\u4E3B\u64AD\uFF08\u5DF2\u5173\u6CE8\u7684\u81EA\u52A8\u8DF3\u8FC7\uFF09",
   wide: true,
   onClose: onClose,
   actions: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {

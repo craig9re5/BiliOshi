@@ -90,3 +90,24 @@ def recovery_route(snap):
     if any(row.get("status_stale") or row.get("tasks_stale") for row in snap.get("rows", [])):
         return {"action": "check", "label": "更新进度", "message": "部分状态或任务进度已过期，请立即检查。"}
     return {}
+
+
+def build_tray_menu(commands_queue, *, paused, safety_blocked=None, can_act=None):
+    """Build the compact tray context menu shared by WebView2 and legacy Tk hosts."""
+    import pystray
+
+    def item(label, command, **kwargs):
+        return pystray.MenuItem(label, lambda: commands_queue.put(command), **kwargs)
+
+    items = [item("打开主界面", "show", default=True)]
+    if safety_blocked is not None:
+        items.append(item("处理账号异常", "safety", visible=lambda _: bool(safety_blocked())))
+    action_opts = {} if can_act is None else {"enabled": lambda _: bool(can_act())}
+    items.extend([
+        pystray.Menu.SEPARATOR,
+        item(lambda _: "恢复挂机" if paused() else "暂停挂机", "toggle", **action_opts),
+        item("立即检查", "check", **action_opts),
+        pystray.Menu.SEPARATOR,
+        item("退出", "exit"),
+    ])
+    return pystray.Menu(*items)

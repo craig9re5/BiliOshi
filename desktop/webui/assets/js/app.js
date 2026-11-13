@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"44c65375c04ffa703fe24d4d0f67a8e8944b9ff9929b833979637d9f41c7c2ab","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"8990b01e7c95cedf052342e2fc4e17f8b212f0fe98019aececdacf464fe0383d"} */
+/* BiliOshi JSX {"code_sha256":"61f4670be12ce5456dcac6d02b401ee2d55f7930b9588846018681f131ac722f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"45058256fdeb560f6bb31a6c0d74c50a44b6e3bc61ab52b40baaf980bb24d8da"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -525,6 +525,21 @@ function App() {
   const selected = rooms.find(room => room.room === selectedId);
   const account = viewed.accountInfo || EMPTY_SNAPSHOT.accountInfo;
   const closing = Boolean(snap.closing);
+  useEffect(() => {
+    setMenu(null);
+  }, [page, activeId]);
+  useEffect(() => {
+    const onDocContextMenu = event => {
+      if (event.defaultPrevented) return;
+      const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      const editable = target?.closest?.('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, [contenteditable="true"]');
+      if (editable) return;
+      event.preventDefault();
+      setMenu(null);
+    };
+    document.addEventListener("contextmenu", onDocContextMenu);
+    return () => document.removeEventListener("contextmenu", onDocContextMenu);
+  }, []);
 
   // The account avatar is resolved by Python from the signed-in profile; a
   // failure keeps the letter placeholder and retries once a minute for network
@@ -1024,13 +1039,37 @@ function App() {
       rooms: roomList
     });
   };
-  const onContextMenu = (event, id) => {
-    event.preventDefault();
+  const onContextMenu = (event, id, mode = "context") => {
+    event.preventDefault?.();
+    const fromKeyboard = mode === "overflow" ? event.detail === 0 : event.clientX === 0 && event.clientY === 0;
+    if (mode === "overflow") {
+      setMenu(current => current?.mode === "overflow" && current?.room === id ? null : (() => {
+        const rect = event.currentTarget?.getBoundingClientRect?.();
+        const anchorRect = rect ? {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom
+        } : null;
+        return {
+          room: id,
+          x: rect ? rect.right : event.clientX ?? 8,
+          y: rect ? rect.bottom + 6 : event.clientY ?? 8,
+          anchorRect,
+          mode,
+          fromKeyboard
+        };
+      })());
+      return;
+    }
     select(id);
     setMenu({
       room: id,
       x: event.clientX,
-      y: event.clientY
+      y: event.clientY,
+      anchorRect: null,
+      mode: "context",
+      fromKeyboard
     });
   };
   const dialogCopy = {
@@ -1148,6 +1187,8 @@ function App() {
     onSyncMedals: openMedals,
     onRemove: remove,
     onContextMenu: onContextMenu,
+    menuRoom: menu?.room,
+    menuMode: menu?.mode,
     busyRoom: busyRoom,
     controlBusy: controlBusy,
     error: snap.error || snap.ui_error,
@@ -1292,6 +1333,7 @@ function App() {
     onClose: closeDialog,
     busy: dialogBusy
   })), menu && /*#__PURE__*/React.createElement(window.RoomMenu, {
+    key: `${menu.room}-${menu.mode}-${menu.x}-${menu.y}`,
     menu: menu,
     room: rooms.find(room => room.room === menu.room),
     onClose: () => setMenu(null),

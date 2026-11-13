@@ -54,6 +54,7 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [onlyGained, setOnlyGained] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const request = useRef(0);
 
@@ -70,6 +71,7 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
     setData(null);
     setError("");
     setSelectedRoom(null);
+    setOnlyGained(false);
 
     const load = async (silent) => {
       try {
@@ -152,33 +154,36 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
     });
   }
 
-  const recordedRooms = rooms.filter((room) =>
-    room.tracked && ((room.recorded_total || 0) > 0 || (cellAt(room, todayIndex).value || 0) > 0)
+  const followedRooms = rooms.filter((room) => room.tracked);
+  const activeRooms = followedRooms.filter((room) =>
+    (room.recorded_total || 0) > 0 || (cellAt(room, todayIndex).value || 0) > 0
   );
+  const visibleRooms = onlyGained ? activeRooms : followedRooms;
   const compareRooms = (left, right) => {
     const a = cellAt(left, todayIndex);
     const b = cellAt(right, todayIndex);
-    if (!a.recorded && !b.recorded) return (right.recorded_total || 0) - (left.recorded_total || 0);
-    if (!a.recorded) return 1;
-    if (!b.recorded) return -1;
-    return b.value - a.value;
+    if (a.recorded !== b.recorded) return a.recorded ? -1 : 1;
+    if (a.recorded && b.recorded && b.value !== a.value) return b.value - a.value;
+    const totalDiff = (right.recorded_total || 0) - (left.recorded_total || 0);
+    if (totalDiff !== 0) return totalDiff;
+    return (right.recorded_days || 0) - (left.recorded_days || 0);
   };
-  const trackedRows = recordedRooms.slice().sort(compareRooms);
+  const trackedRows = visibleRooms.slice().sort(compareRooms);
 
   let maxMini = 1;
-  for (const room of recordedRooms) {
+  for (const room of followedRooms) {
     for (const cell of room.cells) {
       if (cell.recorded && cell.value > maxMini) maxMini = cell.value;
     }
   }
 
   const selected = selectedRoom !== null
-    ? recordedRooms.find((room) => room.room === selectedRoom) || null
+    ? visibleRooms.find((room) => room.room === selectedRoom) || null
     : null;
   const chartValues = selected
     ? days.map((_day, index) => (cellAt(selected, index).recorded ? cellAt(selected, index).value : null))
     : days.map((_day, index) => (
-      recordedRooms.some((room) => cellAt(room, index).recorded) ? dayValue(index) : null));
+      rooms.some((room) => cellAt(room, index).recorded) ? dayValue(index) : null));
   const chartTitle = selected
     ? `${selected.name || `直播间 ${selected.room}`} · 近 7 日`
     : "每日总成长";
@@ -229,7 +234,13 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
       ? (room.tracked ? "尚未同步" : "未记录")
       : `${todayCell.value > 0 ? "+" : ""}${numberText(todayCell.value)}`;
     const todayClass = `growth-room-today${todayMissing ? " missing" : todayCell.value === 0 ? " zero" : ""}`;
-    const totalLabel = room.recorded_days ? `+${numberText(room.recorded_total)}` : "—";
+    const totalGain = room.recorded_total || 0;
+    const hasDays = Boolean(room.recorded_days);
+    const totalLabel = hasDays ? (totalGain > 0 ? `+${numberText(totalGain)}` : "0") : "无记录";
+    const totalClass = `growth-room-total${!hasDays ? " missing" : totalGain === 0 ? " zero" : ""}`;
+    const statusTag = !hasDays && todayMissing
+      ? "尚无同步记录"
+      : (hasDays && totalGain === 0 && (todayMissing || todayCell.value === 0) ? "近7日无增量" : "");
     return (
       <button type="button" key={room.room} className="growth-row" aria-pressed={isSelected}
         title={`${name}${room.tracked ? "" : " · 已移除"} · 查看近 7 日`}
@@ -238,7 +249,10 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
           <span className="growth-avatar" style={{ background: colorFor(room.room) }}>
             {image ? <img src={image} alt="" /> : Array.from(name.trim())[0] || "?"}
           </span>
-          <span className="growth-room-name">{name}</span>
+          <span className="growth-room-meta">
+            <span className="growth-room-name">{name}</span>
+            {statusTag && <span className="growth-room-tag">{statusTag}</span>}
+          </span>
         </span>
         <span className="growth-mini" aria-hidden="true">
           {room.cells.map((cell, index) => {
@@ -257,13 +271,14 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
           })}
         </span>
         <span className={todayClass}>{todayLabel}</span>
-        <span className={`growth-room-total${room.recorded_days ? "" : " missing"}`}>{totalLabel}</span>
+        <span className={totalClass}>{totalLabel}</span>
       </button>
     );
   };
 
   const rowNodes = trackedRows.map((room) => roomRow(room));
   const isWarnBanner = data.status === "needs_login" || data.status === "protection";
+  const showFilter = activeRooms.length < followedRooms.length || onlyGained;
 
   return (
     <div className="growth-page">
@@ -276,8 +291,8 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
           {banner.action ? <button type="button" className="btn sm" onClick={banner.run}>{banner.action}</button> : null}
         </div> : null}
 
-        {recordedRooms.length === 0
-          ? <GrowthState icon="trend" title="还没有可记录的直播间"
+        {followedRooms.length === 0
+          ? <GrowthState icon="trend" title="还没有关注的直播间"
             text="关注主播并开始挂机后，这里会自动记录每天的粉丝牌亲密度。"
             action={onOpenMonitor ? "去直播总览" : ""} onAction={onOpenMonitor} />
           : <>
@@ -333,8 +348,27 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
             </section>
 
             <section className="growth-rooms card">
+              <div className="growth-rooms-bar">
+                <span className="growth-rooms-summary">
+                  当前关注 {followedRooms.length} 位
+                  {activeRooms.length < followedRooms.length ? ` · ${activeRooms.length} 位近 7 日有增长` : ""}
+                </span>
+                {showFilter && (
+                  <div className="growth-filter" role="group" aria-label="直播间筛选">
+                    <button type="button" className="growth-filter-btn" aria-pressed={!onlyGained}
+                      onClick={() => setOnlyGained(false)}>全部 {followedRooms.length}</button>
+                    <button type="button" className="growth-filter-btn" aria-pressed={onlyGained}
+                      onClick={() => setOnlyGained(true)}>有增长 {activeRooms.length}</button>
+                  </div>
+                )}
+              </div>
               <div className="growth-cols"><span>直播间</span><span>近 7 日</span><span>今日</span><span>合计</span></div>
-              {rowNodes}
+              {rowNodes.length ? rowNodes : (
+                <div className="growth-filter-empty">
+                  <span>近 7 日暂无亲密度增长记录</span>
+                  <button type="button" className="btn sm" onClick={() => setOnlyGained(false)}>显示全部关注</button>
+                </div>
+              )}
             </section>
           </>}
       </div>

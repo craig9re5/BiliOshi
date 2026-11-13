@@ -76,6 +76,7 @@ class WebHost:
         self._notified_safety_holds = {}
         self._notified_room_blocks = set()
         self._last_tray_color = None
+        self._last_safety_blocked = False
         self._last_zoomed = False
 
     def run(self, show=True, login=False):
@@ -516,23 +517,21 @@ class WebHost:
             return False
         return bool(engine.paused)
 
+    def _safety_blocked(self):
+        return bool(self._last_safety_blocked)
+
     def _start_tray(self):
         try:
             import pystray
+            from desktop.interaction import build_tray_menu
             # The existing icon is the only dependency on Tk presentation code.
             from desktop.widgets import icon_image
 
-            def item(label, command, default=False):
-                return pystray.MenuItem(label, lambda: self._commands.put(command), default=default)
-
-            menu = pystray.Menu(
-                item("查看状态", "show", default=True),
-                item(lambda _: "恢复挂机" if self._paused() else "暂停挂机", "toggle"),
-                item("立即检查", "check"), item("处理账号保护暂停", "safety"),
-                item("添加主播", "add_member"), item("同步粉丝牌", "sync_medals"),
-                item("设置", "settings"), item("账号登录", "login"),
-                item("查看日志", "logs"), item("导出诊断包", "export_diagnostic"),
-                pystray.Menu.SEPARATOR, item("退出（停止全部挂机）", "exit"),
+            menu = build_tray_menu(
+                self._commands,
+                paused=self._paused,
+                safety_blocked=self._safety_blocked,
+                can_act=lambda: not self._closing.is_set(),
             )
             self._tray = pystray.Icon("BiliOshi", icon_image(), "ビリ推し", menu)
 
@@ -611,6 +610,7 @@ class WebHost:
 
             self._tray.icon = icon_image(color)
             self._last_tray_color = color
+        self._last_safety_blocked = bool(safety.get("blocked"))
         self._tray.update_menu()
 
     def _notify_watch_warnings(self, snap):

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"263c849d39cff5e8a8d3d85beb25058de80b842d663b43699d1de5b58dfb3461","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"57fb7e1a70a5b88af087596c0dde34a66e6028a9afb75bee1e949a02132b8714"} */
+/* BiliOshi JSX {"code_sha256":"2d4708402573ac43942edc2c85974dc32e3dfb0e027c08d547732752297c8525","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"ae4da3cccb394275f540141f64bda9c4cd791d164df97731964776e67b915c90"} */
 (function () {
 "use strict";
 /* Growth page: daily fan-medal intimacy per room, from Api.growth.
@@ -81,6 +81,7 @@ function GrowthPage({
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [onlyGained, setOnlyGained] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const request = useRef(0);
   useEffect(() => {
@@ -95,6 +96,7 @@ function GrowthPage({
     setData(null);
     setError("");
     setSelectedRoom(null);
+    setOnlyGained(false);
     const load = async silent => {
       try {
         if (!(await bridgeReady())) throw new Error("bridge-unavailable");
@@ -177,24 +179,27 @@ function GrowthPage({
       if (index === todayIndex) todayLast = Math.max(todayLast, cell.last_at);
     });
   }
-  const recordedRooms = rooms.filter(room => room.tracked && ((room.recorded_total || 0) > 0 || (cellAt(room, todayIndex).value || 0) > 0));
+  const followedRooms = rooms.filter(room => room.tracked);
+  const activeRooms = followedRooms.filter(room => (room.recorded_total || 0) > 0 || (cellAt(room, todayIndex).value || 0) > 0);
+  const visibleRooms = onlyGained ? activeRooms : followedRooms;
   const compareRooms = (left, right) => {
     const a = cellAt(left, todayIndex);
     const b = cellAt(right, todayIndex);
-    if (!a.recorded && !b.recorded) return (right.recorded_total || 0) - (left.recorded_total || 0);
-    if (!a.recorded) return 1;
-    if (!b.recorded) return -1;
-    return b.value - a.value;
+    if (a.recorded !== b.recorded) return a.recorded ? -1 : 1;
+    if (a.recorded && b.recorded && b.value !== a.value) return b.value - a.value;
+    const totalDiff = (right.recorded_total || 0) - (left.recorded_total || 0);
+    if (totalDiff !== 0) return totalDiff;
+    return (right.recorded_days || 0) - (left.recorded_days || 0);
   };
-  const trackedRows = recordedRooms.slice().sort(compareRooms);
+  const trackedRows = visibleRooms.slice().sort(compareRooms);
   let maxMini = 1;
-  for (const room of recordedRooms) {
+  for (const room of followedRooms) {
     for (const cell of room.cells) {
       if (cell.recorded && cell.value > maxMini) maxMini = cell.value;
     }
   }
-  const selected = selectedRoom !== null ? recordedRooms.find(room => room.room === selectedRoom) || null : null;
-  const chartValues = selected ? days.map((_day, index) => cellAt(selected, index).recorded ? cellAt(selected, index).value : null) : days.map((_day, index) => recordedRooms.some(room => cellAt(room, index).recorded) ? dayValue(index) : null);
+  const selected = selectedRoom !== null ? visibleRooms.find(room => room.room === selectedRoom) || null : null;
+  const chartValues = selected ? days.map((_day, index) => cellAt(selected, index).recorded ? cellAt(selected, index).value : null) : days.map((_day, index) => rooms.some(room => cellAt(room, index).recorded) ? dayValue(index) : null);
   const chartTitle = selected ? `${selected.name || `直播间 ${selected.room}`} · 近 7 日` : "每日总成长";
   let maxChart = 1;
   for (const value of chartValues) {
@@ -246,7 +251,11 @@ function GrowthPage({
     const todayMissing = !todayCell.recorded;
     const todayLabel = todayMissing ? room.tracked ? "尚未同步" : "未记录" : `${todayCell.value > 0 ? "+" : ""}${numberText(todayCell.value)}`;
     const todayClass = `growth-room-today${todayMissing ? " missing" : todayCell.value === 0 ? " zero" : ""}`;
-    const totalLabel = room.recorded_days ? `+${numberText(room.recorded_total)}` : "—";
+    const totalGain = room.recorded_total || 0;
+    const hasDays = Boolean(room.recorded_days);
+    const totalLabel = hasDays ? totalGain > 0 ? `+${numberText(totalGain)}` : "0" : "无记录";
+    const totalClass = `growth-room-total${!hasDays ? " missing" : totalGain === 0 ? " zero" : ""}`;
+    const statusTag = !hasDays && todayMissing ? "尚无同步记录" : hasDays && totalGain === 0 && (todayMissing || todayCell.value === 0) ? "近7日无增量" : "";
     return /*#__PURE__*/React.createElement("button", {
       type: "button",
       key: room.room,
@@ -265,8 +274,12 @@ function GrowthPage({
       src: image,
       alt: ""
     }) : Array.from(name.trim())[0] || "?"), /*#__PURE__*/React.createElement("span", {
+      className: "growth-room-meta"
+    }, /*#__PURE__*/React.createElement("span", {
       className: "growth-room-name"
-    }, name)), /*#__PURE__*/React.createElement("span", {
+    }, name), statusTag && /*#__PURE__*/React.createElement("span", {
+      className: "growth-room-tag"
+    }, statusTag))), /*#__PURE__*/React.createElement("span", {
       className: "growth-mini",
       "aria-hidden": "true"
     }, room.cells.map((cell, index) => {
@@ -284,11 +297,12 @@ function GrowthPage({
     })), /*#__PURE__*/React.createElement("span", {
       className: todayClass
     }, todayLabel), /*#__PURE__*/React.createElement("span", {
-      className: `growth-room-total${room.recorded_days ? "" : " missing"}`
+      className: totalClass
     }, totalLabel));
   };
   const rowNodes = trackedRows.map(room => roomRow(room));
   const isWarnBanner = data.status === "needs_login" || data.status === "protection";
+  const showFilter = activeRooms.length < followedRooms.length || onlyGained;
   return /*#__PURE__*/React.createElement("div", {
     className: "growth-page"
   }, /*#__PURE__*/React.createElement("div", {
@@ -306,9 +320,9 @@ function GrowthPage({
     type: "button",
     className: "btn sm",
     onClick: banner.run
-  }, banner.action) : null) : null, recordedRooms.length === 0 ? /*#__PURE__*/React.createElement(GrowthState, {
+  }, banner.action) : null) : null, followedRooms.length === 0 ? /*#__PURE__*/React.createElement(GrowthState, {
     icon: "trend",
-    title: "\u8FD8\u6CA1\u6709\u53EF\u8BB0\u5F55\u7684\u76F4\u64AD\u95F4",
+    title: "\u8FD8\u6CA1\u6709\u5173\u6CE8\u7684\u76F4\u64AD\u95F4",
     text: "\u5173\u6CE8\u4E3B\u64AD\u5E76\u5F00\u59CB\u6302\u673A\u540E\uFF0C\u8FD9\u91CC\u4F1A\u81EA\u52A8\u8BB0\u5F55\u6BCF\u5929\u7684\u7C89\u4E1D\u724C\u4EB2\u5BC6\u5EA6\u3002",
     action: onOpenMonitor ? "去直播总览" : "",
     onAction: onOpenMonitor
@@ -364,8 +378,32 @@ function GrowthPage({
   }))), /*#__PURE__*/React.createElement("section", {
     className: "growth-rooms card"
   }, /*#__PURE__*/React.createElement("div", {
+    className: "growth-rooms-bar"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "growth-rooms-summary"
+  }, "\u5F53\u524D\u5173\u6CE8 ", followedRooms.length, " \u4F4D", activeRooms.length < followedRooms.length ? ` · ${activeRooms.length} 位近 7 日有增长` : ""), showFilter && /*#__PURE__*/React.createElement("div", {
+    className: "growth-filter",
+    role: "group",
+    "aria-label": "\u76F4\u64AD\u95F4\u7B5B\u9009"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "growth-filter-btn",
+    "aria-pressed": !onlyGained,
+    onClick: () => setOnlyGained(false)
+  }, "\u5168\u90E8 ", followedRooms.length), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "growth-filter-btn",
+    "aria-pressed": onlyGained,
+    onClick: () => setOnlyGained(true)
+  }, "\u6709\u589E\u957F ", activeRooms.length))), /*#__PURE__*/React.createElement("div", {
     className: "growth-cols"
-  }, /*#__PURE__*/React.createElement("span", null, "\u76F4\u64AD\u95F4"), /*#__PURE__*/React.createElement("span", null, "\u8FD1 7 \u65E5"), /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5"), /*#__PURE__*/React.createElement("span", null, "\u5408\u8BA1")), rowNodes))));
+  }, /*#__PURE__*/React.createElement("span", null, "\u76F4\u64AD\u95F4"), /*#__PURE__*/React.createElement("span", null, "\u8FD1 7 \u65E5"), /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5"), /*#__PURE__*/React.createElement("span", null, "\u5408\u8BA1")), rowNodes.length ? rowNodes : /*#__PURE__*/React.createElement("div", {
+    className: "growth-filter-empty"
+  }, /*#__PURE__*/React.createElement("span", null, "\u8FD1 7 \u65E5\u6682\u65E0\u4EB2\u5BC6\u5EA6\u589E\u957F\u8BB0\u5F55"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: () => setOnlyGained(false)
+  }, "\u663E\u793A\u5168\u90E8\u5173\u6CE8"))))));
 }
 Object.assign(window, {
   GrowthPage

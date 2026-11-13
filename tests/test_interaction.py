@@ -140,3 +140,23 @@ class InteractionTests(unittest.TestCase):
         message = panel.save_status.set.call_args.args[0]
         self.assertIn("已保存，但应用失败", message)
         self.assertNotIn("synthetic-secret", message)
+
+    def test_tray_menu_exposes_core_actions_and_conditional_safety_item(self):
+        import queue
+        from desktop.interaction import build_tray_menu
+
+        commands = queue.Queue()
+        paused = [False]
+        blocked = [False]
+        menu = build_tray_menu(
+            commands,
+            paused=lambda: paused[0],
+            safety_blocked=lambda: blocked[0],
+        )
+        visible_texts = [getattr(item, "text", "---") for item in menu]
+        self.assertEqual(visible_texts, ["打开主界面", "- - - -", "暂停挂机", "立即检查", "- - - -", "退出"])
+
+        paused[0] = True
+        blocked[0] = True
+        blocked_texts = [getattr(item, "text", "---") for item in menu]
+        self.assertEqual(blocked_texts, ["打开主界面", "处理账号异常", "- - - -", "恢复挂机", "立即检查", "- - - -", "退出"])

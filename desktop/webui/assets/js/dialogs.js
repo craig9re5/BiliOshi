@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"2b2d2bc96111179fbcb2a18c6791b96b614aaaa19eeb520e1283d70783258c97","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"f5a0a7e45bf631c82206ce14ea8e1e363fb38fef468e9ddd9432fe6db3bdc49b"} */
+/* BiliOshi JSX {"code_sha256":"40338c9ca9e389c2f81d9d2182ad9f7cda0199ca60d8697e98cd0d66804189f1","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"c7215dadbfae8a163c117baf5e69b80ae73a3b8419e4bed3d98688539a8dd1a2"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -8,7 +8,9 @@ const {
 } = window;
 const {
   useEffect,
-  useRef
+  useLayoutEffect,
+  useRef,
+  useState
 } = React;
 function Modal({
   title,
@@ -268,21 +270,78 @@ const RoomMenu = ({
   const ref = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const isOverflow = menu?.mode === "overflow";
+  const [coords, setCoords] = useState({
+    left: menu?.x ?? 8,
+    top: menu?.y ?? 8,
+    origin: isOverflow ? "top right" : "top left",
+    ready: false
+  });
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node || !menu) return;
+    const rect = node.getBoundingClientRect();
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = menu.x ?? pad;
+    let top = menu.y ?? pad;
+    let originX = "left";
+    let originY = "top";
+    if (menu.anchorRect) {
+      const anchor = menu.anchorRect;
+      left = anchor.right - rect.width;
+      originX = "right";
+      if (left < pad) {
+        left = Math.min(anchor.left, vw - rect.width - pad);
+        originX = "left";
+      }
+      if (anchor.bottom + 6 + rect.height <= vh - pad) {
+        top = anchor.bottom + 6;
+        originY = "top";
+      } else {
+        top = anchor.top - rect.height - 6;
+        originY = "bottom";
+      }
+    } else {
+      if (left + rect.width > vw - pad) {
+        left -= rect.width;
+        originX = "right";
+      }
+      if (top + rect.height > vh - pad) {
+        top -= rect.height;
+        originY = "bottom";
+      }
+    }
+    setCoords({
+      left: Math.max(pad, Math.min(left, vw - rect.width - pad)),
+      top: Math.max(pad, Math.min(top, vh - rect.height - pad)),
+      origin: `${originY} ${originX}`,
+      ready: true
+    });
+  }, [menu?.x, menu?.y, menu?.mode, menu?.room, menu?.anchorRect]);
   useEffect(() => {
     const previous = document.activeElement;
     const node = ref.current;
     const items = () => Array.from(node?.querySelectorAll('[role="menuitem"]:not([disabled])') || []);
     const focusTimer = window.setTimeout(() => {
-      (items()[0] || node)?.focus();
+      (menu?.fromKeyboard ? items()[0] || node : node)?.focus({
+        preventScroll: true
+      });
     }, 0);
     const close = event => {
       if (!node?.contains(event.target)) closeRef.current();
     };
+    const dismiss = () => closeRef.current();
     const key = event => {
       if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current();
         previous?.focus?.();
+        return;
+      }
+      if (event.key === "Tab") {
+        closeRef.current();
         return;
       }
       if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
@@ -293,12 +352,21 @@ const RoomMenu = ({
       const next = event.key === "Home" ? 0 : event.key === "End" ? enabled.length - 1 : idx < 0 ? event.key === "ArrowUp" ? enabled.length - 1 : 0 : (idx + (event.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length;
       enabled[next]?.focus();
     };
+    const scroller = document.querySelector(".rooms");
+    document.addEventListener("pointerdown", close);
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", key);
+    window.addEventListener("blur", dismiss);
+    scroller?.addEventListener("scroll", dismiss, {
+      passive: true
+    });
     return () => {
       window.clearTimeout(focusTimer);
+      document.removeEventListener("pointerdown", close);
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", key);
+      window.removeEventListener("blur", dismiss);
+      scroller?.removeEventListener("scroll", dismiss);
     };
   }, []);
   if (!room) return null;
@@ -306,46 +374,73 @@ const RoomMenu = ({
     onClose();
     fn();
   };
+  const pending = Boolean(room.operation?.pending);
+  const actions = isOverflow ? [{
+    key: "wear",
+    icon: "medal",
+    label: "佩戴粉丝牌",
+    disabled: Boolean(room.actions.wear) || pending,
+    title: room.actions.wear,
+    run: () => onAction("wear", room.room)
+  }] : [{
+    key: "open",
+    icon: "external",
+    label: "打开直播间",
+    disabled: Boolean(room.actions.open),
+    title: room.actions.open,
+    run: () => onOpen(room.room)
+  }, {
+    key: "reconnect",
+    icon: "reconnect",
+    label: "重新连接",
+    disabled: Boolean(room.actions.reconnect) || pending,
+    title: room.actions.reconnect,
+    run: () => onAction("reconnect", room.room)
+  }, {
+    key: "wear",
+    icon: "medal",
+    label: "佩戴粉丝牌",
+    disabled: Boolean(room.actions.wear) || pending,
+    title: room.actions.wear,
+    run: () => onAction("wear", room.room)
+  }];
   return /*#__PURE__*/React.createElement("div", {
-    className: "room-menu",
+    className: `room-menu${isOverflow ? " overflow" : ""}${coords.ready ? " ready" : ""}`,
     role: "menu",
     "aria-label": "\u76F4\u64AD\u95F4\u64CD\u4F5C",
     ref: ref,
     tabIndex: -1,
     style: {
-      left: Math.max(8, Math.min(menu.x, window.innerWidth - 198)),
-      top: Math.max(8, Math.min(menu.y, window.innerHeight - 210))
+      left: coords.left,
+      top: coords.top,
+      "--menu-origin": coords.origin
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, !isOverflow && /*#__PURE__*/React.createElement("div", {
+    className: "room-menu-head"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "room-menu-title"
+  }, room.name)), actions.map(item => /*#__PURE__*/React.createElement("button", {
     type: "button",
+    key: item.key,
+    className: "room-menu-item",
     role: "menuitem",
-    onClick: () => invoke(() => onOpen(room.room))
-  }, "\u6253\u5F00\u76F4\u64AD\u95F4"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    role: "menuitem",
-    disabled: Boolean(room.actions.reconnect) || room.operation.pending,
-    title: room.actions.reconnect,
-    onClick: () => invoke(() => onAction("reconnect", room.room))
-  }, "\u91CD\u65B0\u8FDE\u63A5"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    role: "menuitem",
-    disabled: Boolean(room.actions.redo) || room.operation.pending,
-    title: room.actions.redo,
-    onClick: () => invoke(() => onAction("redo", room.room))
-  }, "\u8865\u9F50\u4ECA\u65E5\u4EFB\u52A1"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    role: "menuitem",
-    disabled: Boolean(room.actions.wear) || room.operation.pending,
-    title: room.actions.wear,
-    onClick: () => invoke(() => onAction("wear", room.room))
-  }, "\u4F69\u6234\u7C89\u4E1D\u724C"), /*#__PURE__*/React.createElement("div", {
+    disabled: item.disabled,
+    title: item.title || "",
+    onClick: () => invoke(item.run)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: item.icon,
+    size: 14
+  }), /*#__PURE__*/React.createElement("span", null, item.label))), /*#__PURE__*/React.createElement("hr", {
     className: "menu-divider"
   }), /*#__PURE__*/React.createElement("button", {
     type: "button",
+    className: "room-menu-item destructive-text",
     role: "menuitem",
-    className: "destructive-text",
     onClick: () => invoke(() => onRemove(room))
-  }, "\u79FB\u9664\u4E3B\u64AD"));
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "trash",
+    size: 14
+  }), /*#__PURE__*/React.createElement("span", null, "\u79FB\u9664\u4E3B\u64AD")));
 };
 const DiagnosticModal = ({
   preview,

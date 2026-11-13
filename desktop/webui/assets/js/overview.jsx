@@ -36,7 +36,7 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, che
   </button>
 );
 
-const DetailPanel = ({ room, busy, onAction, onOpen, onMore, onClearRoomBlock, onDismissTaskError, dimmed }) => {
+const DetailPanel = ({ room, busy, onAction, onOpen, onMore, moreOpen, onClearRoomBlock, onDismissTaskError, dimmed }) => {
   const classes = `detail card${dimmed ? " detail-dim" : ""}`;
   if (!room) return (
     <aside className={classes} aria-label="直播间详情" aria-hidden={dimmed || undefined}>
@@ -65,8 +65,11 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore, onClearRoomBlock, o
             <div className="detail-name">{room.name}</div>
             <div className="detail-title" title={room.title}>{room.live ? room.title || "直播中" : room.state}</div>
           </div>
-          <button type="button" className="btn ghost icon-button" title="更多操作"
-            aria-label="更多操作" onClick={onMore}><Icon name="more" size={17} /></button>
+          <button type="button" className={`btn ghost icon-button${moreOpen ? " active" : ""}`} title="更多操作"
+            aria-label="更多操作" aria-haspopup="menu" aria-expanded={Boolean(moreOpen)}
+            onPointerDown={(event) => { if (moreOpen) event.stopPropagation(); }}
+            onMouseDown={(event) => { if (moreOpen) event.stopPropagation(); }}
+            onClick={onMore}><Icon name="more" size={17} /></button>
         </div>
         {showStateRow && <div className="state-row">
           <span className={`state-label ${room.tone === "warn" ? "warn" : ""}`}>
@@ -186,9 +189,9 @@ const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy
 );
 
 const Overview = ({ rooms, selectedId, onSelect, paused,
-  onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, busyRoom, controlBusy,
-  error, recovery, onRecovery, interval, lastCheck, checking, images, signedIn, closing, bridgeConnected,
-  onBatchRemove, onClearRoomBlock, onDismissTaskError }) => {
+  onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, menuRoom, menuMode,
+  busyRoom, controlBusy, error, recovery, onRecovery, interval, lastCheck, checking, images,
+  signedIn, closing, bridgeConnected, onBatchRemove, onClearRoomBlock, onDismissTaskError }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
 
@@ -283,10 +286,10 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
       </section>
       <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen}
         onClearRoomBlock={onClearRoomBlock} onDismissTaskError={onDismissTaskError} dimmed={managing}
+        moreOpen={Boolean(selected && menuMode === "overflow" && menuRoom === selected.room)}
         onMore={(event) => {
           if (!selected) return;
-          const rect = event.currentTarget.getBoundingClientRect();
-          onContextMenu({ preventDefault() {}, clientX: rect.right - 190, clientY: rect.bottom + 6 }, selected.room);
+          onContextMenu(event, selected.room, "overflow");
         }} />
     </div>
     <footer className="statusbar">

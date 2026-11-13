@@ -313,12 +313,37 @@ class _DiagnosticSession:
     def _verify_ipc_and_tray(self) -> None:
         from desktop.storage import send_command
 
+        self.click('button[aria-label="成长记录"]')
+        self.wait("document.querySelectorAll('.growth-row').length === 2")
+        self.check("growth lists all followed rooms", self.host._window.evaluate_js(
+            "document.querySelector('.growth-rooms-summary')?.textContent.includes('当前关注 2 位')"
+        ))
+
         self.click('button[aria-label="直播总览"]')
         self.wait("document.querySelector('.chrome-title')?.textContent === '直播总览'")
         self.click('button[data-room="8"]')
         self.wait("document.querySelector('.detail-name')?.textContent === '示例主播'")
         self.check("offline action disabled", self.host._window.evaluate_js("document.querySelector('.detail-foot .primary').disabled"))
         self.click('button[data-room="7"]')
+        self.wait("document.querySelector('.detail-name')?.textContent === '测试主播'")
+        self.host._window.evaluate_js(
+            "(() => { const r = document.querySelector('button[data-room=\"7\"]'); "
+            "const b = r.getBoundingClientRect(); "
+            "r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 40, clientY: b.top + 16 })); })()"
+        )
+        self.wait("Boolean(document.querySelector('.room-menu:not(.overflow)'))")
+        self.check("context menu omits primary redo duplicate", self.host._window.evaluate_js(
+            "(() => { const items = [...document.querySelectorAll('.room-menu button')].map(b => b.textContent.trim()); "
+            "return items.includes('打开直播间') && !items.includes('补齐今日任务'); })()"
+        ))
+        self.click('.detail-heading .icon-button')
+        self.wait("Boolean(document.querySelector('.room-menu.overflow'))")
+        self.check("detail overflow menu omits duplicate actions", self.host._window.evaluate_js(
+            "(() => { const items = [...document.querySelectorAll('.room-menu button')].map(b => b.textContent.trim()); "
+            "return items.length === 2 && items[0] === '佩戴粉丝牌' && items[1] === '移除主播'; })()"
+        ))
+        self.click('.detail-heading .icon-button')
+        self.wait("!document.querySelector('.room-menu')")
         # Use the same disk IPC used by a second launch, without touching installed data.
         send_command(self.root, "pause")
         self.wait("document.querySelector('.statusbar').textContent.includes('已暂停')")
@@ -365,12 +390,22 @@ class _DiagnosticSession:
 
 
 def _launch_isolated(host, root: Path, qr_session) -> None:
+    import webview
     from PIL import Image
     from desktop.engine import Engine
 
     avatar = Image.new("RGB", (64, 64), "#2d6763")
+    real_start = webview.start
+    webview_dir = root / "webview"
+    webview_dir.mkdir(parents=True, exist_ok=True)
+
+    def start_isolated(*args, **kwargs):
+        kwargs.setdefault("storage_path", str(webview_dir))
+        return real_start(*args, **kwargs)
+
     try:
         with patch.dict(os.environ, {"BILIOSHI_APP_DATA": str(root)}), \
+             patch("webview.start", side_effect=start_isolated), \
              patch.object(Engine, "start", _mark_started), \
              patch("urllib.request.urlopen", side_effect=_forbidden), \
              patch("urllib.request.OpenerDirector.open", side_effect=_forbidden), \
@@ -390,7 +425,7 @@ def run(output, screenshot=None):
 
     output = Path(output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="livesupport-webui-") as directory:
+    with tempfile.TemporaryDirectory(prefix="livesupport-webui-", ignore_cleanup_errors=True) as directory:
         root = Path(directory)
         store, first_id, second_id, first_root = _seed_diagnostic_store(root)
         worker = Mock(pid=os.getpid())

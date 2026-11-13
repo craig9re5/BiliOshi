@@ -1,7 +1,7 @@
 /* Dialogs keep focus inside the active view and restore it on close. */
 
 const { Icon } = window;
-const { useEffect, useRef } = React;
+const { useEffect, useLayoutEffect, useRef, useState } = React;
 
 function Modal({ title, desc, children, actions, onClose, wide }) {
   const element = useRef(null);
@@ -124,17 +124,74 @@ const RoomMenu = ({ menu, room, onClose, onOpen, onAction, onRemove }) => {
   const ref = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const isOverflow = menu?.mode === "overflow";
+  const [coords, setCoords] = useState({ left: menu?.x ?? 8, top: menu?.y ?? 8, origin: isOverflow ? "top right" : "top left", ready: false });
+
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node || !menu) return;
+    const rect = node.getBoundingClientRect();
+    const pad = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let left = menu.x ?? pad;
+    let top = menu.y ?? pad;
+    let originX = "left";
+    let originY = "top";
+
+    if (menu.anchorRect) {
+      const anchor = menu.anchorRect;
+      left = anchor.right - rect.width;
+      originX = "right";
+      if (left < pad) {
+        left = Math.min(anchor.left, vw - rect.width - pad);
+        originX = "left";
+      }
+      if (anchor.bottom + 6 + rect.height <= vh - pad) {
+        top = anchor.bottom + 6;
+        originY = "top";
+      } else {
+        top = anchor.top - rect.height - 6;
+        originY = "bottom";
+      }
+    } else {
+      if (left + rect.width > vw - pad) {
+        left -= rect.width;
+        originX = "right";
+      }
+      if (top + rect.height > vh - pad) {
+        top -= rect.height;
+        originY = "bottom";
+      }
+    }
+    setCoords({
+      left: Math.max(pad, Math.min(left, vw - rect.width - pad)),
+      top: Math.max(pad, Math.min(top, vh - rect.height - pad)),
+      origin: `${originY} ${originX}`,
+      ready: true,
+    });
+  }, [menu?.x, menu?.y, menu?.mode, menu?.room, menu?.anchorRect]);
+
   useEffect(() => {
     const previous = document.activeElement;
     const node = ref.current;
     const items = () => Array.from(node?.querySelectorAll('[role="menuitem"]:not([disabled])') || []);
-    const focusTimer = window.setTimeout(() => { (items()[0] || node)?.focus(); }, 0);
-    const close = (event) => { if (!node?.contains(event.target)) closeRef.current(); };
+    const focusTimer = window.setTimeout(() => {
+      (menu?.fromKeyboard ? (items()[0] || node) : node)?.focus({ preventScroll: true });
+    }, 0);
+    const close = (event) => {
+      if (!node?.contains(event.target)) closeRef.current();
+    };
+    const dismiss = () => closeRef.current();
     const key = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current();
         previous?.focus?.();
+        return;
+      }
+      if (event.key === "Tab") {
+        closeRef.current();
         return;
       }
       if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
@@ -148,30 +205,60 @@ const RoomMenu = ({ menu, room, onClose, onOpen, onAction, onRemove }) => {
             : (idx + (event.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length;
       enabled[next]?.focus();
     };
+    const scroller = document.querySelector(".rooms");
+    document.addEventListener("pointerdown", close);
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", key);
+    window.addEventListener("blur", dismiss);
+    scroller?.addEventListener("scroll", dismiss, { passive: true });
     return () => {
       window.clearTimeout(focusTimer);
+      document.removeEventListener("pointerdown", close);
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", key);
+      window.removeEventListener("blur", dismiss);
+      scroller?.removeEventListener("scroll", dismiss);
     };
   }, []);
   if (!room) return null;
   const invoke = (fn) => { onClose(); fn(); };
-  return <div className="room-menu" role="menu" aria-label="直播间操作" ref={ref} tabIndex={-1}
+  const pending = Boolean(room.operation?.pending);
+  const actions = isOverflow
+    ? [
+      { key: "wear", icon: "medal", label: "佩戴粉丝牌",
+        disabled: Boolean(room.actions.wear) || pending, title: room.actions.wear,
+        run: () => onAction("wear", room.room) },
+    ]
+    : [
+      { key: "open", icon: "external", label: "打开直播间",
+        disabled: Boolean(room.actions.open), title: room.actions.open,
+        run: () => onOpen(room.room) },
+      { key: "reconnect", icon: "reconnect", label: "重新连接",
+        disabled: Boolean(room.actions.reconnect) || pending, title: room.actions.reconnect,
+        run: () => onAction("reconnect", room.room) },
+      { key: "wear", icon: "medal", label: "佩戴粉丝牌",
+        disabled: Boolean(room.actions.wear) || pending, title: room.actions.wear,
+        run: () => onAction("wear", room.room) },
+    ];
+  return <div className={`room-menu${isOverflow ? " overflow" : ""}${coords.ready ? " ready" : ""}`} role="menu" aria-label="直播间操作"
+    ref={ref} tabIndex={-1}
     style={{
-      left: Math.max(8, Math.min(menu.x, window.innerWidth - 198)),
-      top: Math.max(8, Math.min(menu.y, window.innerHeight - 210)),
+      left: coords.left,
+      top: coords.top,
+      "--menu-origin": coords.origin,
     }}>
-    <button type="button" role="menuitem" onClick={() => invoke(() => onOpen(room.room))}>打开直播间</button>
-    <button type="button" role="menuitem" disabled={Boolean(room.actions.reconnect) || room.operation.pending}
-      title={room.actions.reconnect} onClick={() => invoke(() => onAction("reconnect", room.room))}>重新连接</button>
-    <button type="button" role="menuitem" disabled={Boolean(room.actions.redo) || room.operation.pending}
-      title={room.actions.redo} onClick={() => invoke(() => onAction("redo", room.room))}>补齐今日任务</button>
-    <button type="button" role="menuitem" disabled={Boolean(room.actions.wear) || room.operation.pending}
-      title={room.actions.wear} onClick={() => invoke(() => onAction("wear", room.room))}>佩戴粉丝牌</button>
-    <div className="menu-divider" />
-    <button type="button" role="menuitem" className="destructive-text" onClick={() => invoke(() => onRemove(room))}>移除主播</button>
+    {!isOverflow && <div className="room-menu-head"><span className="room-menu-title">{room.name}</span></div>}
+    {actions.map((item) => (
+      <button type="button" key={item.key} className="room-menu-item" role="menuitem"
+        disabled={item.disabled} title={item.title || ""} onClick={() => invoke(item.run)}>
+        <Icon name={item.icon} size={14} /><span>{item.label}</span>
+      </button>
+    ))}
+    <hr className="menu-divider" />
+    <button type="button" className="room-menu-item destructive-text" role="menuitem"
+      onClick={() => invoke(() => onRemove(room))}>
+      <Icon name="trash" size={14} /><span>移除主播</span>
+    </button>
   </div>;
 };
 

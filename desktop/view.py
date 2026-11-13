@@ -72,25 +72,17 @@ class TrayUI:
         build_room_menu(self)
         self.image = tk.PhotoImage(data=self._png_data())
         self.root.iconphoto(True, self.image)
+        from desktop.interaction import build_tray_menu
+
         self.tray = pystray.Icon(
             "BiliOshi",
             icon_image(),
             "ビリ推し",
-            pystray.Menu(
-                pystray.MenuItem("查看状态", lambda: self.commands.put("show"), default=True),
-                pystray.MenuItem(
-                    lambda item: "恢复挂机" if self.engine.paused else "暂停挂机",
-                    lambda: self.commands.put("toggle"),
-                ),
-                pystray.MenuItem("立即检查", lambda: self.commands.put("check")),
-                pystray.MenuItem("处理账号保护暂停", lambda: self.commands.put("safety")),
-                pystray.MenuItem("添加主播", lambda: self.commands.put("add_member")),
-                pystray.MenuItem("同步粉丝牌", lambda: self.commands.put("sync_medals")),
-                pystray.MenuItem("设置", lambda: self.commands.put("settings")),
-                pystray.MenuItem("账号登录", lambda: self.commands.put("login")),
-                pystray.MenuItem("查看日志", lambda: self.commands.put("logs")),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("退出（停止全部挂机）", lambda: self.commands.put("exit")),
+            build_tray_menu(
+                self.commands,
+                paused=lambda: self.engine.paused,
+                safety_blocked=lambda: bool(self.safety_notices.get("active")),
+                can_act=lambda: not getattr(self, "closing", False),
             ),
         )
         threading.Thread(target=self.tray.run, name="tray", daemon=True).start()

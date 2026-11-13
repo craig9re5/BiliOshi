@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"78c4b4274c9da11b989a799155288a439c4640064e58e3db6f25bf186b0da7e5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"8d9bfb04b6cb01e3e3687c87cc6e49c8b2e5498815d5f644b0e4e1cec5cb74a9"} */
+/* BiliOshi JSX {"code_sha256":"724d77c62099aa1a2c2fb7fe4562684add203c20f8a2ff118c6ebfbeca801161","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"5cccb7514941b3ece037e315c050d45f215a76a8aae20304d61f55d8f8a3e236"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -75,6 +75,7 @@ const DetailPanel = ({
   onAction,
   onOpen,
   onMore,
+  moreOpen,
   onClearRoomBlock,
   onDismissTaskError,
   dimmed
@@ -118,9 +119,17 @@ const DetailPanel = ({
     title: room.title
   }, room.live ? room.title || "直播中" : room.state)), /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn ghost icon-button",
+    className: `btn ghost icon-button${moreOpen ? " active" : ""}`,
     title: "\u66F4\u591A\u64CD\u4F5C",
     "aria-label": "\u66F4\u591A\u64CD\u4F5C",
+    "aria-haspopup": "menu",
+    "aria-expanded": Boolean(moreOpen),
+    onPointerDown: event => {
+      if (moreOpen) event.stopPropagation();
+    },
+    onMouseDown: event => {
+      if (moreOpen) event.stopPropagation();
+    },
     onClick: onMore
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "more",
@@ -293,6 +302,8 @@ const Overview = ({
   onSyncMedals,
   onRemove,
   onContextMenu,
+  menuRoom,
+  menuMode,
   busyRoom,
   controlBusy,
   error,
@@ -445,14 +456,10 @@ const Overview = ({
     onClearRoomBlock: onClearRoomBlock,
     onDismissTaskError: onDismissTaskError,
     dimmed: managing,
+    moreOpen: Boolean(selected && menuMode === "overflow" && menuRoom === selected.room),
     onMore: event => {
       if (!selected) return;
-      const rect = event.currentTarget.getBoundingClientRect();
-      onContextMenu({
-        preventDefault() {},
-        clientX: rect.right - 190,
-        clientY: rect.bottom + 6
-      }, selected.room);
+      onContextMenu(event, selected.room, "overflow");
     }
   })), /*#__PURE__*/React.createElement("footer", {
     className: "statusbar"

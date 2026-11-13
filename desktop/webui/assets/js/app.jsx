@@ -325,6 +325,25 @@ function App() {
   const account = viewed.accountInfo || EMPTY_SNAPSHOT.accountInfo;
   const closing = Boolean(snap.closing);
 
+  useEffect(() => {
+    setMenu(null);
+  }, [page, activeId]);
+
+  useEffect(() => {
+    const onDocContextMenu = (event) => {
+      if (event.defaultPrevented) return;
+      const target = event.target?.nodeType === 1 ? event.target : event.target?.parentElement;
+      const editable = target?.closest?.(
+        'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, [contenteditable="true"]'
+      );
+      if (editable) return;
+      event.preventDefault();
+      setMenu(null);
+    };
+    document.addEventListener("contextmenu", onDocContextMenu);
+    return () => document.removeEventListener("contextmenu", onDocContextMenu);
+  }, []);
+
   // The account avatar is resolved by Python from the signed-in profile; a
   // failure keeps the letter placeholder and retries once a minute for network
   // hiccups. A confirmed QR login bumps avatarVersion so a new account reloads.
@@ -718,8 +737,32 @@ function App() {
     setMenu(null);
     setDialog({ type: "batchRemove", rooms: roomList });
   };
-  const onContextMenu = (event, id) => {
-    event.preventDefault(); select(id); setMenu({ room: id, x: event.clientX, y: event.clientY });
+  const onContextMenu = (event, id, mode = "context") => {
+    event.preventDefault?.();
+    const fromKeyboard = mode === "overflow"
+      ? event.detail === 0
+      : (event.clientX === 0 && event.clientY === 0);
+    if (mode === "overflow") {
+      setMenu((current) => (current?.mode === "overflow" && current?.room === id
+        ? null
+        : (() => {
+          const rect = event.currentTarget?.getBoundingClientRect?.();
+          const anchorRect = rect
+            ? { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }
+            : null;
+          return {
+            room: id,
+            x: rect ? rect.right : (event.clientX ?? 8),
+            y: rect ? rect.bottom + 6 : (event.clientY ?? 8),
+            anchorRect,
+            mode,
+            fromKeyboard,
+          };
+        })()));
+      return;
+    }
+    select(id);
+    setMenu({ room: id, x: event.clientX, y: event.clientY, anchorRect: null, mode: "context", fromKeyboard });
   };
 
   const dialogCopy = {
@@ -774,7 +817,8 @@ function App() {
         {page === "monitor" && <window.Overview key={activeId} rooms={rooms} selectedId={selectedId} onSelect={select}
           paused={snap.paused}
           onAction={roomAction} onOpen={(id) => invoke("open_room", [id])} onAddMember={openAdd} onSyncMedals={openMedals}
-          onRemove={remove} onContextMenu={onContextMenu} busyRoom={busyRoom} controlBusy={controlBusy}
+          onRemove={remove} onContextMenu={onContextMenu} menuRoom={menu?.room} menuMode={menu?.mode}
+          busyRoom={busyRoom} controlBusy={controlBusy}
           error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
           interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
           images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected}
@@ -835,7 +879,8 @@ function App() {
             </div>
           : null}
         onConfirm={confirmAction} onClose={closeDialog} busy={dialogBusy} />}
-      {menu && <window.RoomMenu menu={menu} room={rooms.find((room) => room.room === menu.room)} onClose={() => setMenu(null)}
+      {menu && <window.RoomMenu key={`${menu.room}-${menu.mode}-${menu.x}-${menu.y}`} menu={menu}
+        room={rooms.find((room) => room.room === menu.room)} onClose={() => setMenu(null)}
         onOpen={(id) => invoke("open_room", [id])} onAction={roomAction} onRemove={remove} />}
     </div>
   );

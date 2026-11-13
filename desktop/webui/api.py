@@ -22,11 +22,13 @@ import webbrowser
 from pathlib import Path
 
 from bilioshi.accounts import ALL_ACCOUNTS, AccountStoreError
+from bilioshi.diagnostics_bundle import collect_diagnostic_preview, export_diagnostic_bundle
 from bilioshi.growth import CHINA_TZ, load_history
 from bilioshi.members import load_account_members, load_members
 from bilioshi.operating_mode import PROFILES, profile_for
-from bilioshi.redaction import redact
+from bilioshi.redaction import redact, redact_paths
 from bilioshi.runtime import read_json, update_json
+from bilioshi.safety import describe_hold
 from bilioshi.secret_store import is_envelope
 from desktop.interaction import action_reason, recovery_route
 from desktop.storage import load_config
@@ -44,24 +46,28 @@ _SETTING_FLAGS = (
 _PENDING_MESSAGES = {
     "redo": "正在补齐任务", "wear": "正在佩戴粉丝牌", "reconnect": "正在请求重连",
     "remove": "正在移除主播", "settings": "正在保存并应用设置", "pause": "正在调整挂机状态",
-    "check": "正在请求检查", "safety": "正在检查账号并解除保护暂停", "logout": "正在退出登录",
+    "check": "正在请求检查", "safety": "正在检查账号并解除保护暂停",
+    "safety_check": "正在检测账号风控与会话状态", "logout": "正在退出登录",
     "add": "正在添加主播", "import": "正在导入粉丝牌主播",
+    "export_diagnostic": "正在导出脱敏诊断包",
 }
 # These operations always touch the active Engine. A view of another account
 # must stay read-only rather than silently mutating the running account.
-_ACTIVE_VIEW_ONLY = {"add", "import", "resolve", "medals", "check", "pause", "safety", "remove"}
+_ACTIVE_VIEW_ONLY = {
+    "add", "import", "resolve", "medals", "check", "pause", "safety", "safety_check", "remove",
+}
 
 
-def _public(value):
+def _public(value, *, sanitize_exceptions=True):
     """Only JSON data crosses the boundary; secrets and raw exception names do not."""
     value = redact(value)
     if isinstance(value, dict):
-        return {str(key): _public(item) for key, item in value.items()
+        return {str(key): _public(item, sanitize_exceptions=sanitize_exceptions) for key, item in value.items()
                 if str(key).lower() not in _SECRET_FIELDS}
     if isinstance(value, (list, tuple)):
-        return [_public(item) for item in value]
+        return [_public(item, sanitize_exceptions=sanitize_exceptions) for item in value]
     if isinstance(value, str):
-        return _EXCEPTION_NAME.sub("（详情见日志）", value)
+        return _EXCEPTION_NAME.sub("（详情见日志）", value) if sanitize_exceptions else value
     if value is None or type(value) in (bool, int):
         return value
     if isinstance(value, float):
@@ -205,6 +211,8 @@ class Api:
                 try:
                     fresh = self._engine.snapshot(blocking=False)
                     if fresh is not None:
+                        if not (fresh.get("safety") or {}).get("blocked"):
+                            self._sync_unblocked_status()
                         with self._cache_lock:
                             self._last_snapshot = copy.deepcopy(fresh)
                         busy = False
@@ -291,6 +299,8 @@ class Api:
                 try:
                     fresh = self._engine.snapshot(blocking=False)
                     if fresh is not None:
+                        if not (fresh.get("safety") or {}).get("blocked"):
+                            self._sync_unblocked_status()
                         with self._cache_lock:
                             self._last_snapshot = copy.deepcopy(fresh)
                         busy = False
@@ -378,8 +388,12 @@ class Api:
         hold = status.get("safety")
         if not isinstance(hold, dict):
             hold = {"blocked": False}
+        if not hold.get("blocked") and isinstance(summary.get("safety"), dict) and summary["safety"].get("blocked"):
+            hold = dict(summary["safety"])
         if summary.get("state") == "protection" and not hold.get("blocked"):
             hold = {"blocked": True, "kind": "review", "reason": "账号保护暂停"}
+        if hold.get("blocked") and "steps" not in hold:
+            hold = {**hold, **describe_hold(hold, load_account_members(root))}
         view = {
             **self._empty_snapshot(),
             **status,
@@ -558,6 +572,7 @@ class Api:
         try:
             self._host.view(account_id or ALL_ACCOUNTS)
         except Exception:
+            logging.exception("Switch viewed account failed account_id=%s", account_id)
             return {"ok": False, "error": "账号不存在或已被移除。"}
         self._ui.push_now()
         return {"ok": True, "view": self._host.view_id}
@@ -569,6 +584,7 @@ class Api:
             with self._mutations, self._control_mutations:
                 self._host.switch_to(account_id)
         except Exception as exc:
+            logging.exception("Switch active account failed account_id=%s", account_id)
             message = str(exc) if str(exc) else "切换账号失败，请稍后重试。"
             return {"ok": False, "error": message}
         self._sync_active()
@@ -583,6 +599,7 @@ class Api:
         try:
             self._host.set_account_paused(account_id, paused)
         except Exception:
+            logging.exception("Set account paused failed account_id=%s", account_id)
             return {"ok": False, "error": "无法保存此账号的暂停状态。"}
         self._ui.push_now()
         return {"ok": True, "paused": paused}
@@ -595,6 +612,7 @@ class Api:
         try:
             self._host.set_global_paused(paused)
         except Exception:
+            logging.exception("Set global paused failed")
             return {"ok": False, "error": "无法切换全局暂停。"}
         self._sync_active()
         self._ui.push_now()
@@ -607,6 +625,7 @@ class Api:
             with self._mutations, self._control_mutations:
                 self._host.remove_account(account_id)
         except Exception:
+            logging.exception("Remove account failed account_id=%s", account_id)
             return {"ok": False, "error": "账号不存在或无法移除。"}
         self._sync_active()
         self._ui.push_now()
@@ -628,7 +647,7 @@ class Api:
     # Room writes and controls have separate serial lanes. Reservations happen
     # first so duplicate room actions cannot queue behind a slow network call.
     def _run(self, kind, operation, *, room=None, policy=None, mutating=True,
-             allow_without_engine=False):
+             allow_without_engine=False, sanitize_exceptions=True):
         self._sync_active()
         if self._engine is None and not allow_without_engine:
             return {"ok": False, "error": "当前没有正在运行的账号。"}
@@ -646,11 +665,13 @@ class Api:
                            "message": _PENDING_MESSAGES.get(kind, "正在处理，请稍候"), "started": time.time()}
             self._active += 1
         self._ui.push_now()
-        result = {"ok": False, "error": "操作未成功，请重试或查看活动记录。"}
+        result = {"ok": False, "error": "操作未成功，请重试或查看日志。"}
         try:
             # Pause/reconnect/check remain usable while a room task waits on IO.
             # Engine and task services own the actual shared-data locks.
-            control = kind in {"pause", "check", "settings", "safety", "reconnect", "remove", "logout"}
+            control = kind in {
+                "pause", "check", "settings", "safety", "safety_check", "reconnect", "remove", "logout",
+            }
             lock = self._control_mutations if control else self._mutations
             with lock if mutating else nullcontext():
                 if self._closing.is_set():
@@ -664,10 +685,10 @@ class Api:
                         reason = self._room_reason(snap, row, policy or kind)
                     returned = ({"ok": False, "error": reason} if reason else
                                 operation(row) if room is not None else operation())
-                    result = _public(returned)
+                    result = _public(returned, sanitize_exceptions=sanitize_exceptions)
         except Exception:
             logging.exception("Web action failed action=%s room=%s", kind, room)
-            result = {"ok": False, "error": "操作未成功，请重试或查看活动记录。"}
+            result = {"ok": False, "error": "操作未成功，请重试或查看日志。"}
         finally:
             with self._state:
                 states[key].update(pending=False, ok=bool(result.get("ok")),
@@ -712,6 +733,7 @@ class Api:
             if target_id and self._store is not None:
                 self._store.get(target_id)
         except Exception:
+            logging.exception("Target account lookup failed for settings account_id=%s", target_id)
             return {"ok": False, "error": "账号不存在或已被移除。"}
         payload = dict(changes)
         app_autostart = payload.pop("autostart", None)
@@ -766,7 +788,7 @@ class Api:
                     self._ui.apply_settings()
                 except Exception:
                     logging.exception("Applying saved web settings failed")
-                    return {"ok": False, "saved": True, "error": "设置已保存，但应用失败，请重试保存或查看活动记录。"}
+                    return {"ok": False, "saved": True, "error": "设置已保存，但应用失败，请重试保存或查看日志。"}
             else:
                 self._ui.push_now()
             result = {"ok": True}
@@ -799,12 +821,55 @@ class Api:
 
         return self._run("check", check)
 
+    def _sync_unblocked_status(self):
+        if self._store is None or self._host is None:
+            return
+        active_id = self._host.active_id
+        if not active_id or not self._store.has(active_id):
+            return
+        row = self._store.get(active_id)
+        if row.get("status") == "blocked":
+            next_status = "ok" if self._store.has_credentials(active_id) else "needs_login"
+            self._store.update(active_id, status=next_status)
+
     def resume_safety(self):
         def resume():
             ok, message = self._engine.resume_safety(confirmed=True)
+            if ok:
+                self._sync_unblocked_status()
+                check_now = getattr(self._engine, "check_now", None)
+                if callable(check_now):
+                    check_now()
             return {"ok": bool(ok), "message" if ok else "error": message}
 
         return self._run("safety", resume)
+
+    def check_safety(self, auto_resume=False):
+        def check():
+            result = self._engine.check_safety(auto_resume=bool(auto_resume))
+            if result.get("resumed") or not (result.get("hold") or {}).get("blocked"):
+                self._sync_unblocked_status()
+                check_now = getattr(self._engine, "check_now", None)
+                if callable(check_now):
+                    check_now()
+            return result
+
+        return self._run("safety_check", check)
+
+    def open_safety_link(self, kind="live", room=None):
+        try:
+            if room:
+                target_room = _positive_id(room)
+                url = f"https://live.bilibili.com/{target_room}"
+            elif kind == "security":
+                url = "https://account.bilibili.com/account/home"
+            else:
+                url = "https://live.bilibili.com/"
+            ok = webbrowser.open(url)
+        except Exception:
+            logging.exception("Opening safety helper URL failed")
+            ok = False
+        return {"ok": bool(ok), **({} if ok else {"error": "无法打开 B 站页面，请检查默认浏览器。"})}
 
     def redo(self, room, task_type="all"):
         if task_type not in ("all", "danmaku", "like"):
@@ -891,13 +956,113 @@ class Api:
             else:
                 root = self._account_root(account_id)
         except Exception:
+            logging.exception("Open logs lookup failed account_id=%s", account_id)
             return {"ok": False, "error": "账号不存在或已被移除。"}
         try:
-            os.startfile(str(root / "logs"))
+            logs_dir = root / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(logs_dir))
         except (OSError, AttributeError):
             logging.exception("Opening log directory failed")
             return {"ok": False, "error": "无法打开日志目录。"}
         return {"ok": True}
+
+    def open_exports(self):
+        host_root = self._host_root if self._host is not None else self._root
+        exports_dir = host_root / "exports"
+        try:
+            exports_dir.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(exports_dir))
+        except (OSError, AttributeError):
+            logging.exception("Opening diagnostic exports directory failed")
+            return {"ok": False, "error": "无法打开诊断包导出目录。"}
+        return {"ok": True}
+
+    def report_client_error(self, errors=None):
+        """Log scrubbed WebView2 frontend errors into desktop/errors logs."""
+        items = [errors] if isinstance(errors, str) else list(errors) if isinstance(errors, (list, tuple)) else []
+        logged = 0
+        for raw in items[:20]:
+            text = redact_paths(redact(str(raw))).strip()
+            if not text:
+                continue
+            logging.warning("WebUI frontend error: %s", text[:500])
+            logged += 1
+        return {"ok": True, "count": logged}
+
+    def _diagnostic_roots(self):
+        host_root = self._host_root if self._host is not None else self._root
+        if self._store is None:
+            return host_root, None
+        roots = {}
+        try:
+            for row in self._store.accounts():
+                roots[row["id"]] = self._store.account_root(row["id"])
+        except Exception:
+            logging.exception("Collecting account roots for diagnostics failed")
+        return host_root, roots
+
+    def diagnostic_preview(self, account_id=None, anonymize=True):
+        if type(anonymize) is not bool:
+            return {"ok": False, "error": "脱敏参数必须为布尔值。"}
+        target_id = account_id if account_id not in ("", ALL_ACCOUNTS) else None
+
+        def preview():
+            host_root, account_roots = self._diagnostic_roots()
+            return collect_diagnostic_preview(
+                host_root,
+                account_id=target_id,
+                account_roots=account_roots,
+                anonymize=anonymize,
+                ui_mode="webview2",
+            )
+
+        return self._run(
+            "diagnostic_preview",
+            preview,
+            mutating=False,
+            allow_without_engine=True,
+            sanitize_exceptions=False,
+        )
+
+    def export_diagnostic(self, options=None):
+        if options is None:
+            options = {}
+        if not isinstance(options, dict):
+            return {"ok": False, "error": "诊断包参数格式无效。"}
+        anonymize = options.get("anonymize", True)
+        include_state = options.get("include_state", True)
+        if type(anonymize) is not bool or type(include_state) is not bool:
+            return {"ok": False, "error": "诊断包选项必须为布尔值。"}
+        account_id = options.get("account_id")
+        target_id = account_id if account_id not in ("", ALL_ACCOUNTS) else None
+
+        def export():
+            host_root, account_roots = self._diagnostic_roots()
+            result = export_diagnostic_bundle(
+                host_root,
+                account_id=target_id,
+                account_roots=account_roots,
+                anonymize=anonymize,
+                include_state=include_state,
+                ui_mode="webview2",
+            )
+            logging.info(
+                "Exported diagnostic bundle file=%s anonymized=%s include_state=%s included=%s",
+                result.get("filename"),
+                anonymize,
+                include_state,
+                len(result.get("included_files", [])),
+            )
+            return result
+
+        return self._run(
+            "export_diagnostic",
+            export,
+            mutating=False,
+            allow_without_engine=True,
+            sanitize_exceptions=False,
+        )
 
     def resolve_member(self, query):
         if not isinstance(query, str) or not query.strip():
@@ -1304,6 +1469,7 @@ class Api:
                 try:
                     self._store.clear_credentials(target)
                 except Exception:
+                    logging.exception("Account logout failed account_id=%s", target)
                     return {"ok": False, "error": "退出登录失败，请稍后重试。"}
                 from desktop.avatars import clear_account_profile
 

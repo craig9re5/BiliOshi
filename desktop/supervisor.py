@@ -187,6 +187,7 @@ class Supervisor:
             identity = process_identity(record["pid"])
         if not identity or identity != record:
             if self.target is not None:
+                logging.warning("Guardian noticed desktop process exited or changed pid=%s", self.target.get("pid"))
                 self._backoff(now)
                 self.target = None
             self.stale_checks = 0

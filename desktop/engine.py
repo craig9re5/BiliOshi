@@ -357,10 +357,22 @@ class Engine:
             ok, message = self.application.resume_safety(confirmed)
             self.safety = self.application.safety_status()
             if ok:
+                self._was_safety_blocked = False
                 self.error = ""
                 self.next_check = 0
             self.persist()
             return ok, message
+
+    def check_safety(self, *, auto_resume=False):
+        with self.lock:
+            result = self.application.probe_safety(auto=False, auto_resume=auto_resume)
+            self.safety = result.get("hold") or self.application.safety_status()
+            if not self.safety.get("blocked"):
+                self._was_safety_blocked = False
+                self.error = ""
+                self.next_check = 0
+            self.persist()
+            return result
 
     def close(self):
         self.stopping.set()
@@ -458,7 +470,10 @@ class Engine:
         clock = time.monotonic()
         for room, proc in list(self.workers.items()):
             if proc.poll() is not None:
-                logging.info("Room worker exited room=%s code=%s", room, proc.returncode)
+                if proc.returncode:
+                    logging.warning("Room worker exited unexpectedly room=%s code=%s", room, proc.returncode)
+                else:
+                    logging.info("Room worker exited room=%s code=%s", room, proc.returncode)
                 self._record_interruption(room, "worker_exited")
                 del self.workers[room]
                 self.worker_health.pop(room, None)
@@ -505,6 +520,7 @@ class Engine:
         now = time.time()
         self.safety = self.application.safety_status()
         if self.safety["blocked"]:
+            self._was_safety_blocked = True
             if self.safety.get("kind") in ("auth", "credentials"):
                 self.account = ""
                 self.account_checked_at = 0
@@ -514,13 +530,47 @@ class Engine:
             )
             if (self.workers or self.probe) and not grace:
                 self.stop_children("account_safety")
+            next_probe = self.safety.get("next_probe_at") or 0
+            if (
+                not self.paused
+                and not grace
+                and self.safety.get("kind") in ("uncertain", "review")
+                and not self.safety.get("until")
+                and next_probe
+                and now >= next_probe
+            ):
+                result = self.application.probe_safety(auto=True)
+                self.safety = result.get("hold") or self.application.safety_status()
+                if not self.safety.get("blocked"):
+                    self._was_safety_blocked = False
+                    self.error = ""
+                    self.next_check = 0
+                    self.persist()
+                    self._watch_workers(now)
+                    return
             self.error = self.safety["reason"]
-            self.next_check = self.safety.get("until") or now + 300
+            candidates = [
+                t
+                for t in (
+                    self.safety.get("until"),
+                    self.safety.get("next_probe_at"),
+                    (self.safety.get("since", 0) + 20) if grace else None,
+                    now + 300,
+                )
+                if t
+            ]
+            self.next_check = min(candidates)
             self.force_probe = False
             return
+        if getattr(self, "_was_safety_blocked", False):
+            self._was_safety_blocked = False
+            self.error = ""
+            self.next_check = 0
+            self.persist()
         self._watch_workers(now)
         if self.probe:
             if self.probe.poll() is None and now - self.probe_started > 180:
+                logging.warning("Probe timed out after 180s pid=%s", self.probe.pid)
                 self.probe.kill()
                 self.probe.wait()
                 self.error = "网络检查超时，稍后重试。"
@@ -583,6 +633,7 @@ class Engine:
         observed = result.get("observed", now)
         received = {str(k): v for k, v in result["statuses"].items()}
         self.status_errors = {}
+        failed_rooms = []
         for member in self.members:
             key = str(member["room"])
             if received.get(key, {}).get("live_status") in (0, 1, 2):
@@ -590,6 +641,9 @@ class Engine:
                 self.statuses[key] = received[key]
             else:
                 self.status_errors[key] = "直播状态查询失败"
+                failed_rooms.append(key)
+        if failed_rooms:
+            logging.warning("Probe missing live_status for rooms=%s", failed_rooms)
         if "medals" in result and isinstance(result["medals"], dict):
             self.medals = result["medals"]
             try:

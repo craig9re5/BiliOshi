@@ -54,9 +54,9 @@ class DailyNotifications:
                 self.tick()
                 self.error = ""
             except Exception as exc:
-                # Background boundary: expose only the type, not URLs, responses or secrets.
+                # Background boundary: expose only the type in UI, keep redacted traceback in logs.
                 self.error = f"每日总结后台异常（{type(exc).__name__}），请检查本机配置"
-                logging.warning("Daily notification failed: %s", type(exc).__name__)
+                logging.exception("Daily notification failed")
             self.stopping.wait(15)
 
     def _account(self):
@@ -154,6 +154,7 @@ class DailyNotifications:
         try:
             outcome = self.sender(saved, message)
         except Exception:
+            logging.exception("Daily notification send raised exception")
             outcome = {"state": "unknown", "reason": "提交异常，结果未知；不会自动重发"}
         box.finish(message, outcome, self.clock())
 
@@ -161,6 +162,7 @@ class DailyNotifications:
         try:
             members, result, observed, observed_account = self.collector(self.root)
         except Exception:
+            logging.exception("Daily notification collector failed")
             # Daily report still explains unavailable data, without sending error text.
             from ..members import load_members
             members, result, observed, observed_account = load_members(self.root), {"error": True}, self.clock(), account

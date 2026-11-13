@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 import urllib.parse
@@ -100,6 +101,7 @@ def report_live_likes(
         except TaskDeferred:
             raise
         except Exception:
+            logging.exception("Live like WBI signing failed room=%s", room_id)
             return {"code": None, "message": "无法生成 WBI 签名", "error_kind": "signing"}
         check_window()
         url = ("https://api.live.bilibili.com/xlive/app-ucenter/v1/like_info_v3/like/likeReportV3?"

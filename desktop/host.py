@@ -15,6 +15,7 @@ from pathlib import Path
 from bilioshi.accounts import ALL_ACCOUNTS, AccountStore, UnknownAccount
 from bilioshi.members import load_account_members
 from bilioshi.runtime import FileLock, read_json, update_json
+from bilioshi.safety import describe_hold
 from desktop.engine import Engine
 from desktop.storage import initialize
 from desktop.windows import Job
@@ -323,6 +324,10 @@ class AccountHost:
         if not isinstance(status, dict):
             status = {}
         members = load_account_members(root)
+        safety_data = (
+            getattr(engine, "safety", None) if engine is not None else status.get("safety")
+        ) or {"blocked": False}
+        blocked = bool(safety_data.get("blocked")) or (row["status"] == "blocked" and engine is None)
         running = (
             self.active_id == account_id
             and engine is not None
@@ -330,9 +335,10 @@ class AccountHost:
             and not engine.paused
             and not self.global_paused
             and row["status"] == "ok"
+            and not safety_data.get("blocked")
         )
         paused = bool(engine.paused) if engine is not None else bool(settings.get("paused"))
-        if row["status"] == "blocked":
+        if blocked:
             state = "protection"
         elif row["status"] == "needs_login" or not self.store.has_credentials(account_id):
             state = "needs_login"
@@ -356,6 +362,8 @@ class AccountHost:
             value = item.get("intimacy_gain")
             if isinstance(value, (int, float)):
                 gain = value if gain is None else gain + value
+        if safety_data.get("blocked") and "steps" not in safety_data:
+            safety_data = {**safety_data, **describe_hold(safety_data, members)}
         return {
             **row,
             "signed_in": self.store.has_credentials(account_id),
@@ -368,7 +376,7 @@ class AccountHost:
             "gain": gain,
             "snapshot_at": status.get("updated", 0),
             "stale": bool(status.get("stale") or status.get("exited")),
-            "safety": status.get("safety") or {"blocked": False},
+            "safety": safety_data,
             "account": status.get("account", ""),
         }
 

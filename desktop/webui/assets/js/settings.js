@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"94ad411555f724617e2d589623015e434795b1615716d68b55a6a34855e2cf85","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"8ec0206e7f8bb037a6a630c17aa697c2c1652491a257df351c26663f947c496e"} */
+/* BiliOshi JSX {"code_sha256":"2bc214e8194c9c929d09d8354bea5697e6d1c2334006e681129850ee5ae2c389","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"17881edd1f2deb1449839aa3f7cb2d9278dd306ba87e538de5ac4ce1a160956b"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -132,6 +132,10 @@ const Choice = ({
   })))));
 };
 const THEME_CHOICES = [{
+  key: "system",
+  name: "跟随系统",
+  hint: "随系统深浅外观切换"
+}, {
   key: "white",
   name: "纸白",
   hint: "中性纸面"
@@ -147,23 +151,45 @@ const THEME_CHOICES = [{
   key: "apricot",
   name: "暖杏灰",
   hint: "温暖柔和"
+}, {
+  key: "dark",
+  name: "墨青暗",
+  hint: "夜间深色"
 }];
+const useSystemDark = () => {
+  const [dark, setDark] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = event => setDark(Boolean(event.matches));
+    setDark(Boolean(media.matches));
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    }
+    media.addListener(onChange);
+    return () => media.removeListener(onChange);
+  }, []);
+  return dark;
+};
 const ThemeOptions = ({
   value,
-  onChange
+  onChange,
+  systemDark
 }) => /*#__PURE__*/React.createElement("div", {
   className: "theme-options",
   role: "group",
   "aria-label": "\u754C\u9762\u4E3B\u9898"
 }, THEME_CHOICES.map(theme => {
   const active = theme.key === value;
+  const hint = theme.key === "system" ? `当前${systemDark ? "深色" : "浅色"}` : theme.hint;
   return /*#__PURE__*/React.createElement("button", {
     type: "button",
     key: theme.key,
     className: "theme-option",
     "data-theme": theme.key,
     "aria-pressed": active,
-    title: `${theme.name} · ${theme.hint}`,
+    title: `${theme.name} · ${hint}`,
     onClick: () => onChange(theme.key)
   }, /*#__PURE__*/React.createElement("span", {
     className: `theme-chip ${theme.key}`,
@@ -179,10 +205,15 @@ const SettingsPage = ({
   settings,
   onSetting,
   pendingSettings,
-  theme = "white",
+  theme = "system",
   onTheme,
-  onLogs
+  scope,
+  onLogs,
+  onHostLogs,
+  onDiagnostics,
+  version
 }) => {
+  const systemDark = useSystemDark();
   const disabled = key => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
@@ -253,9 +284,15 @@ const SettingsPage = ({
       label: "激进"
     }],
     onChange: value => onSetting("run_mode", value)
-  })), /*#__PURE__*/React.createElement(SettingRow, {
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "group card"
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "group-head"
+  }, "\u65E5\u5FD7\u4E0E\u8BCA\u65AD\u53CD\u9988"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u65E5\u5FD7",
-    desc: "\u6253\u5F00\u65E5\u5FD7\u6587\u4EF6\u6240\u5728\u76EE\u5F55\uFF0C\u4FBF\u4E8E\u6392\u969C"
+    desc: scope ? "可分别查看当前账号挂机日志或主程序全局日志" : "打开日志文件所在目录，便于排障"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "btn-row"
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm",
@@ -263,16 +300,39 @@ const SettingsPage = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "folder",
     size: 13
-  }), "\u67E5\u770B\u65E5\u5FD7"))), /*#__PURE__*/React.createElement("section", {
+  }), scope ? "账号日志" : "查看日志"), scope && onHostLogs && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onHostLogs
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "folder",
+    size: 13
+  }), "\u4E3B\u7A0B\u5E8F\u65E5\u5FD7"))), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u4E00\u952E\u5BFC\u51FA\u8BCA\u65AD\u5305",
+    desc: "\u6253\u5305\u65E5\u5FD7\u3001\u8FD1\u671F\u62A5\u9519\u4E0E\u73AF\u5883\u6458\u8981\uFF0C\u81EA\u52A8\u79FB\u9664\u51ED\u8BC1\u5E76\u9ED8\u8BA4\u533F\u540D\u5316\u8EAB\u4EFD"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    onClick: onDiagnostics
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "download",
+    size: 13
+  }), "\u5BFC\u51FA\u8BCA\u65AD\u5305")), version && /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u7248\u672C\u4FE1\u606F",
+    desc: "\u63D0\u4EA4\u95EE\u9898\u53CD\u9988\u65F6\u5EFA\u8BAE\u9644\u5E26\u7248\u672C\u53F7\u4E0E\u8131\u654F\u8BCA\u65AD\u5305"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "version-pill"
+  }, "v", version))), /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head"
   }, "\u5916\u89C2"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u754C\u9762\u4E3B\u9898",
-    desc: "\u81EA\u5B9A\u4E49\u5E94\u7528\u914D\u8272\u98CE\u683C"
+    desc: theme === "system" ? `跟随系统，当前为${systemDark ? "深色" : "浅色"}外观` : "自定义应用配色风格"
   }, /*#__PURE__*/React.createElement(ThemeOptions, {
     value: theme,
-    onChange: onTheme
+    onChange: onTheme,
+    systemDark: systemDark
   }))))));
 };
 const AccountRow = ({
@@ -289,7 +349,7 @@ const AccountRow = ({
 }) => {
   const state = window.accountStateLabel(account);
   const needsLogin = !account.signed_in || account.status === "needs_login";
-  const protection = account.status === "blocked";
+  const protection = account.status === "blocked" || Boolean(account.safety?.blocked);
   const issueText = protection ? account.safety?.reason || "账号操作已暂停，需在平台处理" : needsLogin ? "登录已失效，请重新扫码" : null;
   return /*#__PURE__*/React.createElement("div", {
     className: `account-item ${isActive ? "current" : ""}`
@@ -366,6 +426,8 @@ const AccountPage = ({
   onRemove,
   onProtection,
   onResumeSafety,
+  onCheckSafety,
+  safetyProbe,
   onCheck,
   busy,
   version
@@ -373,8 +435,8 @@ const AccountPage = ({
   const hold = account.safety || {};
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
-  const action = !account.signed_in || needsLogin ? onScan : cooldown ? null : hold.blocked ? onResumeSafety : onCheck;
-  const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "立即检查";
+  const checkingSafety = Boolean(safetyProbe?.loading);
+  const locationParts = [hold.room_label, hold.operation_label].filter(Boolean);
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8D26\u53F7"
@@ -430,19 +492,51 @@ const AccountPage = ({
     className: "safety-status"
   }, /*#__PURE__*/React.createElement("i", {
     className: `status-dot ${hold.blocked ? "warn" : "ok"}`
-  }), /*#__PURE__*/React.createElement("strong", null, hold.blocked ? "保护暂停中" : "状态正常"), hold.blocked && hold.reason && /*#__PURE__*/React.createElement("span", {
+  }), /*#__PURE__*/React.createElement("strong", null, hold.blocked ? hold.kind_label || "保护暂停中" : "状态正常", hold.blocked && hold.code !== undefined && hold.code !== null && `（错误码 ${hold.code}）`), hold.blocked && hold.reason && /*#__PURE__*/React.createElement("span", {
     className: "safety-reason"
-  }, hold.reason)), cooldown && /*#__PURE__*/React.createElement("small", {
+  }, hold.reason)), hold.blocked && locationParts.length > 0 && /*#__PURE__*/React.createElement("small", {
     className: "safety-time"
-  }, "\u6700\u65E9\u6062\u590D\u65F6\u95F4\uFF1A", absoluteTime(hold.until))), action && /*#__PURE__*/React.createElement("button", {
+  }, "\u89E6\u53D1\u4F4D\u7F6E\uFF1A", locationParts.join(" · ")), cooldown && /*#__PURE__*/React.createElement("small", {
+    className: "safety-time"
+  }, "\u6700\u65E9\u81EA\u52A8\u6062\u590D\uFF1A", absoluteTime(hold.until)), !cooldown && hold.blocked && hold.next_probe_at && /*#__PURE__*/React.createElement("small", {
+    className: "safety-time"
+  }, "\u4E0B\u6B21\u81EA\u52A8\u590D\u68C0\uFF1A", absoluteTime(hold.next_probe_at))), /*#__PURE__*/React.createElement("div", {
+    className: "safety-actions"
+  }, (!account.signed_in || needsLogin) && /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn sm",
-    onClick: () => action(),
+    className: "btn sm primary",
+    onClick: () => onScan(),
     disabled: busy
   }, /*#__PURE__*/React.createElement(Icon, {
-    name: needsLogin ? "qr" : hold.blocked ? "shield" : "refresh",
+    name: "qr",
     size: 13
-  }), /*#__PURE__*/React.createElement("span", null, actionLabel)))))));
+  }), /*#__PURE__*/React.createElement("span", null, "\u626B\u7801\u767B\u5F55")), account.signed_in && !needsLogin && hold.blocked && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: () => onResumeSafety(),
+    disabled: busy || checkingSafety
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "shield",
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", null, "\u67E5\u770B\u8BE6\u60C5\u4E0E\u6392\u67E5")), !cooldown && onCheckSafety && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    onClick: () => onCheckSafety(true),
+    disabled: busy || checkingSafety
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "refresh",
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", null, checkingSafety ? "检测中…" : "检测并恢复"))), account.signed_in && !needsLogin && !hold.blocked && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: () => onCheck(),
+    disabled: busy
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "refresh",
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", null, "\u7ACB\u5373\u68C0\u67E5"))))), version && /*#__PURE__*/React.createElement("div", {
+    className: "page-foot-version"
+  }, "\u30D3\u30EA\u63A8\u3057 v", version))));
 };
 Object.assign(window, {
   SettingsPage,

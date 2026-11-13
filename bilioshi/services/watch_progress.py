@@ -1,10 +1,12 @@
 """Verify watch rewards independently of heartbeat acceptance and reaction tasks."""
 
+import logging
 import re
 import sys
 import time
 from .. import safety
 from ..operating_mode import current_profile
+from ..redaction import redact
 
 CHECK_INTERVAL = 10 * 60
 MIN_STALL_SECONDS = 30 * 60
@@ -127,8 +129,9 @@ class WatchProgressMonitor:
         try:
             club = self.gateway.get_fans_club_task_info(self.room, self.uid, *self.credentials)
         except (OSError, ValueError, RuntimeError) as exc:
+            logging.warning("Watch progress query failed room=%s err=%s", self.room, redact(str(exc)), exc_info=True)
             self.gateway._log({"type": "watch_progress_query_error", "room_id": self.room,
-                               "error": type(exc).__name__})
+                               "error": type(exc).__name__, "detail": redact(str(exc))[:180]})
             club = {}
         progress = parse_watch_task(club)
         account = None
@@ -136,8 +139,9 @@ class WatchProgressMonitor:
             try:
                 account = self.clock.observe(self.room, self.gateway.task_day(), progress["current"])
             except (OSError, ValueError, RuntimeError, TimeoutError) as exc:
+                logging.warning("Watch credit clock failed room=%s err=%s", self.room, redact(str(exc)), exc_info=True)
                 self.gateway._log({"type": "watch_credit_clock_error", "room_id": self.room,
-                                   "error": type(exc).__name__})
+                                   "error": type(exc).__name__, "detail": redact(str(exc))[:180]})
         self.result = self.tracker.observe(club, self.gateway.task_day(), now,
                                            self.accepted_seconds, account)
         self.result.update(day=self.tracker.day, checked_at=time.time())
@@ -188,8 +192,9 @@ class WatchProgressMonitor:
         try:
             live = self.gateway._get_single_room_status(self.room, *self.credentials)
         except (OSError, ValueError, RuntimeError) as exc:
+            logging.warning("Watch reward live status query failed room=%s err=%s", self.room, redact(str(exc)), exc_info=True)
             self.gateway._log({"type": "watch_reward_live_query_error", "room_id": self.room,
-                               "error": type(exc).__name__})
+                               "error": type(exc).__name__, "detail": redact(str(exc))[:180]})
             return
         if (not live or live.get("live_status") != 1
                 or safety.status(self.credentials[0])["blocked"]):
@@ -205,8 +210,9 @@ class WatchProgressMonitor:
             if chain.restart():
                 recovery["status"] = "reconnected"
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
+            logging.warning("Watch reward reconnect failed room=%s err=%s", self.room, redact(str(exc)), exc_info=True)
             self.gateway._log({"type": "watch_reward_reconnect_error", "room_id": self.room,
-                               "error": type(exc).__name__})
+                               "error": type(exc).__name__, "detail": redact(str(exc))[:180]})
         self.gateway._log({"type": "watch_reward_reconnect", "room_id": self.room,
                            "attempt": self.reconnects, "success": recovery["status"] == "reconnected"})
         self._publish()

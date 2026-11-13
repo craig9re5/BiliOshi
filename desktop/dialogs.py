@@ -1,4 +1,5 @@
 from .settings_layout import build_automation, build_system, build_auth
+import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
 import time
@@ -33,7 +34,8 @@ def apply_saved_settings(panel):
             message = "已保存并应用。"
             ok = True
         except Exception as exc:
-            message = f"已保存，但应用失败（{type(exc).__name__}），请重试保存或查看活动记录。"
+            logging.exception("Applying saved settings failed")
+            message = f"已保存，但应用失败（{type(exc).__name__}），请重试保存或查看日志。"
             ok = False
         def finish():
             panel.applying = False

@@ -11,6 +11,7 @@ import logging
 import math
 import os
 import queue
+import sys
 import threading
 import time
 from pathlib import Path
@@ -20,6 +21,23 @@ from desktop.storage import read_json
 ASSETS = Path(__file__).resolve().parent / "assets"
 INDEX = ASSETS / "index.html"
 PUSH_INTERVAL = 0.75
+
+
+def _initial_background_color() -> str:
+    """Match the Windows dark-mode preference before WebView2 finishes painting."""
+    if sys.platform != "win32":
+        return "#fcfcfb"
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
+            light_theme, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        return "#141716" if int(light_theme) == 0 else "#fcfcfb"
+    except Exception:
+        return "#fcfcfb"
 
 
 class WebHost:
@@ -55,6 +73,7 @@ class WebHost:
         self._shutdown_thread = None
         self._watch_notice_day = None
         self._watch_notices = set()
+        self._notified_safety_holds = {}
         self._last_tray_color = None
         self._last_zoomed = False
 
@@ -67,7 +86,7 @@ class WebHost:
             # hit-testing restores edge resizing and the drag region moves it.
             self._window = webview.create_window(
                 "ビリ推し", url=INDEX.as_uri(), js_api=self._api,
-                width=1180, height=760, min_size=(900, 600), background_color="#fcfcfb",
+                width=1180, height=760, min_size=(900, 600), background_color=_initial_background_color(),
                 text_select=False, hidden=not (show or login), zoomable=True,
                 frameless=True, easy_drag=True, shadow=True,
             )
@@ -365,6 +384,7 @@ class WebHost:
                         if pushed:
                             self._update_tray(snapshot)
                             self._notify_watch_warnings(snapshot)
+                            self._notify_safety_events(snapshot)
                         else:
                             self._ready.clear()
                         next_snapshot = now + PUSH_INTERVAL
@@ -413,7 +433,7 @@ class WebHost:
                     from desktop.supervisor import command_for_request
 
                     command = command_for_request(request)
-                    if command in {"show", "login", "pause", "resume", "check", "exit", "supervisor_exit"}:
+                    if command in {"show", "login", "pause", "resume", "check", "exit", "supervisor_exit", "export_diagnostic"}:
                         self._commands.put(command)
             except (OSError, ValueError, TypeError):
                 logging.warning("Ignoring unreadable desktop command")
@@ -445,11 +465,21 @@ class WebHost:
                     "safety": ("show_page", {"page": "account"}),
                 }[command]
                 self.emit(event, payload)
-            elif command in {"pause", "resume", "toggle", "check", "logs"}:
+            elif command in {"pause", "resume", "toggle", "check", "logs", "export_diagnostic"}:
+                def export_and_open():
+                    res = self._api.export_diagnostic({"anonymize": True, "include_state": True})
+                    if res.get("ok"):
+                        self._api.open_exports()
+                        name = res.get("filename", "")
+                        self._notify(f"已导出脱敏诊断包：{name}", "ビリ推し · 诊断包")
+                        self.emit("toast", {"message": f"已导出诊断包：{name}", "tone": "info"})
+                    return res
+
                 operation = {
                     "pause": lambda: self._api.set_paused(True), "resume": lambda: self._api.set_paused(False),
                     "toggle": self._api.toggle_pause, "check": self._api.check_now,
                     "logs": lambda: self._api.open_logs(),
+                    "export_diagnostic": export_and_open,
                 }[command]
                 self._submit_control(command, operation)
 
@@ -498,7 +528,8 @@ class WebHost:
                 item(lambda _: "恢复挂机" if self._paused() else "暂停挂机", "toggle"),
                 item("立即检查", "check"), item("处理账号保护暂停", "safety"),
                 item("添加主播", "add_member"), item("同步粉丝牌", "sync_medals"),
-                item("设置", "settings"), item("账号登录", "login"), item("查看日志", "logs"),
+                item("设置", "settings"), item("账号登录", "login"),
+                item("查看日志", "logs"), item("导出诊断包", "export_diagnostic"),
                 pystray.Menu.SEPARATOR, item("退出（停止全部挂机）", "exit"),
             )
             self._tray = pystray.Icon("BiliOshi", icon_image(), "ビリ推し", menu)
@@ -551,13 +582,16 @@ class WebHost:
         if not self._has_tray():
             return
         rows = snap.get("rows", [])
+        safety = snap.get("safety") or {}
         active = sum(bool(row.get("heartbeat_healthy")) for row in rows)
-        warnings = bool(snap.get("error") or snap.get("ui_error") or any(
+        warnings = bool(snap.get("error") or snap.get("ui_error") or safety.get("blocked") or any(
             row.get("connection_warning") or row.get("watch_warning") for row in rows))
         accounts = snap.get("accounts") or []
         running = sum(1 for row in accounts if row.get("running"))
         if snap.get("global_paused"):
             title = "全部暂停"
+        elif safety.get("blocked"):
+            title = "冷却中" if safety.get("until") else "保护暂停"
         elif warnings:
             title = "需要处理"
         elif snap.get("paused"):
@@ -600,6 +634,42 @@ class WebHost:
             if self._notify(f"【{row['name']}】{warning}",
                             "ビリ推し · 连接提醒" if connection else "ビリ推し · 看播收益提醒"):
                 self._watch_notices.add(key)
+
+    def _notify_safety_events(self, snap):
+        account_id = snap.get("active_account_id") or ""
+        safety = snap.get("safety") or {}
+        prev = self._notified_safety_holds.get(account_id)
+        if not safety.get("blocked"):
+            if prev is not None:
+                self._notified_safety_holds.pop(account_id, None)
+                if prev[0] not in ("auth", "credentials"):
+                    acct = snap.get("account") or ""
+                    prefix = f"【{acct}】" if acct else ""
+                    msg = f"{prefix}账号保护状态已解除，挂机监控已恢复。"
+                    self._notify(msg, "ビリ推し · 保护暂停已解除")
+                    self.emit("toast", {"message": msg, "kind": "info"})
+            return
+        kind = safety.get("kind") or "review"
+        if kind == "network":
+            return
+        key = (kind, safety.get("since"), safety.get("code"))
+        if prev == key:
+            return
+        self._notified_safety_holds[account_id] = key
+        acct = snap.get("account") or ""
+        prefix = f"【{acct}】" if acct else ""
+        title = (
+            "ビリ推し · 风控保护暂停"
+            if kind in ("review", "permission")
+            else "ビリ推し · 账号异常提醒"
+        )
+        msg = f"{prefix}{safety.get('reason', '触发账号保护暂停')}"
+        if safety.get("next_probe_at"):
+            msg += f"（将在 {time.strftime('%H:%M:%S', time.localtime(safety['next_probe_at']))} 自动复检）"
+        elif safety.get("until"):
+            msg += f"（预计 {time.strftime('%H:%M:%S', time.localtime(safety['until']))} 恢复）"
+        self._notify(msg, title)
+        self.emit("toast", {"message": msg, "kind": "error"})
 
 
 def _js(value):

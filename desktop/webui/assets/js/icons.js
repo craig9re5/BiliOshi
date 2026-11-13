@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"5f1708703afbe1740752950709762ad6bb4a12cf4841d1e8f9b8cba02d009d7c","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"2618ddc45634549a405620359da57613bf5fa815e027c071df94466f8ba4add6"} */
+/* BiliOshi JSX {"code_sha256":"cc90516ab6bc0ab5afb70ef1463daf05ee98d34a165f7d0c61c471cc0cde179d","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"d813cc888b07defefadc079206df2c5476663970ddc7dc08756e7fe5296c3db0"} */
 (function () {
 "use strict";
 /* Hand-drawn 16px stroke icons — one weight, round caps, currentColor.
@@ -190,6 +190,20 @@ const Icon = ({
       r: "5.5"
     }), /*#__PURE__*/React.createElement("path", {
       d: "M8 13.5 6.5 21l5.5-3 5.5 3-1.5-7.5"
+    })),
+    download: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
+      d: "M12 4.5v10.5M7.8 11.2 12 15.4l4.2-4.2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M4.5 16.8v1.6c0 .9.7 1.6 1.6 1.6h11.8c.9 0 1.6-.7 1.6-1.6v-1.6"
+    })),
+    copy: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("rect", {
+      x: "8.5",
+      y: "8.5",
+      width: "11",
+      height: "11",
+      rx: "2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M5.5 15.5H5a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 5 3.5h9a1.5 1.5 0 0 1 1.5 1.5v.5"
     }))
   };
   return /*#__PURE__*/React.createElement("svg", common, paths[name] || paths.info);

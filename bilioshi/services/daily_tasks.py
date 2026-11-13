@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from typing import Dict
@@ -176,6 +177,7 @@ class DailyTaskRunner:
                     else "任务尚未确认完成，留待下次巡检"
                 )
         except Exception as exc:
+            logging.exception("Daily danmaku task failed room=%s", self.room)
             result = {"done": False, "error": f"任务执行失败（{type(exc).__name__}）"}
         output["danmaku"] = result
         output["success"] = output["success"] and self.danmaku_done
@@ -198,6 +200,7 @@ class DailyTaskRunner:
                 self.room, self.uid, self.sessdata, self.bili_jct, **options,
             )
         except Exception as exc:
+            logging.exception("Daily live-like task failed room=%s", self.room)
             result = {"success": False, "error": f"任务执行失败（{type(exc).__name__}）"}
         self.like_done = bool(result.get("success") and result.get("done", False))
         if result.get("pending_current") is not None:

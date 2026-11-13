@@ -2,11 +2,14 @@
 
 from pathlib import Path
 import time
+import urllib.parse
 from . import heartbeat as live
+from . import http
 from .check_auth import check_login_profile
 from .context import RuntimeContext, use_context
 from .runtime import data_dir, read_json, task_day, update_json
-from .members import validate_members
+from .members import load_members, validate_members
+from .session_headers import session_headers
 from .launch import watch_arguments
 from . import safety
 
@@ -85,6 +88,161 @@ class AppContext:
         if not ok:
             return False, "登录或平台验证未通过，保护暂停保留"
         return safety.resume(credentials[0], confirmed=True, root=self.root)
+
+    def _probe_live_endpoints(self, sessdata, bili_jct, hold):
+        """Query read-only live endpoints with safety_probe=True to test current risk state."""
+        checks = []
+        summary = "只读自检通过：账号会话与直播只读接口均返回正常"
+        with use_context(self.runtime):
+            members = load_members(self.root)
+            op_room = str((hold.get("operation") or {}).get("room") or "")
+            target = next((m for m in members if str(m.get("room")) == op_room), None) or (
+                members[0] if members else None
+            )
+            if not target:
+                return checks, True, False, summary
+            room = str(target["room"])
+            uid = str(target["uid"])
+            status_resp = http.request_json(
+                "https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids",
+                {
+                    **session_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room}"),
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data=urllib.parse.urlencode([("uids[]", uid)]).encode("utf-8"),
+                safety_probe=True,
+            )
+            status_ok = status_resp.get("code") == 0
+            status_code = status_resp.get("code")
+            status_msg = str(status_resp.get("message") or "").strip()
+            checks.append(
+                {
+                    "name": "直播状态接口",
+                    "ok": status_ok,
+                    "code": status_code,
+                    "detail": (
+                        f"正常（{target.get('name', room)}）"
+                        if status_ok
+                        else f"[{status_code}] {status_msg or '请求异常'}"
+                    ),
+                }
+            )
+            params = {
+                "csrf": bili_jct,
+                "platform": "pc",
+                "room_id": room,
+                "scene": "club",
+                "target_id": uid,
+                "web_location": "444.260",
+            }
+            club_url = (
+                "https://api.live.bilibili.com/xlive/app-ucenter/v1/fansMedal/GetActivatedMedalInfo?"
+                + urllib.parse.urlencode(params)
+            )
+            club_resp = http.request_json(
+                club_url,
+                session_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room}"),
+                safety_probe=True,
+            )
+            club_ok = club_resp.get("code") == 0
+            club_code = club_resp.get("code")
+            club_msg = str(club_resp.get("message") or "").strip()
+            checks.append(
+                {
+                    "name": "粉丝团接口",
+                    "ok": club_ok,
+                    "code": club_code,
+                    "detail": "只读返回正常" if club_ok else f"[{club_code}] {club_msg or '请求异常'}",
+                }
+            )
+            for resp in (status_resp, club_resp):
+                if resp.get("code") in (-101, -111) or resp.get("error_kind") == "auth":
+                    safety.hold_account(
+                        sessdata,
+                        "auth",
+                        "登录已失效，请重新扫码登录",
+                        code=resp.get("code"),
+                        operation=hold.get("operation"),
+                        raw_message=str(resp.get("message") or ""),
+                        root=self.root,
+                    )
+                    return checks, False, True, "登录会话已失效，请重新扫码登录"
+            if status_ok and club_ok:
+                return checks, True, False, summary
+            if {status_code, club_code} & {-352, -412, 412}:
+                return checks, False, False, "只读复检仍触发 B 站风控/验证限制，请先在网页端完成验证后重试"
+            failed = next((item for item in checks if not item["ok"]), None)
+            return (
+                checks,
+                False,
+                False,
+                f"{failed['name']}未通过：{failed['detail']}" if failed else "只读复检未通过",
+            )
+
+    def probe_safety(self, *, auto=False, auto_resume=False):
+        """Run read-only live checks against the active safety hold and optionally recover."""
+        hold = self.safety_status()
+        if not hold.get("blocked"):
+            return {
+                "ok": True, "passed": True, "resumed": False,
+                "hold": hold, "summary": "当前没有保护暂停", "checks": [],
+            }
+        if hold.get("kind") == "credentials":
+            return {
+                "ok": False, "passed": False, "resumed": False, "hold": hold,
+                "summary": "凭证无法解密，请重新扫码登录",
+                "checks": [{"name": "凭证解密", "ok": False, "detail": "需要重新扫码登录"}],
+            }
+        try:
+            sessdata, bili_jct = self.credentials()
+        except ValueError as exc:
+            return {"ok": False, "passed": False, "resumed": False, "hold": hold, "summary": str(exc), "checks": []}
+
+        valid, msg, _profile = self.validate_credentials_profile(sessdata, bili_jct)
+        checks = [{"name": "账号会话", "ok": bool(valid), "detail": msg or ("登录有效" if valid else "会话验证失败")}]
+        if not valid:
+            if not str(msg).startswith("认证接口请求失败"):
+                safety.hold_account(
+                    sessdata, "auth", "登录已失效，请重新扫码登录",
+                    code=-101, operation=hold.get("operation"), raw_message=str(msg or ""), root=self.root,
+                )
+                return {
+                    "ok": False, "passed": False, "resumed": False,
+                    "hold": self.safety_status(), "summary": f"会话验证失败：{msg}", "checks": checks,
+                }
+            updated = safety.record_probe(
+                sessdata, checks, passed=False, summary=str(msg or "网络请求失败"), auto=auto, root=self.root
+            )
+            return {
+                "ok": True, "passed": False, "resumed": False,
+                "hold": updated, "summary": str(msg or "网络请求失败"), "checks": checks,
+            }
+
+        live_checks, all_passed, auth_failed, summary = self._probe_live_endpoints(sessdata, bili_jct, hold)
+        checks.extend(live_checks)
+        if auth_failed:
+            return {
+                "ok": False, "passed": False, "resumed": False,
+                "hold": self.safety_status(), "summary": summary, "checks": checks,
+            }
+
+        safety.record_probe(sessdata, checks, passed=all_passed, summary=summary, auto=auto, root=self.root)
+        resumed = False
+        if all_passed:
+            if auto and hold.get("kind") in safety.AUTO_PROBE_DELAYS and not hold.get("until"):
+                ok_resume, resume_msg = safety.auto_resume(sessdata, checks, summary=summary, root=self.root)
+                resumed = bool(ok_resume)
+                summary = resume_msg
+            elif auto_resume and not hold.get("until") and hold.get("kind") != "auth":
+                ok_resume, resume_msg = self.resume_safety(confirmed=True)
+                resumed = bool(ok_resume)
+                if ok_resume:
+                    summary = resume_msg
+
+        return {
+            "ok": True, "passed": all_passed, "resumed": resumed,
+            "hold": self.safety_status(), "summary": summary, "checks": checks,
+        }
 
     def add_members(self, additions):
         additions = [{key: member[key] for key in ("name", "uid", "room")} for member in additions]

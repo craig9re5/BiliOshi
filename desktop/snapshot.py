@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 import os
 import time
 from bilioshi.runtime import APP_VERSION, task_day
+from bilioshi.safety import describe_hold
 from bilioshi.services.watch_progress import CHECK_INTERVAL, parse_watch_task
 
 
@@ -12,9 +13,12 @@ def project_snapshot(engine, states, now):
     rows = []
     for member in engine.members:
         rows.append(project_row(engine, member, states[member["room"]], now))
+    safety_state = dict(getattr(engine, "safety", None) or {"blocked": False})
+    if safety_state.get("blocked"):
+        safety_state.update(describe_hold(safety_state, engine.members))
     return {
         "paused": engine.paused,
-        "safety": getattr(engine, "safety", {"blocked": False}),
+        "safety": safety_state,
         "checking": engine.probe is not None,
         "error": engine.error,
         "account": engine.account,

@@ -222,6 +222,18 @@ class AccountWebUiTests(unittest.TestCase):
         self.assertTrue(self.store.has_credentials("uid-1"))
         self.assertFalse(self.store.has_credentials("uid-2"))
 
+    def test_diagnostic_export_succeeds_without_active_engine_and_scrubs_secrets(self):
+        (self.host.root / "logs").mkdir(parents=True, exist_ok=True)
+        (self.host.root / "logs" / "desktop.log").write_text("host line SESSDATA=abc123456789\n", encoding="utf-8")
+        (self.store.account_root("uid-1") / "logs").mkdir(parents=True, exist_ok=True)
+        (self.store.account_root("uid-1") / "logs" / "probe.log").write_text("probe error\n", encoding="utf-8")
+
+        self.api._engine = None
+        result = self.api.export_diagnostic({"anonymize": True, "include_state": True})
+        self.assertTrue(result["ok"])
+        self.assertTrue(Path(result["zip_path"]).is_file())
+        self.assertTrue(any("desktop.log" in f for f in result["included_files"]))
+
 
 if __name__ == "__main__":
     unittest.main()

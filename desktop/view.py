@@ -37,6 +37,9 @@ class TrayUI:
         self.control_messages = {}
         self.last_snapshot = None
         self.closing = False
+        self.watch_notice_day = None
+        self.watch_notices = set()
+        self.safety_notices = {}
         self.ui_error = ""
         if os.name == "nt":
             import ctypes
@@ -192,8 +195,8 @@ class TrayUI:
                 returned = operation()
                 ok, result = returned if isinstance(returned, tuple) and len(returned) == 2 and isinstance(returned[0], bool) else (True, message.replace("正在", "已"))
             except Exception as exc:
-                logging.error("Desktop control failed action=%s error=%s", key, type(exc).__name__)
-                ok, result = False, f"操作失败（{type(exc).__name__}），可重试或查看活动记录。"
+                logging.exception("Desktop control failed action=%s", key)
+                ok, result = False, f"操作失败（{type(exc).__name__}），可重试或查看日志。"
             self.commands.put(("control_done", key, ok, result))
         if self.engine.dispatcher.submit_control(run) is None:
             self.commands.put(("control_done", key, False, "程序正在退出，操作未提交。"))
@@ -293,6 +296,7 @@ class TrayUI:
             self.workbench.render(snap)
             self._render_footer(snap)
             self._notify_watch_warnings(snap)
+            self._notify_safety_events(snap)
         except Exception:
             logging.exception("Desktop refresh failed")
             self.ui_error = "界面刷新失败，正在自动重试。"
@@ -411,6 +415,9 @@ class TrayUI:
             if cmd == "show":
                 self.show()
             elif cmd == "refresh":
+                self.watch_notice_day = None
+                self.watch_notices = set()
+                self.safety_notices = {}
                 self.ui_error = ""
             elif cmd in {"toggle", "pause", "resume"}:
                 paused = not self.engine.paused if cmd == "toggle" else cmd == "pause"
@@ -432,6 +439,8 @@ class TrayUI:
                 self.on_safety_resume()
 
     def on_safety_resume(self):
+        from bilioshi.safety import describe_hold
+
         hold = self.engine.application.safety_status()
         if not hold.get("blocked"):
             messagebox.showinfo("账号保护", "当前没有账号保护暂停。", parent=self.root)
@@ -439,18 +448,24 @@ class TrayUI:
         if hold.get("kind") in ("auth", "credentials"):
             self.open_settings(focus_auth=True, scan=True)
             return
+        details = describe_hold(hold, self.engine.members)
+        code_part = f"（错误码 {details['code']}）" if details.get("code") is not None else ""
+        lines = [f"{details['kind_label']}{code_part}：{hold['reason']}"]
+        where = " / ".join(x for x in (details.get("room_label"), details.get("operation_label")) if x)
+        if where:
+            lines.append(f"触发位置：{where}")
         if hold.get("until"):
             until = time.strftime("%H:%M:%S", time.localtime(hold["until"]))
-            messagebox.showinfo(
-                "账号冷却", f"{hold['reason']}\n最早恢复时间：{until}", parent=self.root
-            )
+            lines.append(f"最早自动恢复：{until}")
+            messagebox.showinfo("账号冷却", "\n".join(lines), parent=self.root)
             return
-        if not messagebox.askyesno(
-            "恢复账号操作",
-            hold["reason"]
-            + "\n\n请先在 B 站完成必要验证、处理限制或核对任务进度。确认已经处理后恢复？当天预算不会重置。",
-            parent=self.root,
-        ):
+        if hold.get("next_probe_at"):
+            probe_at = time.strftime("%H:%M:%S", time.localtime(hold["next_probe_at"]))
+            lines.append(f"下次自动复检：{probe_at}")
+        if details.get("steps"):
+            lines.append("\n排查建议：\n" + "\n".join(f"{i + 1}. {step}" for i, step in enumerate(details["steps"])))
+        lines.append("\n请先在 B 站完成必要验证、处理限制或核对任务进度。确认已经处理后恢复？当天预算不会重置。")
+        if not messagebox.askyesno("恢复账号操作", "\n".join(lines), parent=self.root):
             return
 
         self._submit_control("safety", lambda: self.engine.resume_safety(confirmed=True), "正在检查账号并解除保护暂停…")
@@ -635,3 +650,44 @@ class TrayUI:
             except Exception:
                 logging.exception("Watch reward notification failed")
             self.watch_notices.add(key)
+
+    def _notify_safety_events(self, snap):
+        safety = snap.get("safety") or {}
+        prev = getattr(self, "safety_notices", {}).get("active")
+        if not safety.get("blocked"):
+            if prev is not None:
+                self.safety_notices.pop("active", None)
+                if prev[0] not in ("auth", "credentials") and getattr(self, "tray", None):
+                    acct = snap.get("account") or ""
+                    prefix = f"【{acct}】" if acct else ""
+                    try:
+                        self.tray.notify(
+                            f"{prefix}账号保护状态已解除，挂机监控已恢复。",
+                            title="ビリ推し · 保护暂停已解除",
+                        )
+                    except Exception:
+                        logging.exception("Safety recovery notification failed")
+            return
+        kind = safety.get("kind") or "review"
+        if kind == "network":
+            return
+        key = (kind, safety.get("since"), safety.get("code"))
+        if prev == key:
+            return
+        self.safety_notices["active"] = key
+        if not getattr(self, "tray", None):
+            return
+        acct = snap.get("account") or ""
+        prefix = f"【{acct}】" if acct else ""
+        msg = f"{prefix}{safety.get('reason', '触发账号保护暂停')}"
+        if safety.get("next_probe_at"):
+            msg += f"（{time.strftime('%H:%M:%S', time.localtime(safety['next_probe_at']))} 自动复检）"
+        elif safety.get("until"):
+            msg += f"（{time.strftime('%H:%M:%S', time.localtime(safety['until']))} 恢复）"
+        try:
+            self.tray.notify(
+                msg,
+                title="ビリ推し · 风控保护暂停" if kind in ("review", "permission") else "ビリ推し · 账号异常提醒",
+            )
+        except Exception:
+            logging.exception("Safety notification failed")

@@ -11,6 +11,8 @@ $installedExe = Join-Path $installDir 'BiliOshi.exe'
 $sourceExe = (Resolve-Path -LiteralPath $ExePath).Path
 $env:BILIOSHI_APP_DATA = $dataDir
 New-Item -ItemType Directory -Path $installDir,$dataDir -Force | Out-Null
+$settingsFile = Join-Path $dataDir 'settings.json'
+$hadSettings = Test-Path -LiteralPath $settingsFile
 $account = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 & icacls.exe $dataDir /inheritance:r /grant:r "${account}:(OI)(CI)(F)" '*S-1-5-18:(OI)(CI)(F)' '*S-1-5-32-544:(OI)(CI)(F)' | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Cannot protect application data directory' }
@@ -28,8 +30,25 @@ if ((Test-Path -LiteralPath $installedExe) -and $running) {
 if (Test-Path -LiteralPath $installedExe) {
     $backupExe = Join-Path $installDir ('BiliOshi.previous-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.exe')
     Copy-Item -LiteralPath $installedExe -Destination $backupExe
+    Get-ChildItem -LiteralPath $installDir -Filter 'BiliOshi.previous-*.exe' -File |
+        Sort-Object -Property Name -Descending |
+        Select-Object -Skip 2 |
+        Remove-Item -Force -ErrorAction SilentlyContinue
 }
 Copy-Item -LiteralPath $sourceExe -Destination $installedExe -Force
+$sourceDir = Split-Path -Path $sourceExe -Parent
+$sourceBuildInfo = Join-Path $sourceDir 'build-info.json'
+if (Test-Path -LiteralPath $sourceBuildInfo -PathType Leaf) {
+    Copy-Item -LiteralPath $sourceBuildInfo -Destination (Join-Path $installDir 'build-info.json') -Force
+}
+$sourceLicenses = Join-Path $sourceDir 'third_party_licenses'
+if (Test-Path -LiteralPath $sourceLicenses -PathType Container) {
+    $destLicenses = Join-Path $installDir 'third_party_licenses'
+    if (Test-Path -LiteralPath $destLicenses) {
+        Remove-Item -LiteralPath $destLicenses -Recurse -Force
+    }
+    Copy-Item -LiteralPath $sourceLicenses -Destination $destLicenses -Recurse -Force
+}
 $obsoleteExtension = Join-Path $installDir 'browser-extension'
 if (Test-Path -LiteralPath $obsoleteExtension) {
     $resolvedExtension = (Resolve-Path -LiteralPath $obsoleteExtension).Path
@@ -47,10 +66,13 @@ if (Test-Path -LiteralPath $legacyCookie) {
 }
 $migration = Start-Process -FilePath $installedExe -ArgumentList $migrationArgs -WindowStyle Hidden -Wait -PassThru
 if ($migration.ExitCode -ne 0) { throw 'Protected credential migration failed' }
-$settingsFile = Join-Path $dataDir 'settings.json'
-$settings = Get-Content -LiteralPath $settingsFile -Raw | ConvertFrom-Json
-$settings.paused = -not [bool]$Activate
-$settings | ConvertTo-Json | Set-Content -LiteralPath $settingsFile -Encoding utf8
+$settings = Get-Content -LiteralPath $settingsFile -Raw -Encoding utf8 | ConvertFrom-Json
+$targetPaused = if (-not $hadSettings) { -not [bool]$Activate } elseif ($Activate -and ($settings.paused -eq $true)) { $false } else { $null }
+if ($null -ne $targetPaused -and $settings.paused -ne $targetPaused) {
+    $settings.paused = $targetPaused
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($settingsFile, (($settings | ConvertTo-Json -Depth 10) + [Environment]::NewLine), $utf8NoBom)
+}
 
 if ($Activate) {
     try {

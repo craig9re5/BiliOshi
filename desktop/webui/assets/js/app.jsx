@@ -4,7 +4,16 @@ const { useState, useEffect, useRef, useCallback } = React;
 const { Icon, Pulse, call, bridgeReady, toRoom } = window;
 const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false,
   notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false };
-const THEME_KEYS = ["white", "paper", "mist", "apricot"];
+const THEME_KEYS = ["system", "white", "paper", "mist", "apricot", "dark"];
+const applyDocumentTheme = (value) => {
+  const theme = THEME_KEYS.includes(value) ? value : "system";
+  document.documentElement.dataset.theme = theme;
+  const meta = document.querySelector('meta[name="color-scheme"]');
+  if (meta) {
+    meta.content = theme === "dark" ? "dark" : theme === "system" ? "light dark" : "light";
+  }
+  return theme;
+};
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
@@ -88,13 +97,23 @@ function App() {
   const [page, setPage] = useState("monitor");
   const [theme, setTheme] = useState(() => {
     const current = document.documentElement.dataset.theme;
-    return THEME_KEYS.includes(current) ? current : "white";
+    return THEME_KEYS.includes(current) ? current : "system";
   });
   const chooseTheme = useCallback((value) => {
     if (!THEME_KEYS.includes(value)) return;
-    setTheme(value);
-    document.documentElement.dataset.theme = value;
-    try { window.localStorage.setItem("bilioshi.theme", value); } catch {}
+    setTheme(applyDocumentTheme(value));
+    try {
+      if (value === "system") window.localStorage.removeItem("bilioshi.theme");
+      else window.localStorage.setItem("bilioshi.theme", value);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    const onStorage = (event) => {
+      if (event.key !== "bilioshi.theme") return;
+      setTheme(applyDocumentTheme(event.newValue || "system"));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
   const [collapsed, setCollapsed] = useState(() => {
     try { return window.localStorage.getItem("bilioshi.sidebar") === "collapsed"; } catch { return false; }
@@ -114,11 +133,19 @@ function App() {
   const [pendingSettings, setPendingSettings] = useState(new Set());
   const [dialog, setDialog] = useState(null);
   const [dialogBusy, setDialogBusy] = useState(false);
+  const [safetyProbe, setSafetyProbe] = useState({ loading: false, result: null });
   const [query, setQuery] = useState("");
   const [searchResult, setSearchResult] = useState(null);
   const [searching, setSearching] = useState(false);
   const [medals, setMedals] = useState({ data: [], loading: false, error: "" });
   const [medalSelection, setMedalSelection] = useState(new Set());
+  const [diagPreview, setDiagPreview] = useState(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const [diagAnonymize, setDiagAnonymize] = useState(true);
+  const [diagIncludeState, setDiagIncludeState] = useState(true);
+  const [diagExporting, setDiagExporting] = useState(false);
+  const [diagExported, setDiagExported] = useState(null);
+  const [diagStatus, setDiagStatus] = useState("");
   const [qr, setQr] = useState(null);
   const [menu, setMenu] = useState(null);
   const [images, setImages] = useState({});
@@ -205,13 +232,19 @@ function App() {
           if (["monitor", "growth", "automation", "account"].includes(payload.page)) setPage(payload.page);
         } else if (event.type === "add_member") handlers.current.openAdd?.();
         else if (event.type === "sync_medals") handlers.current.openMedals?.();
+        else if (event.type === "open_diagnostic") handlers.current.openDiagnostics?.();
         else if (event.type === "toast") toast(payload.message, payload.tone);
         else if (event.type === "settings_changed") handlers.current.refresh?.();
       }
     };
+    window.__reportClientError = (msg) => call("report_client_error", [[msg]]).catch(() => {});
     bridgeReady().then(async (ready) => {
       if (!alive.current) return;
       if (!ready) { toast("无法连接后台，重启应用后重试", "error"); return; }
+      if (Array.isArray(window.__errs) && window.__errs.length) {
+        const queued = window.__errs.splice(0, window.__errs.length);
+        call("report_client_error", [queued]).catch(() => {});
+      }
       try {
         await call("ready");
         receiveSnapshot(await call("snapshot"));
@@ -220,6 +253,7 @@ function App() {
     return () => {
       alive.current = false;
       if (window.LS?.onSnapshot === receiveSnapshot) delete window.LS;
+      delete window.__reportClientError;
       toastTimers.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, [receiveSnapshot, toast]);
@@ -439,6 +473,89 @@ function App() {
     }
   };
 
+  const loadDiagnosticPreview = async (anonymizeValue) => {
+    const generation = dialogGeneration.current;
+    setDiagLoading(true);
+    try {
+      const result = await call("diagnostic_preview", "", Boolean(anonymizeValue));
+      if (!alive.current || generation !== dialogGeneration.current) return;
+      if (result?.ok) setDiagPreview(result);
+      else setDiagStatus(result?.error || "无法预览诊断信息，仍可直接尝试导出。");
+    } catch {
+      if (alive.current && generation === dialogGeneration.current) {
+        setDiagStatus("无法读取诊断预览，仍可直接尝试导出。");
+      }
+    } finally {
+      if (alive.current && generation === dialogGeneration.current) setDiagLoading(false);
+    }
+  };
+
+  const openDiagnostics = () => {
+    dialogGeneration.current += 1;
+    setMenu(null);
+    setDiagExported(null);
+    setDiagStatus("");
+    setDialog("diagnostic");
+    loadDiagnosticPreview(diagAnonymize);
+  };
+
+  const changeDiagAnonymize = (checked) => {
+    setDiagAnonymize(checked);
+    setDiagExported(null);
+    setDiagStatus("");
+    loadDiagnosticPreview(checked);
+  };
+
+  const exportDiagnostic = async () => {
+    if (diagExporting) return;
+    setDiagExporting(true);
+    setDiagStatus("");
+    try {
+      const result = await invoke("export_diagnostic", [{
+        anonymize: diagAnonymize,
+        include_state: diagIncludeState,
+      }]);
+      if (!alive.current) return;
+      if (result?.ok) {
+        setDiagExported(result);
+        setDiagStatus("脱敏诊断包已生成，可打开文件夹或复制摘要反馈给开发者。");
+      } else {
+        setDiagStatus(result?.error || "导出诊断包失败，请查看日志目录。");
+      }
+    } finally {
+      if (alive.current) setDiagExporting(false);
+    }
+  };
+
+  const copyDiagnosticSummary = async () => {
+    const text = diagExported?.summary_markdown || diagPreview?.summary_markdown;
+    if (!text) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error("no clipboard");
+      }
+      setDiagStatus("已复制 Markdown 问题摘要，可直接粘贴到反馈中。");
+      toast("问题摘要已复制到剪贴板");
+    } catch {
+      try {
+        const box = document.createElement("textarea");
+        box.value = text;
+        box.style.position = "fixed";
+        box.style.opacity = "0";
+        document.body.appendChild(box);
+        box.select();
+        document.execCommand("copy");
+        document.body.removeChild(box);
+        setDiagStatus("已复制 Markdown 问题摘要，可直接粘贴到反馈中。");
+        toast("问题摘要已复制到剪贴板");
+      } catch {
+        setDiagStatus("剪贴板复制受限，请直接打开诊断包内的 summary.md。");
+      }
+    }
+  };
+
   const importMedals = async () => {
     if (dialogBusy) return;
     setDialogBusy(true);
@@ -447,6 +564,45 @@ function App() {
       if (result?.ok) { setDialog(null); toast(`已导入 ${result.count} 位主播`); await refresh(); }
     } finally { if (alive.current) setDialogBusy(false); }
   };
+
+  const openSafety = (targetAccount = null) => {
+    setSafetyProbe({ loading: false, result: null });
+    setDialog({
+      type: "safety",
+      account: targetAccount || accounts.find((item) => item.id === activeId) || null,
+    });
+  };
+
+  const checkSafety = async (autoResume = true) => {
+    setSafetyProbe((prev) => ({ ...prev, loading: true }));
+    try {
+      const result = await invoke("check_safety", [Boolean(autoResume)]);
+      if (!alive.current) return;
+      const probeResult = {
+        passed: Boolean(result?.passed),
+        summary: result?.summary || (result?.passed ? "只读自检通过" : "只读自检未通过"),
+        checks: Array.isArray(result?.checks) ? result.checks : [],
+        at: Date.now() / 1000,
+      };
+      setSafetyProbe({ loading: false, result: probeResult });
+      if (result?.resumed || (result?.ok && !result?.hold?.blocked)) {
+        setDialog(null);
+        toast(result?.summary || "只读自检通过，保护暂停已解除", "info");
+        await refresh();
+      } else if (result?.hold?.kind === "auth") {
+        toast(result?.summary || "登录凭证已失效，请重新扫码登录", "error");
+        await refresh();
+      } else if (result && result.passed === false) {
+        toast(result.summary || "只读自检未通过", "error");
+      }
+    } catch {
+      if (alive.current) {
+        setSafetyProbe((prev) => ({ ...prev, loading: false }));
+      }
+    }
+  };
+
+  const openSafetyLink = (kind, room) => invoke("open_safety_link", [kind || "live", room || null]);
 
   const switchAccount = async (accountId) => {
     if (!accountId) return;
@@ -462,7 +618,7 @@ function App() {
       return;
     }
     if (target.status === "blocked") {
-      setDialog({ type: "protection", account: target });
+      openSafety(target);
       return;
     }
     const result = await invoke("switch_account", [accountId]);
@@ -482,9 +638,8 @@ function App() {
       let result;
       if (kind === "remove") result = await invoke("remove_member", [dialog.room.room], `已移除 ${dialog.room.name}`);
       else if (kind === "logout") { closeQr(); result = await invoke("logout", [dialog.account?.id || ""], "已退出登录"); }
-      else if (kind === "safety") result = await invoke("resume_safety");
+      else if (kind === "safety") result = await invoke("resume_safety", [], "保护暂停已解除");
       else if (kind === "quit") result = await invoke("quit");
-      else if (kind === "protection") result = { ok: true };
       else if (kind === "switch") {
         result = await invoke("switch_account", [dialog.account.id]);
         if (result?.ok) { selectionInitialized.current = false; setSelectedId(null); }
@@ -509,15 +664,14 @@ function App() {
     else if (route.action === "switch") { setPage("monitor"); }
     else if (route.action === "safety") {
       if (snap.safety?.kind === "auth" || snap.safety?.kind === "credentials") openQr(activeId);
-      else if (snap.safety?.until > Date.now() / 1000) { setPage("account"); }
-      else setDialog({ type: "safety" });
+      else openSafety();
     } else if (route.action === "room") { setPage("monitor"); setSelectedId(route.room); }
     else if (route.action === "logs") invoke("open_logs", [activeId]);
     else if (route.action === "refresh") control("refresh");
     else control("check_now");
   };
 
-  handlers.current = { openQr, openAdd, openMedals, refresh };
+  handlers.current = { openQr, openAdd, openMedals, openDiagnostics, refresh };
 
   const select = (id) => { userSelected.current = id; setSelectedId(id); };
   const remove = (room) => { setMenu(null); setDialog({ type: "remove", room }); };
@@ -533,17 +687,22 @@ function App() {
     remove: { title: "移除主播？", desc: `将从关注列表中移除「${dialog?.room?.name || ""}」，后续可随时重新添加。`, confirmLabel: "移除主播", danger: true },
     batchRemove: { title: `批量移除 ${dialog?.rooms?.length || 0} 位主播？`, desc: "将从关注列表中移除所选主播，后续可随时重新添加。", confirmLabel: "确认批量移除", danger: true },
     logout: { title: "退出当前账号？", desc: "退出后将停止挂机并清除登录凭证，关注列表与记录仍会保留。", confirmLabel: "退出登录", danger: true },
-    safety: { title: "恢复账号操作？", desc: "请先在 B 站确认账号状态正常。恢复后将重新检查并继续运行。", confirmLabel: "确认并恢复" },
     quit: { title: "退出 ビリ推し？", desc: "将停止所有任务并退出程序。如需后台挂机，直接关闭窗口即可。", confirmLabel: "退出应用", danger: true },
     switch: { title: "切换挂机账号？", desc: "切换后将使用新账号开始挂机，当前任务进度会自动保存。", confirmLabel: "切换并挂机" },
     removeAccount: { title: "移除这个账号？", desc: "将从列表中移除此账号并清除凭证，关注列表与记录仍会保留。", confirmLabel: "移除账号", danger: true },
-    protection: { title: "账号保护暂停", desc: "检测到平台安全验证或限制，互动操作已暂停。请先在 B 站完成验证。", confirmLabel: "知道了" }
   };
 
-  const modalOpen = Boolean(qr || dialog);
+  const modalOpen = Boolean(qr || (dialog && dialog !== "diagnostic"));
   const modalAvatar = dialog?.account?.id
     ? (dialog.account.id === activeId ? (accountAvatar || accountAvatars[dialog.account.id]) : accountAvatars[dialog.account.id])
     : "";
+  const safetyAccount = dialog?.type === "safety"
+    ? (dialog.account || accounts.find((item) => item.id === activeId) || null)
+    : null;
+  const isSafetyActive = !safetyAccount || !activeId || safetyAccount.id === activeId;
+  const safetyHold = isSafetyActive
+    ? snap.safety
+    : (safetyAccount?.safety?.blocked ? safetyAccount.safety : { blocked: true, kind: "review", reason: "该账号处于保护暂停状态" });
 
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
@@ -583,14 +742,18 @@ function App() {
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
           pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme}
           scope={accounts.find((item) => item.id === activeId) || null} scopeAll={false}
-          onLogs={() => invoke("open_logs", [activeId])} />}
+          onLogs={() => invoke("open_logs", [activeId])}
+          onHostLogs={() => invoke("open_logs", [""])}
+          onDiagnostics={openDiagnostics}
+          version={snap.version} />}
         {page === "account" && <window.AccountPage accounts={accounts} activeId={activeId} viewId={activeId}
           account={account} avatar={accountAvatar} avatars={accountAvatars} onScan={openQr}
           onView={() => setPage("monitor")} onSwitch={switchAccount}
           onLogout={(id) => setDialog({ type: "logout", account: accounts.find((item) => item.id === id) })}
           onRemove={(id) => setDialog({ type: "removeAccount", account: accounts.find((item) => item.id === id) })}
-          onProtection={(id) => setDialog({ type: "protection", account: accounts.find((item) => item.id === id) })}
-          onResumeSafety={() => setDialog({ type: "safety" })}
+          onProtection={(id) => openSafety(accounts.find((item) => item.id === id))}
+          onResumeSafety={() => openSafety()}
+          onCheckSafety={checkSafety} safetyProbe={safetyProbe}
           onCheck={() => control("check_now")} busy={closing}
           version={snap.version} />}
         </div>
@@ -604,6 +767,20 @@ function App() {
         selected={medalSelection} onToggle={(uid) => setMedalSelection((current) => { const next = new Set(current);
           if (next.has(uid)) next.delete(uid); else next.add(uid); return next; })}
         onImport={importMedals} importing={dialogBusy} onClose={closeDialog} onRetry={openMedals} />}
+      {dialog === "diagnostic" && <window.DiagnosticModal
+        preview={diagPreview} loading={diagLoading}
+        anonymize={diagAnonymize} includeState={diagIncludeState}
+        onChangeAnonymize={changeDiagAnonymize}
+        onChangeIncludeState={(checked) => { setDiagIncludeState(checked); setDiagExported(null); }}
+        exporting={diagExporting} exported={diagExported} statusText={diagStatus}
+        onExport={exportDiagnostic} onCopySummary={copyDiagnosticSummary}
+        onOpenExports={() => invoke("open_exports")}
+        onClose={() => { if (!diagExporting) { dialogGeneration.current += 1; setDialog(null); } }} />}
+      {dialog?.type === "safety" && <window.SafetyModal
+        hold={safetyHold} account={safetyAccount} isActive={isSafetyActive}
+        probeState={safetyProbe} busy={dialogBusy}
+        onCheck={checkSafety} onResume={confirmAction}
+        onOpenLink={openSafetyLink} onScan={openQr} onClose={closeDialog} />}
       {dialog?.type && dialogCopy[dialog.type] && <window.ConfirmModal {...dialogCopy[dialog.type]}
         body={dialog.type === "switch" || dialog.type === "logout" || dialog.type === "removeAccount"
           ? <div className="account-preview">

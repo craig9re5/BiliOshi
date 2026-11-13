@@ -1,6 +1,7 @@
 """One HTTP/JSON boundary. Failures have explicit, credential-free metadata."""
 
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,6 +31,11 @@ class ApiError(RuntimeError):
         super().__init__(redact(message))
 
 
+def _safe_url(url):
+    parsed = urllib.parse.urlsplit(str(url))
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.netloc else str(url).split("?", 1)[0]
+
+
 def _once(url, headers=None, *, data=None, method=None, timeout=10):
     request = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
     try:
@@ -44,6 +50,23 @@ def _once(url, headers=None, *, data=None, method=None, timeout=10):
             raise ValueError("expected JSON object")
         return value
     except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read(256).decode("utf-8", errors="replace").strip() if hasattr(exc, "read") else ""
+        except Exception:
+            detail = ""
+        finally:
+            try:
+                exc.close()
+            except Exception:
+                pass
+        logging.warning(
+            "HTTP error url=%s status=%s reason=%s detail=%s",
+            _safe_url(url),
+            exc.code,
+            redact(str(getattr(exc, "reason", ""))),
+            redact(detail[:160]),
+        )
         value = {"code": exc.code, "message": f"HTTP {exc.code}", "error_kind": "http"}
         retry_after = exc.headers.get("Retry-After") if exc.headers else None
         if retry_after and retry_after.isdigit():
@@ -56,9 +79,21 @@ def _once(url, headers=None, *, data=None, method=None, timeout=10):
             except (TypeError, ValueError, OverflowError):
                 pass
         return value
-    except (OSError, urllib.error.URLError, TimeoutError):
+    except (OSError, urllib.error.URLError, TimeoutError) as exc:
+        logging.warning(
+            "HTTP request failed url=%s err=%s: %s",
+            _safe_url(url),
+            type(exc).__name__,
+            redact(str(exc)),
+        )
         return {"code": -1, "message": "网络请求失败", "error_kind": "network"}
-    except (ValueError, UnicodeError):
+    except (ValueError, UnicodeError) as exc:
+        logging.warning(
+            "HTTP response decode failed url=%s err=%s: %s",
+            _safe_url(url),
+            type(exc).__name__,
+            redact(str(exc)),
+        )
         return {"code": -1, "message": "服务端响应格式无效", "error_kind": "data"}
 
 
@@ -66,7 +101,16 @@ def get_json(url, headers, timeout=10):
     return request_json(url, headers, timeout=timeout)
 
 
-def request_json(url, headers=None, *, data=None, method=None, timeout=10, auth_probe=False):
+def request_json(
+    url,
+    headers=None,
+    *,
+    data=None,
+    method=None,
+    timeout=10,
+    auth_probe=False,
+    safety_probe=False,
+):
     """Retry reads only; never replay a write after an ambiguous outcome."""
     check_window()
     headers = headers or {}
@@ -89,7 +133,7 @@ def request_json(url, headers=None, *, data=None, method=None, timeout=10, auth_
     mutation = effective_method != "GET" and parsed.path not in safety.READ_POST_PATHS
     if sessdata:
         hold = safety.status(sessdata)
-        may_read = hold.get("kind") == "uncertain" and not mutation
+        may_read = (hold.get("kind") == "uncertain" or safety_probe) and not mutation
         if (
             hold["blocked"]
             and not may_read
@@ -109,7 +153,11 @@ def request_json(url, headers=None, *, data=None, method=None, timeout=10, auth_
                     }
                 )
     op = safety.operation(url, data, effective_method)
-    cache = read_cache() if parsed.path == "/x/web-interface/nav" and not auth_probe else None
+    cache = (
+        read_cache()
+        if parsed.path == "/x/web-interface/nav" and not auth_probe and not safety_probe
+        else None
+    )
     cache_key = (sessdata, url)
     if cache is not None and cache_key in cache:
         return cache[cache_key]
@@ -126,9 +174,9 @@ def request_json(url, headers=None, *, data=None, method=None, timeout=10, auth_
         wait(delays[attempt])
         if sessdata:
             hold = safety.status(sessdata)
-            if hold["blocked"] and hold.get("kind") != "uncertain":
+            if hold["blocked"] and hold.get("kind") != "uncertain" and not safety_probe:
                 return safety.blocked_response(hold)
-    if sessdata:
+    if sessdata and not safety_probe:
         safety.observe(sessdata, url, response, mutation=mutation, op=op)
     if isinstance(response.get("message"), str):
         response["message"] = redact(response["message"])

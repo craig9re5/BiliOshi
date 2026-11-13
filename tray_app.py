@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 from pathlib import Path
+import platform
 import sys
 
 from desktop.storage import data_dir, initialize, send_command
@@ -26,6 +27,8 @@ def main():
     parser.add_argument("--tk", action="store_true", help="使用兼容的 Tk 桌面界面")
     parser.add_argument("--login", action="store_true", help="打开 B 站扫码登录")
     parser.add_argument("--diagnostic", action="store_true")
+    parser.add_argument("--export-diagnostic", action="store_true", help="生成一键脱敏诊断包 (.zip)")
+    parser.add_argument("--no-anonymize", action="store_true", help="导出诊断包时保留原始账号/主播 ID（仅调试使用）")
     parser.add_argument("--web-diagnostic", type=Path, metavar="REPORT", help="用隔离数据验收 WebView2 窗口")
     parser.add_argument("--diagnostic-screenshot", type=Path, metavar="PNG")
     parser.add_argument("--protect-credentials", action="store_true")
@@ -37,14 +40,38 @@ def main():
         from desktop.webui.diagnostics import run
 
         return run(args.web_diagnostic, args.diagnostic_screenshot)
-    root = data_dir()
-    initialize(root, MEMBERS)
+    try:
+        root = data_dir()
+        initialize(root, MEMBERS)
+    except Exception as exc:
+        if not (args.command or args.worker or args.probe or args.supervisor):
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(
+                None, f"初始化数据目录失败（{type(exc).__name__}）：{exc}", "BiliOshi", 0x10
+            )
+        else:
+            sys.stderr.write(f"Failed to initialize data directory: {exc}\n")
+        return 1
     if args.protect_credentials:
         from bilioshi.runtime import protect_credentials, write_json
 
         write_json(
             root / "credential-migration.json", protect_credentials(root, args.legacy_credentials)
         )
+        return 0
+    if args.export_diagnostic:
+        import json as _json
+        from bilioshi.diagnostics_bundle import export_diagnostic_bundle
+
+        result = export_diagnostic_bundle(
+            root,
+            anonymize=not args.no_anonymize,
+            include_state=True,
+            ui_mode="cli",
+        )
+        print(_json.dumps({k: v for k, v in result.items() if k not in ("summary_markdown", "recent_errors")},
+                          ensure_ascii=False, indent=2))
         return 0
     if args.command:
         from desktop.windows import Mutex, instance_name
@@ -64,24 +91,41 @@ def main():
     role = "supervisor" if args.supervisor else "probe" if args.probe else "worker" if args.worker else "desktop"
     logging_setup.setup(root, role, args.worker, level=args.log_level)
     logging.info(
-        "Startup mode=%s root=%s cwd=%s credentials_present=%s",
+        "Startup version=%s os=%s python=%s frozen=%s tk_flag=%s mode=%s root=%s cwd=%s credentials_present=%s",
+        APP_VERSION,
+        platform.platform(),
+        platform.python_version(),
+        bool(getattr(sys, "frozen", False)),
+        bool(args.tk),
         role,
         root,
         os.getcwd(),
         (root / "credentials.json").exists(),
     )
     if args.supervisor:
-        from desktop.supervisor import run
+        try:
+            from desktop.supervisor import run
 
-        return run(root, start=args.start)
+            return run(root, start=args.start)
+        except Exception:
+            logging.exception("Supervisor failed")
+            return 1
     if args.probe:
-        from desktop.worker import probe
+        try:
+            from desktop.worker import probe
 
-        return probe(root, Path(args.probe))
+            return probe(root, Path(args.probe))
+        except Exception:
+            logging.exception("Probe failed")
+            return 1
     if args.worker:
-        from desktop.worker import watch
+        try:
+            from desktop.worker import watch
 
-        return watch(root, args.worker, args.skip_actions, watch_only=args.watch_only)
+            return watch(root, args.worker, args.skip_actions, watch_only=args.watch_only)
+        except Exception:
+            logging.exception("Worker failed room=%s", args.worker)
+            return 1
     if args.diagnostic:
         from desktop.ui import icon_image
         from desktop.storage import write_json, load_config

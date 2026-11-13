@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-src 'none'">
 <title>ビリ推し</title>
 <script src="js/theme.js"></script>
@@ -12,12 +13,20 @@
 <div id="root"></div>
 <script>
 window.__errs = [];
-window.addEventListener("error", function (event) {
-  window.__errs.push(String(event.message) + " @ " + String(event.filename || "").split("/").pop() + ":" + event.lineno);
+function __pushClientErr(text) {
+  var msg = String(text || "").slice(0, 500);
+  if (!msg) return;
+  window.__errs.push(msg);
   window.__errs = window.__errs.slice(-20);
+  if (typeof window.__reportClientError === "function") {
+    window.__reportClientError(msg);
+  }
+}
+window.addEventListener("error", function (event) {
+  __pushClientErr(String(event.message) + " @ " + String(event.filename || "").split("/").pop() + ":" + event.lineno);
 });
 window.addEventListener("unhandledrejection", function (event) {
-  window.__errs.push("rejection: " + String((event.reason && event.reason.message) || event.reason));
+  __pushClientErr("rejection: " + String((event.reason && event.reason.message) || event.reason));
 });
 </script>
 

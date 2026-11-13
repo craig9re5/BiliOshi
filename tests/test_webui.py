@@ -14,7 +14,7 @@ from desktop.avatars import file_token, save_account_profile
 from desktop.engine import Engine
 from desktop.storage import initialize, read_json, write_json, send_command
 from desktop.webui.api import Api
-from desktop.webui.window import WebHost
+from desktop.webui.window import ASSETS, WebHost, _initial_background_color
 
 
 class WebUiTests(unittest.TestCase):
@@ -185,6 +185,110 @@ class WebUiTests(unittest.TestCase):
         host._shutdown_thread.join(3)
         self.engine.close.assert_called_once()
         host._window.destroy.assert_called_once()
+
+    def test_diagnostic_bundle_and_client_error_endpoints(self):
+        with patch("desktop.webui.api.logging.warning") as warn:
+            res = self.api.report_client_error(["TypeError at app.js:12 SESSDATA=secret-1234567890"])
+        self.assertEqual(res, {"ok": True, "count": 1})
+        logged_text = str(warn.call_args.args)
+        self.assertNotIn("secret-1234567890", logged_text)
+        self.assertIn("[REDACTED]", logged_text)
+
+        preview = self.api.diagnostic_preview()
+        self.assertTrue(preview["ok"])
+        self.assertIn("summary_markdown", preview)
+
+        exported = self.api.export_diagnostic({"anonymize": True, "include_state": True})
+        self.assertTrue(exported["ok"])
+        self.assertTrue(Path(exported["zip_path"]).is_file())
+
+    def test_initial_background_color_follows_windows_theme(self):
+        with patch("desktop.webui.window.sys.platform", "linux"):
+            self.assertEqual(_initial_background_color(), "#fcfcfb")
+
+        fake_key = Mock()
+        fake_key.__enter__ = Mock(return_value=fake_key)
+        fake_key.__exit__ = Mock(return_value=False)
+        with patch("desktop.webui.window.sys.platform", "win32"), \
+             patch("winreg.OpenKey", return_value=fake_key), \
+             patch("winreg.QueryValueEx", return_value=(0, 4)):
+            self.assertEqual(_initial_background_color(), "#141716")
+        with patch("desktop.webui.window.sys.platform", "win32"), \
+             patch("winreg.OpenKey", return_value=fake_key), \
+             patch("winreg.QueryValueEx", return_value=(1, 4)):
+            self.assertEqual(_initial_background_color(), "#fcfcfb")
+
+    def test_dark_and_system_theme_assets(self):
+        html = (ASSETS / "index.html").read_text(encoding="utf-8")
+        css = (ASSETS / "style.css").read_text(encoding="utf-8")
+        theme_js = (ASSETS / "js/theme.js").read_text(encoding="utf-8")
+        self.assertIn('<meta name="color-scheme" content="light dark">', html)
+        self.assertIn("@media (prefers-color-scheme: dark)", css)
+        self.assertIn('html[data-theme="dark"]', css)
+        for key in ("system", "white", "paper", "mist", "apricot", "dark"):
+            self.assertIn(key, theme_js)
+
+    def test_safety_check_syncs_blocked_account_status_and_notifications(self):
+        from bilioshi.accounts import AccountStore
+        from bilioshi import safety
+        from bilioshi.runtime import save_login
+
+        store = AccountStore(self.root)
+        created, _ = store.upsert(uid=99, name="风控测试账号", status="blocked")
+        acc_root = store.account_root(created["id"])
+        initialize(acc_root, [{"room": 7, "uid": 9, "name": "测试主播"}])
+        save_login("synthetic-session-99", "synthetic-csrf-99", acc_root / "credentials.json")
+        safety.bind_account("synthetic-session-99", 99, root=acc_root)
+        safety.hold_account(
+            "synthetic-session-99",
+            "review",
+            "请先完成平台安全验证后恢复",
+            code=-352,
+            operation={"room": "7", "kind": "danmaku"},
+            root=acc_root,
+        )
+
+        engine = Engine(acc_root, job=Mock())
+        host = SimpleNamespace(
+            root=self.root,
+            store=store,
+            active_id=created["id"],
+            view_id=created["id"],
+            global_paused=False,
+            active_engine=lambda: engine,
+        )
+        api = Api(host, self.ui)
+        with patch.object(engine.application, "validate_credentials_profile", return_value=(True, "风控测试账号", {"uid": 99})), \
+             patch("bilioshi.http._once", return_value={"code": 0, "data": {}}):
+            result = api.check_safety(True)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["passed"])
+        self.assertTrue(result["resumed"])
+        self.assertEqual(store.get(created["id"])["status"], "ok")
+
+        with patch("desktop.webui.api.webbrowser.open", return_value=True) as open_url:
+            link_res = api.open_safety_link("security", None)
+        self.assertTrue(link_res["ok"])
+        open_url.assert_called_once_with("https://account.bilibili.com/account/home")
+
+        web_host = WebHost(self.engine)
+        web_host._notify = Mock(return_value=True)
+        web_host.emit = Mock()
+        blocked_snap = {
+            "active_account_id": created["id"],
+            "account": "风控测试账号",
+            "safety": {"blocked": True, "kind": "review", "code": -352, "since": 1000, "reason": "触发风控"},
+        }
+        web_host._notify_safety_events(blocked_snap)
+        web_host._notify_safety_events(blocked_snap)
+        self.assertEqual(web_host._notify.call_count, 1)
+        self.assertEqual(web_host.emit.call_count, 1)
+        self.assertEqual(web_host.emit.call_args.args[0], "toast")
+
+        recovered_snap = {"active_account_id": created["id"], "account": "风控测试账号", "safety": {"blocked": False}}
+        web_host._notify_safety_events(recovered_snap)
+        self.assertEqual(web_host._notify.call_count, 2)
+        self.assertEqual(web_host.emit.call_count, 2)
 
 
 if __name__ == "__main__":

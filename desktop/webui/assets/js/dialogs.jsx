@@ -175,4 +175,280 @@ const RoomMenu = ({ menu, room, onClose, onOpen, onAction, onRemove }) => {
   </div>;
 };
 
-Object.assign(window, { Modal, QrModal, AddMemberModal, MedalsModal, ConfirmModal, RoomMenu });
+const DiagnosticModal = ({
+  preview, loading, anonymize, includeState, onChangeAnonymize, onChangeIncludeState,
+  exporting, exported, statusText, onExport, onCopySummary, onOpenExports, onClose
+}) => {
+  const dialogRef = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return undefined;
+    if (!dialog.open) dialog.showModal();
+
+    const handleClose = () => {
+      dialog.returnValue = "";
+      closeRef.current();
+    };
+    dialog.addEventListener("close", handleClose);
+
+    // Fallback for engines without <dialog closedby="any"> light-dismiss support.
+    let cleanupOutside = null;
+    if (!("closedBy" in HTMLDialogElement.prototype)) {
+      const outside = (e) => {
+        const r = dialog.getBoundingClientRect();
+        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+      };
+      let pressedOutside = false;
+      const onDown = (e) => { pressedOutside = outside(e); };
+      const onUp = (e) => { if (pressedOutside && outside(e)) dialog.close(); };
+      dialog.addEventListener("pointerdown", onDown);
+      dialog.addEventListener("pointerup", onUp);
+      cleanupOutside = () => {
+        dialog.removeEventListener("pointerdown", onDown);
+        dialog.removeEventListener("pointerup", onUp);
+      };
+    }
+
+    return () => {
+      dialog.removeEventListener("close", handleClose);
+      cleanupOutside?.();
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+
+  const errors = exported?.recent_errors || preview?.recent_errors || [];
+  const env = preview?.environment || {};
+  const errCount = preview?.recent_error_count ?? errors.length;
+  const sizeKb = exported?.size_bytes ? `${Math.max(1, Math.round(exported.size_bytes / 1024))} KB` : "";
+
+  return (
+    <dialog ref={dialogRef} className="modal wide diag-dialog" closedby="any" aria-labelledby="diag-dialog-title">
+      <div className="diag-head">
+        <div>
+          <h3 id="diag-dialog-title">导出脱敏诊断包</h3>
+          <p className="diag-sub">汇总运行日志与环境信息用于问题排查。已严格剔除登录凭证、Cookie、Token 与本机用户名路径。</p>
+        </div>
+        {env.app_version && <span className="version-pill">v{env.app_version}</span>}
+      </div>
+
+      <div className="diag-summary-bar">
+        {loading ? (
+          <span>正在扫描最近日志…</span>
+        ) : errCount > 0 ? (
+          <span className="diag-warn"><Icon name="alert" size={13} />近期发现 {errCount} 条告警或错误记录</span>
+        ) : (
+          <span className="diag-ok"><Icon name="check" size={13} />近期错误日志无异常记录</span>
+        )}
+        {env.account_count > 0 && <span className="diag-meta">{env.account_count} 个账号 · {env.multi_account_mode}</span>}
+      </div>
+
+      {errors.length > 0 && (
+        <details className="diag-details" open={errCount > 0}>
+          <summary>最近错误节选（已脱敏，展示最新 {Math.min(errors.length, 20)} 条）</summary>
+          <pre className="diag-preview">{errors.slice(-12).join("\n")}</pre>
+        </details>
+      )}
+
+      <form className="diag-form" onSubmit={(event) => { event.preventDefault(); onExport(); }}>
+        <fieldset className="diag-fieldset">
+          <legend>脱敏与包含内容</legend>
+          <label className="diag-check" htmlFor="diag-anonymize">
+            <input type="checkbox" id="diag-anonymize" name="anonymize" autoFocus
+              checked={anonymize} disabled={exporting} onChange={(e) => onChangeAnonymize(e.target.checked)} />
+            <span>隐藏 UID、账号名、主播名与房间号（公开反馈推荐开启）</span>
+          </label>
+          <label className="diag-check" htmlFor="diag-include-state">
+            <input type="checkbox" id="diag-include-state" name="include_state"
+              checked={includeState} disabled={exporting} onChange={(e) => onChangeIncludeState(e.target.checked)} />
+            <span>包含非敏感运行设置、房间状态与最近活动记录尾部</span>
+          </label>
+        </fieldset>
+
+        <div className="diag-status-region" role="status" aria-live="polite">
+          {exported?.ok && (
+            <div className="diag-result">
+              <div className="diag-result-main">
+                <strong><Icon name="check" size={13} />已导出：{exported.filename}（{sizeKb}）</strong>
+                <span className="diag-path" title={exported.zip_path}>{exported.zip_path}</span>
+              </div>
+              <button type="button" className="btn sm" onClick={onOpenExports}>
+                <Icon name="folder" size={13} />打开所在文件夹
+              </button>
+            </div>
+          )}
+          {!exported?.ok && statusText && <div className="diag-feedback">{statusText}</div>}
+          {exported?.ok && statusText && <div className="diag-feedback ok">{statusText}</div>}
+        </div>
+
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={() => dialogRef.current?.close()} disabled={exporting}>关闭</button>
+          <button type="button" className="btn" onClick={onCopySummary}
+            disabled={loading || (!exported?.summary_markdown && !preview?.summary_markdown)}>
+            <Icon name="copy" size={13} />复制摘要
+          </button>
+          <button type="submit" className="btn primary" disabled={exporting}>
+            <Icon name="download" size={13} />{exporting ? "正在打包…" : exported ? "重新导出 (.zip)" : "导出诊断包 (.zip)"}
+          </button>
+        </div>
+      </form>
+    </dialog>
+  );
+};
+
+const SafetyModal = ({
+  hold,
+  account,
+  isActive = true,
+  probeState,
+  busy,
+  onCheck,
+  onResume,
+  onOpenLink,
+  onScan,
+  onClose,
+}) => {
+  const dialogRef = useModalDialog(onClose);
+  const info = hold || {};
+  const nowSec = Math.floor(Date.now() / 1000);
+  const cooldown = Boolean(info.blocked && info.until && info.until > nowSec);
+  const needsLogin = info.kind === "auth" || info.kind === "credentials";
+  const lastProbe = probeState?.result || info.last_probe || null;
+  const checking = Boolean(probeState?.loading);
+  const checks = Array.isArray(lastProbe?.checks) ? lastProbe.checks : [];
+  const steps = Array.isArray(info.steps) ? info.steps : [];
+  const roomId = info.operation?.room || "";
+  const locationParts = [info.room_label, info.operation_label].filter(Boolean);
+
+  return (
+    <dialog ref={dialogRef} className="modal wide safety-dialog" closedby="any" aria-labelledby="safety-dialog-title">
+      <div className="safety-modal-head">
+        <div className="safety-modal-title">
+          <Icon name="shield" size={16} />
+          <div>
+            <h3 id="safety-dialog-title">{info.kind_label || "账号保护暂停"}</h3>
+            <p className="safety-modal-sub">
+              {account?.name ? `${account.name} · ` : ""}
+              {info.since ? `触发于 ${absoluteTime(info.since)}` : "已暂停互动操作以保护账号"}
+            </p>
+          </div>
+        </div>
+        {info.code !== undefined && info.code !== null && (
+          <span className="version-pill">错误码 {info.code}</span>
+        )}
+      </div>
+
+      <div className="safety-reason-box">
+        <strong>{info.reason || "检测到平台安全验证或操作受限，已暂停自动化操作。"}</strong>
+        {info.raw_message && info.raw_message !== info.reason && (
+          <div className="safety-raw-msg">平台返回：{info.raw_message}</div>
+        )}
+      </div>
+
+      <div className="safety-meta-grid">
+        {locationParts.length > 0 && (
+          <div className="safety-meta-item">
+            <span>触发位置</span>
+            <strong>{locationParts.join(" · ")}</strong>
+          </div>
+        )}
+        {cooldown && (
+          <div className="safety-meta-item">
+            <span>自动恢复时间</span>
+            <strong>{absoluteTime(info.until)}</strong>
+          </div>
+        )}
+        {!cooldown && info.next_probe_at && (
+          <div className="safety-meta-item">
+            <span>下次自动复检</span>
+            <strong>
+              {absoluteTime(info.next_probe_at)}
+              {typeof info.auto_recover_remaining === "number" && `（今日自动恢复剩余 ${info.auto_recover_remaining} 次）`}
+            </strong>
+          </div>
+        )}
+        {!cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && (
+          <div className="safety-meta-item">
+            <span>自动复检状态</span>
+            <strong>已达本轮自动复检或今日恢复上限，请人工确认后恢复</strong>
+          </div>
+        )}
+      </div>
+
+      {steps.length > 0 && (
+        <div className="safety-steps">
+          <div className="safety-section-label">排查与处理步骤</div>
+          <ol>
+            {steps.map((step, index) => <li key={index}>{step}</li>)}
+          </ol>
+        </div>
+      )}
+
+      {lastProbe && (
+        <div className={`safety-probe-box ${lastProbe.passed ? "ok" : "fail"}`} role="status" aria-live="polite">
+          <div className="safety-probe-summary">
+            <Icon name={lastProbe.passed ? "check" : "alert"} size={13} />
+            <span>{lastProbe.summary || (lastProbe.passed ? "只读自检通过" : "只读自检未通过")}</span>
+            {lastProbe.at && <small>{absoluteTime(lastProbe.at)}</small>}
+          </div>
+          {checks.length > 0 && (
+            <ul className="safety-probe-checks">
+              {checks.map((item, idx) => (
+                <li key={idx} className={item.ok ? "ok" : "fail"}>
+                  <Icon name={item.ok ? "check" : "alert"} size={12} />
+                  <strong>{item.name}</strong>
+                  <span>{item.detail}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="safety-links-row">
+        {roomId && (
+          <button type="button" className="btn sm" onClick={() => onOpenLink("live", roomId)} disabled={busy || checking}>
+            打开对应直播间
+          </button>
+        )}
+        <button type="button" className="btn sm" onClick={() => onOpenLink("live", null)} disabled={busy || checking}>
+          打开 B 站直播首页
+        </button>
+        <button type="button" className="btn sm" onClick={() => onOpenLink("security", null)} disabled={busy || checking}>
+          账号安全中心
+        </button>
+      </div>
+
+      <div className="modal-actions">
+        <button type="button" className="btn" onClick={() => dialogRef.current?.close()} disabled={busy || checking}>
+          关闭
+        </button>
+        {isActive && needsLogin && (
+          <button type="button" className="btn primary" onClick={() => { dialogRef.current?.close(); onScan(account?.id || ""); }} disabled={busy}>
+            重新扫码登录
+          </button>
+        )}
+        {isActive && !needsLogin && !cooldown && (
+          <>
+            <button type="button" className="btn" onClick={onResume} disabled={busy || checking}>
+              {busy ? "处理中…" : "确认已处理并恢复"}
+            </button>
+            <button type="button" className="btn primary" onClick={() => onCheck(true)} disabled={busy || checking}>
+              <Icon name="refresh" size={13} />
+              {checking ? "检测中…" : "检测并自动恢复"}
+            </button>
+          </>
+        )}
+        {!isActive && (
+          <button type="button" className="btn primary" onClick={() => dialogRef.current?.close()}>
+            知道了
+          </button>
+        )}
+      </div>
+    </dialog>
+  );
+};
+
+Object.assign(window, { Modal, QrModal, AddMemberModal, MedalsModal, ConfirmModal, RoomMenu, DiagnosticModal, SafetyModal });

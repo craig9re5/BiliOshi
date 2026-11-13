@@ -5,6 +5,7 @@ from .http import get_json, post_form, post_empty, request_json, require_data
 import argparse
 import hashlib
 import json
+import logging
 import os
 import random
 import re
@@ -36,6 +37,7 @@ from .runtime import (
 )
 from .context import CURRENT, runtime_path
 from .http import get_json, post_form, post_empty, request_json
+from .redaction import redact
 from .session_headers import session_headers
 
 _DISCORD_TARGET = os.environ.get("ASOUL_DISCORD_TARGET")
@@ -161,6 +163,12 @@ def get_fans_club_task_info(room_id: int, anchor_uid: int, sessdata: str, bili_j
     resp = _get_json(url, headers)
     if resp and resp.get("code") == 0 and isinstance(resp.get("data"), dict):
         return resp["data"]
+    logging.warning(
+        "get_fans_club_task_info failed room=%s code=%s msg=%s",
+        room_id,
+        (resp or {}).get("code"),
+        redact(str((resp or {}).get("message", "")))[:120],
+    )
     return {}
 
 
@@ -293,6 +301,12 @@ def _get_room_info(room_id: int, sessdata: str, bili_jct: str) -> Optional[Dict]
             "area_id": data.get("area_id", 0),
             "parent_area_id": data.get("parent_area_id", 0),
         }
+    logging.warning(
+        "_get_room_info failed room=%s code=%s msg=%s",
+        room_id,
+        (resp or {}).get("code"),
+        redact(str((resp or {}).get("message", "")))[:120],
+    )
     return None
 
 
@@ -306,7 +320,15 @@ def enter_room(room_id: int, sessdata: str, bili_jct: str) -> bool:
     headers = _make_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room_id}")
     data = {"room_id": str(room_id), "platform": "pc", "csrf": bili_jct, "csrf_token": bili_jct}
     resp = _post_form(url, data, headers)
-    return resp is not None and resp.get("code") == 0
+    if resp is not None and resp.get("code") == 0:
+        return True
+    logging.warning(
+        "enter_room failed room=%s code=%s msg=%s",
+        room_id,
+        (resp or {}).get("code"),
+        redact(str((resp or {}).get("message", "")))[:120],
+    )
+    return False
 
 
 _X25KN_E_URL = "https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/E"

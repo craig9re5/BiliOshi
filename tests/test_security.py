@@ -528,3 +528,99 @@ class VaultTests(unittest.TestCase):
             with patch.object(heartbeat, "_post_form", return_value={"code": 0}) as post:
                 heartbeat._x25kn_post(URL, {"ua": "old"}, SESSION, CSRF, URL)
             self.assertEqual(post.call_args.args[1]["ua"], "QR UA")
+
+
+class SafetyAutoRecoveryTests(unittest.TestCase):
+    def test_describe_hold_exposes_context_and_redacts_secrets(self):
+        with tempfile.TemporaryDirectory() as folder, use_context(RuntimeContext(Path(folder))):
+            root = Path(folder)
+            register_secrets({"SESSDATA": SESSION, "bili_jct": CSRF})
+            save_login(SESSION, CSRF, root / "credentials.json")
+            safety.bind_account(SESSION, 123)
+            hold = safety.hold_account(
+                SESSION,
+                "review",
+                "请先完成平台安全验证后恢复",
+                code=-352,
+                operation={"room": "1", "kind": "danmaku"},
+                raw_message=f"风控拦截 SESSDATA={SESSION}",
+                root=root,
+            )
+            info = safety.describe_hold(hold, [{"name": "测试主播", "uid": 999, "room": 1}])
+            self.assertEqual(info["kind_label"], "安全验证 / 风控拦截")
+            self.assertEqual(info["room_label"], "「测试主播」（房间 1）")
+            self.assertEqual(info["operation_label"], "发送弹幕")
+            self.assertEqual(hold["code"], -352)
+            self.assertNotIn(SESSION, hold["raw_message"])
+            self.assertIn("[REDACTED]", hold["raw_message"])
+            self.assertGreaterEqual(len(info["steps"]), 2)
+
+    def test_probe_safety_bypasses_hold_for_readonly_checks_and_auto_recovers(self):
+        from bilioshi.application import AppContext
+        from desktop.storage import initialize
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            initialize(root, [{"room": 1, "uid": 1001, "name": "主播A"}])
+            save_login(SESSION, CSRF, root / "credentials.json")
+            safety.bind_account(SESSION, 123, root=root)
+            safety.hold_account(
+                SESSION,
+                "review",
+                "请先完成平台安全验证后恢复",
+                code=-352,
+                operation={"room": "1", "kind": "danmaku"},
+                root=root,
+            )
+            app = AppContext(root)
+
+            def fail_once(*args, **kwargs):
+                return {"code": -352, "message": "风控校验失败"}
+
+            with patch.object(app, "validate_credentials_profile", return_value=(True, "测试账号", {"uid": 123})), \
+                 patch.object(http, "_once", side_effect=[{"code": -352, "message": "风控校验失败"}, {"code": 0}]):
+                first = app.probe_safety(auto=True)
+            self.assertFalse(first["passed"])
+            self.assertFalse(first["resumed"])
+            self.assertEqual(first["hold"]["auto_attempts"], 1)
+            self.assertIsNotNone(first["hold"]["next_probe_at"])
+
+            with patch.object(app, "validate_credentials_profile", return_value=(True, "测试账号", {"uid": 123})), \
+                 patch.object(http, "_once", return_value={"code": 0, "data": {}}):
+                second = app.probe_safety(auto=True)
+            self.assertTrue(second["passed"])
+            self.assertTrue(second["resumed"])
+            self.assertFalse(second["hold"]["blocked"])
+            self.assertFalse(safety.status(SESSION, root)["blocked"])
+
+    def test_uncertain_auto_recovery_via_engine_tick(self):
+        from desktop.storage import initialize
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            initialize(root, [{"room": 1, "uid": 1001, "name": "主播A"}])
+            save_login(SESSION, CSRF, root / "credentials.json")
+            safety.bind_account(SESSION, 123, root=root)
+            safety.hold_account(
+                SESSION,
+                "uncertain",
+                "操作结果未知，已停止重复发送；请核对服务端进度",
+                code=-1,
+                operation={"room": "1", "kind": "like"},
+                root=root,
+            )
+            # Backdate hold past 20s grace and trigger immediate next_probe_at.
+            path = root / "state/safety/uid-123.json"
+            raw = read_json(path, {})
+            raw["hold"]["since"] = time.time() - 180
+            raw["hold"]["next_probe_at"] = time.time() - 5
+            write_json(path, raw)
+
+            engine = Engine(root, job=Mock())
+            with patch.object(engine.application, "validate_credentials_profile", return_value=(True, "测试账号", {"uid": 123})), \
+                 patch.object(http, "_once", return_value={"code": 0, "data": {}}), \
+                 patch.object(engine, "_watch_workers") as watch:
+                engine.tick()
+            watch.assert_called_once()
+            self.assertFalse(engine.safety["blocked"])
+            self.assertEqual(engine.error, "")

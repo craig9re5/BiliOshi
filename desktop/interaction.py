@@ -52,7 +52,7 @@ def recovery_route(snap):
     """Every advertised failure has a visible next step; no guessed risk reason."""
     hold = snap.get("safety", {})
     if snap.get("ui_error"):
-        return {"action": "refresh", "label": "重试界面", "message": snap["ui_error"] + "；也可查看活动记录。"}
+        return {"action": "refresh", "label": "重试界面", "message": snap["ui_error"] + "；也可查看日志。"}
     if snap.get("inactive"):
         return {
             "action": "switch",
@@ -65,13 +65,17 @@ def recovery_route(snap):
         if hold.get("until"):
             until = time.strftime("%H:%M:%S", time.localtime(hold["until"]))
             return {"action": "safety", "label": "查看冷却说明", "message": f"{hold.get('reason', '账号冷却中')}；{until} 后自动恢复。"}
-        return {"action": "safety", "label": "解除异常暂停", "message": hold.get("reason", "请先在 B 站处理账号异常，再恢复。")}
+        msg = hold.get("reason", "请先在 B 站处理账号异常，再恢复。")
+        if hold.get("next_probe_at"):
+            probe_at = time.strftime("%H:%M:%S", time.localtime(hold["next_probe_at"]))
+            msg = f"{msg} 下次自动复检 {probe_at}。"
+        return {"action": "safety", "label": "解除异常暂停", "message": msg}
     if snap.get("paused"):
         return {"action": "resume", "label": "恢复挂机", "message": "挂机已暂停，点击“恢复挂机”继续。"}
     if snap.get("engine_busy"):
         return {"action": "logs", "label": "查看日志", "message": "后台操作执行中，界面可继续浏览；状态暂未刷新。"}
     if snap.get("error"):
-        return {"action": "check", "label": "重试检查", "message": snap["error"] + "；可重试检查或查看活动记录。"}
+        return {"action": "check", "label": "重试检查", "message": snap["error"] + "；可重试检查或查看日志。"}
     if not snap.get("account_confirmed", bool(snap.get("account"))):
         if snap.get("account"):
             return {"action": "check", "label": "验证登录状态", "message": "登录状态待验证，请立即检查；登录失效可在账号管理扫码。"}

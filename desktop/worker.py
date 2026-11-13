@@ -95,7 +95,10 @@ class RoomStateRecorder:
             self.save()
             return
         if code:
-            self.state.update(phase="运行失败", error="本轮挂机未成功完成，请查看日志")
+            self.state.update(
+                phase="运行失败",
+                error=self.state.get("error") or "本轮挂机未成功完成，请查看日志",
+            )
         else:
             self.state["phase"] = "本轮结束" if self.state["beats"] else "本轮结束（暂无成功心跳）"
         self.save()
@@ -117,7 +120,9 @@ def watch(root, room, skip_actions=False, *, watch_only=False):
         code = AppContext(root, observer=recorder).run_watch(member, config)
         return code
     except Exception as exc:
-        recorder.state.update(phase="运行失败", error=type(exc).__name__)
+        logging.exception("Watch worker failed room=%s", room)
+        detail = f"{type(exc).__name__}: {exc}".strip()
+        recorder.state.update(phase="运行失败", error=detail[:180])
         return 1
     finally:
         recorder.finish(code)

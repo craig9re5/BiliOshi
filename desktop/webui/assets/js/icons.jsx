@@ -129,7 +129,19 @@ const Icon = ({ name, size = 15, stroke = 1.6, className = "" }) => {
       </>
     ),
     more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
-    medal: <><circle cx="12" cy="9" r="5.5" /><path d="M8 13.5 6.5 21l5.5-3 5.5 3-1.5-7.5" /></>
+    medal: <><circle cx="12" cy="9" r="5.5" /><path d="M8 13.5 6.5 21l5.5-3 5.5 3-1.5-7.5" /></>,
+    download: (
+      <>
+        <path d="M12 4.5v10.5M7.8 11.2 12 15.4l4.2-4.2" />
+        <path d="M4.5 16.8v1.6c0 .9.7 1.6 1.6 1.6h11.8c.9 0 1.6-.7 1.6-1.6v-1.6" />
+      </>
+    ),
+    copy: (
+      <>
+        <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+        <path d="M5.5 15.5H5a1.5 1.5 0 0 1-1.5-1.5V5A1.5 1.5 0 0 1 5 3.5h9a1.5 1.5 0 0 1 1.5 1.5v.5" />
+      </>
+    )
   };
   return <svg {...common}>{paths[name] || paths.info}</svg>;
 };

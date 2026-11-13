@@ -88,18 +88,40 @@ const Choice = ({ value, options, onChange, label, disabled }) => {
 };
 
 const THEME_CHOICES = [
+  { key: "system", name: "跟随系统", hint: "随系统深浅外观切换" },
   { key: "white", name: "纸白", hint: "中性纸面" },
   { key: "paper", name: "暖纸白", hint: "温和纸感" },
   { key: "mist", name: "雾青灰", hint: "清爽青灰" },
-  { key: "apricot", name: "暖杏灰", hint: "温暖柔和" }
+  { key: "apricot", name: "暖杏灰", hint: "温暖柔和" },
+  { key: "dark", name: "墨青暗", hint: "夜间深色" }
 ];
 
-const ThemeOptions = ({ value, onChange }) => (
+const useSystemDark = () => {
+  const [dark, setDark] = useState(() =>
+    typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (event) => setDark(Boolean(event.matches));
+    setDark(Boolean(media.matches));
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    }
+    media.addListener(onChange);
+    return () => media.removeListener(onChange);
+  }, []);
+  return dark;
+};
+
+const ThemeOptions = ({ value, onChange, systemDark }) => (
   <div className="theme-options" role="group" aria-label="界面主题">
     {THEME_CHOICES.map((theme) => {
       const active = theme.key === value;
+      const hint = theme.key === "system" ? `当前${systemDark ? "深色" : "浅色"}` : theme.hint;
       return <button type="button" key={theme.key} className="theme-option" data-theme={theme.key}
-        aria-pressed={active} title={`${theme.name} · ${theme.hint}`}
+        aria-pressed={active} title={`${theme.name} · ${hint}`}
         onClick={() => onChange(theme.key)}>
         <span className={`theme-chip ${theme.key}`} aria-hidden="true" />
         <span className="theme-name">{theme.name}</span>
@@ -109,7 +131,11 @@ const ThemeOptions = ({ value, onChange }) => (
   </div>
 );
 
-const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", onTheme, onLogs }) => {
+const SettingsPage = ({
+  settings, onSetting, pendingSettings, theme = "system", onTheme,
+  scope, onLogs, onHostLogs, onDiagnostics, version
+}) => {
+  const systemDark = useSystemDark();
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   return (<>
@@ -144,16 +170,37 @@ const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", o
             options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
             onChange={(value) => onSetting("run_mode", value)} />
         </SettingRow>
-        <SettingRow name="运行日志" desc="打开日志文件所在目录，便于排障">
-          <button type="button" className="btn sm" onClick={onLogs}>
-            <Icon name="folder" size={13} />查看日志
+      </section>
+      <section className="group card">
+        <header className="group-head">日志与诊断反馈</header>
+        <SettingRow name="运行日志" desc={scope ? "可分别查看当前账号挂机日志或主程序全局日志" : "打开日志文件所在目录，便于排障"}>
+          <div className="btn-row">
+            <button type="button" className="btn sm" onClick={onLogs}>
+              <Icon name="folder" size={13} />{scope ? "账号日志" : "查看日志"}
+            </button>
+            {scope && onHostLogs && (
+              <button type="button" className="btn sm" onClick={onHostLogs}>
+                <Icon name="folder" size={13} />主程序日志
+              </button>
+            )}
+          </div>
+        </SettingRow>
+        <SettingRow name="一键导出诊断包" desc="打包日志、近期报错与环境摘要，自动移除凭证并默认匿名化身份">
+          <button type="button" className="btn sm primary" onClick={onDiagnostics}>
+            <Icon name="download" size={13} />导出诊断包
           </button>
         </SettingRow>
+        {version && (
+          <SettingRow name="版本信息" desc="提交问题反馈时建议附带版本号与脱敏诊断包">
+            <span className="version-pill">v{version}</span>
+          </SettingRow>
+        )}
       </section>
       <section className="group card">
         <header className="group-head">外观</header>
-        <SettingRow name="界面主题" desc="自定义应用配色风格">
-          <ThemeOptions value={theme} onChange={onTheme} />
+        <SettingRow name="界面主题"
+          desc={theme === "system" ? `跟随系统，当前为${systemDark ? "深色" : "浅色"}外观` : "自定义应用配色风格"}>
+          <ThemeOptions value={theme} onChange={onTheme} systemDark={systemDark} />
         </SettingRow>
       </section>
     </div></div>
@@ -163,7 +210,7 @@ const SettingsPage = ({ settings, onSetting, pendingSettings, theme = "white", o
 const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogout, onRemove, onProtection, busy }) => {
   const state = window.accountStateLabel(account);
   const needsLogin = !account.signed_in || account.status === "needs_login";
-  const protection = account.status === "blocked";
+  const protection = account.status === "blocked" || Boolean(account.safety?.blocked);
   const issueText = protection
     ? (account.safety?.reason || "账号操作已暂停，需在平台处理")
     : needsLogin
@@ -216,12 +263,12 @@ const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogo
 };
 
 const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, onScan, onView, onSwitch,
-  onLogout, onRemove, onProtection, onResumeSafety, onCheck, busy, version }) => {
+  onLogout, onRemove, onProtection, onResumeSafety, onCheckSafety, safetyProbe, onCheck, busy, version }) => {
   const hold = account.safety || {};
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
-  const action = !account.signed_in || needsLogin ? onScan : cooldown ? null : hold.blocked ? onResumeSafety : onCheck;
-  const actionLabel = !account.signed_in || needsLogin ? "扫码登录" : cooldown ? "等待自动恢复" : hold.blocked ? "确认并恢复" : "立即检查";
+  const checkingSafety = Boolean(safetyProbe?.loading);
+  const locationParts = [hold.room_label, hold.operation_label].filter(Boolean);
   return (<>
     <div className="settings" data-screen-label="账号"><div className="settings-inner">
       <section className="group card">
@@ -247,19 +294,51 @@ const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, onScan
           <div className="safety-info">
             <div className="safety-status">
               <i className={`status-dot ${hold.blocked ? "warn" : "ok"}`} />
-              <strong>{hold.blocked ? "保护暂停中" : "状态正常"}</strong>
+              <strong>
+                {hold.blocked ? (hold.kind_label || "保护暂停中") : "状态正常"}
+                {hold.blocked && hold.code !== undefined && hold.code !== null && `（错误码 ${hold.code}）`}
+              </strong>
               {hold.blocked && hold.reason && <span className="safety-reason">{hold.reason}</span>}
             </div>
-            {cooldown && <small className="safety-time">最早恢复时间：{absoluteTime(hold.until)}</small>}
+            {hold.blocked && locationParts.length > 0 && (
+              <small className="safety-time">触发位置：{locationParts.join(" · ")}</small>
+            )}
+            {cooldown && <small className="safety-time">最早自动恢复：{absoluteTime(hold.until)}</small>}
+            {!cooldown && hold.blocked && hold.next_probe_at && (
+              <small className="safety-time">下次自动复检：{absoluteTime(hold.next_probe_at)}</small>
+            )}
           </div>
-          {action && (
-            <button type="button" className="btn sm" onClick={() => action()} disabled={busy}>
-              <Icon name={needsLogin ? "qr" : hold.blocked ? "shield" : "refresh"} size={13} />
-              <span>{actionLabel}</span>
-            </button>
-          )}
+          <div className="safety-actions">
+            {(!account.signed_in || needsLogin) && (
+              <button type="button" className="btn sm primary" onClick={() => onScan()} disabled={busy}>
+                <Icon name="qr" size={13} />
+                <span>扫码登录</span>
+              </button>
+            )}
+            {account.signed_in && !needsLogin && hold.blocked && (
+              <>
+                <button type="button" className="btn sm" onClick={() => onResumeSafety()} disabled={busy || checkingSafety}>
+                  <Icon name="shield" size={13} />
+                  <span>查看详情与排查</span>
+                </button>
+                {!cooldown && onCheckSafety && (
+                  <button type="button" className="btn sm primary" onClick={() => onCheckSafety(true)} disabled={busy || checkingSafety}>
+                    <Icon name="refresh" size={13} />
+                    <span>{checkingSafety ? "检测中…" : "检测并恢复"}</span>
+                  </button>
+                )}
+              </>
+            )}
+            {account.signed_in && !needsLogin && !hold.blocked && (
+              <button type="button" className="btn sm" onClick={() => onCheck()} disabled={busy}>
+                <Icon name="refresh" size={13} />
+                <span>立即检查</span>
+              </button>
+            )}
+          </div>
         </div>
       </section>
+      {version && <div className="page-foot-version">ビリ推し v{version}</div>}
     </div></div>
   </>);
 };

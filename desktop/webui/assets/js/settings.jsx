@@ -215,7 +215,7 @@ const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogo
   );
 };
 
-const AccountPage = ({ accounts, activeId, account, avatar, onScan, onView, onSwitch,
+const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, onScan, onView, onSwitch,
   onLogout, onRemove, onProtection, onResumeSafety, onCheck, busy, version }) => {
   const hold = account.safety || {};
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
@@ -233,10 +233,10 @@ const AccountPage = ({ accounts, activeId, account, avatar, onScan, onView, onSw
         </header>
         {accounts.length ? accounts.map((item) => <AccountRow key={item.id} account={item}
           isActive={item.id === activeId}
-          image={item.id === activeId ? avatar : undefined}
+          image={item.id === activeId ? (avatar || avatars[item.id]) : avatars[item.id]}
           onView={onView} onSwitch={onSwitch} onScan={onScan} onLogout={onLogout} onRemove={onRemove} onProtection={onProtection}
           busy={busy} />)
-          : <div className="empty list-empty"><Icon name="user" size={28} />
+          : <div className="empty list-empty"><Icon name="user" size={24} />
             <strong>尚未添加 B 站账号</strong>
             <button type="button" className="btn primary sm" onClick={() => onScan("")}>
               <Icon name="qr" size={12} />扫码添加账号</button></div>}

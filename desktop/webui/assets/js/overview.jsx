@@ -15,7 +15,7 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, che
     onDoubleClick={() => !managing && window.call("open_room", room.room).catch(() => {})}
     onContextMenu={(event) => !managing && onContextMenu(event, room.room)}>
     {managing && <span className={`room-check ${checked ? "checked" : ""}`} aria-hidden="true">
-      <Icon name={checked ? "check" : "circle"} size={11} />
+      {checked && <Icon name="check" size={11} />}
     </span>}
     <Avatar room={room} image={image} />
     <span className="room-main">
@@ -225,7 +225,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
           <header className="list-head managing-head">
             <button type="button" className="batch-all-btn" onClick={toggleAll} aria-label="全选">
               <span className={`room-check ${allChecked ? "checked" : ""}`} aria-hidden="true">
-                <Icon name={allChecked ? "check" : "circle"} size={11} />
+                {allChecked && <Icon name="check" size={11} />}
               </span>
               <span>全选 ({selectedBatch.size}/{rooms.length})</span>
             </button>
@@ -245,7 +245,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
             managing={managing} checked={selectedBatch.has(room.room)} onToggleCheck={toggleCheck} />)
             : <div className="empty list-empty"><Icon name="monitor" size={24} /><strong>还没有关注主播</strong>
               <span>添加主播或同步粉丝牌后即可自动挂机</span>
-              <button type="button" className="btn" onClick={onAddMember}>添加主播</button></div>}
+              <button type="button" className="btn sm primary" onClick={onAddMember}>添加主播</button></div>}
         </div>
       </section>
       <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen} dimmed={managing}

@@ -42,7 +42,7 @@ function cellAt(room, index) {
 
 const GrowthState = ({ icon, title, text, action, onAction }) => (
   <section className="growth-state card">
-    <Icon name={icon} size={20} />
+    <Icon name={icon} size={24} />
     <strong>{title}</strong>
     {text ? <span>{text}</span> : null}
     {action ? <button type="button" className="btn sm" onClick={onAction}>{action}</button> : null}
@@ -263,16 +263,17 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
   };
 
   const rowNodes = trackedRows.map((room) => roomRow(room));
+  const isWarnBanner = data.status === "needs_login" || data.status === "protection";
 
   return (
     <div className="growth-page">
       <div className="growth-inner">
         <span className="growth-sr" aria-live="polite">{announcement}</span>
 
-        {banner ? <div className={`growth-banner${data.status === "needs_login" || data.status === "protection" ? " warn" : ""}`}>
-          <Icon name="info" size={14} />
+        {banner ? <div className={`growth-banner${isWarnBanner ? " warn" : ""}`} role="status">
+          <Icon name={isWarnBanner ? "alert" : "info"} size={14} />
           <span>{banner.text}</span>
-          {banner.action ? <button type="button" className="growth-link" onClick={banner.run}>{banner.action}</button> : null}
+          {banner.action ? <button type="button" className="btn sm" onClick={banner.run}>{banner.action}</button> : null}
         </div> : null}
 
         {recordedRooms.length === 0
@@ -312,7 +313,7 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
                       </div>
                       <div className="growth-chart-area">
                         {missing
-                          ? null
+                          ? <div className="growth-chart-missing" aria-hidden="true" />
                           : <div className={`growth-chart-bar${zero ? " zero" : ""}${isToday ? " today" : ""}`}
                             style={{ height: `${height}%` }} />}
                       </div>

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"2a9094887e812477974744cdefaef1bc2ef427baa7022b2755b6273a124e9cff","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"86f7cf6b5985a2ed5320278b4214a98caccdb96efcf95327190dcc394cae1f36"} */
+/* BiliOshi JSX {"code_sha256":"fb6d9ee13537309c20800de69333023910fbe5f325bfd2321e2b94037f7246a1","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"5bc2bb19d3b5b50b43be589653733d5af1b215afad24f1f3909e963ead989bfa"} */
 (function () {
 "use strict";
 /* Hand-drawn 16px stroke icons — one weight, round caps, currentColor.
@@ -157,6 +157,20 @@ const Icon = ({
     chevron: /*#__PURE__*/React.createElement("path", {
       d: "M6.5 9.2 12 14.6l5.5-5.4"
     }),
+    circle: /*#__PURE__*/React.createElement("circle", {
+      cx: "12",
+      cy: "12",
+      r: "8.4"
+    }),
+    trash: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
+      d: "M4.5 7.2h15"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M9.4 7.2V5.3c0-.7.6-1.3 1.3-1.3h2.6c.7 0 1.3.6 1.3 1.3v1.9"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M6.8 7.2l.8 11.2c.1.9.8 1.6 1.7 1.6h5.4c.9 0 1.6-.7 1.7-1.6l.8-11.2"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10.2 11v4.6M13.8 11v4.6"
+    })),
     more: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("circle", {
       cx: "5",
       cy: "12",

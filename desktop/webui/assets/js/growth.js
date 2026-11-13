@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"f88b98b54a4886809f4b412882861922533fec424a3ff24115235531d81a2ada","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"47ae88478e3ca23f8c82d718866b5375e5a8ca7e28348268ff570e74753c2521"} */
+/* BiliOshi JSX {"code_sha256":"263c849d39cff5e8a8d3d85beb25058de80b842d663b43699d1de5b58dfb3461","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"growth.jsx","source_sha256":"57fb7e1a70a5b88af087596c0dde34a66e6028a9afb75bee1e949a02132b8714"} */
 (function () {
 "use strict";
 /* Growth page: daily fan-medal intimacy per room, from Api.growth.
@@ -64,7 +64,7 @@ const GrowthState = ({
   className: "growth-state card"
 }, /*#__PURE__*/React.createElement(Icon, {
   name: icon,
-  size: 20
+  size: 24
 }), /*#__PURE__*/React.createElement("strong", null, title), text ? /*#__PURE__*/React.createElement("span", null, text) : null, action ? /*#__PURE__*/React.createElement("button", {
   type: "button",
   className: "btn sm",
@@ -288,6 +288,7 @@ function GrowthPage({
     }, totalLabel));
   };
   const rowNodes = trackedRows.map(room => roomRow(room));
+  const isWarnBanner = data.status === "needs_login" || data.status === "protection";
   return /*#__PURE__*/React.createElement("div", {
     className: "growth-page"
   }, /*#__PURE__*/React.createElement("div", {
@@ -296,13 +297,14 @@ function GrowthPage({
     className: "growth-sr",
     "aria-live": "polite"
   }, announcement), banner ? /*#__PURE__*/React.createElement("div", {
-    className: `growth-banner${data.status === "needs_login" || data.status === "protection" ? " warn" : ""}`
+    className: `growth-banner${isWarnBanner ? " warn" : ""}`,
+    role: "status"
   }, /*#__PURE__*/React.createElement(Icon, {
-    name: "info",
+    name: isWarnBanner ? "alert" : "info",
     size: 14
   }), /*#__PURE__*/React.createElement("span", null, banner.text), banner.action ? /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "growth-link",
+    className: "btn sm",
     onClick: banner.run
   }, banner.action) : null) : null, recordedRooms.length === 0 ? /*#__PURE__*/React.createElement(GrowthState, {
     icon: "trend",
@@ -344,7 +346,10 @@ function GrowthPage({
       className: `growth-chart-value${missing ? " missing" : isToday ? " strong" : ""}`
     }, missing ? "" : shortNumber(value)), /*#__PURE__*/React.createElement("div", {
       className: "growth-chart-area"
-    }, missing ? null : /*#__PURE__*/React.createElement("div", {
+    }, missing ? /*#__PURE__*/React.createElement("div", {
+      className: "growth-chart-missing",
+      "aria-hidden": "true"
+    }) : /*#__PURE__*/React.createElement("div", {
       className: `growth-chart-bar${zero ? " zero" : ""}${isToday ? " today" : ""}`,
       style: {
         height: `${height}%`

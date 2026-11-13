@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"b6b60095e3c80e13a4564f5d07abc0ef01f12b36046929113abef9b3355ad083","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"2814bdf67402125c21dc1a3647ac0e0cf171ce14a212aa9f1cc78a7ac095593b"} */
+/* BiliOshi JSX {"code_sha256":"94ad411555f724617e2d589623015e434795b1615716d68b55a6a34855e2cf85","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"8ec0206e7f8bb037a6a630c17aa697c2c1652491a257df351c26663f947c496e"} */
 (function () {
 "use strict";
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
@@ -358,6 +358,7 @@ const AccountPage = ({
   activeId,
   account,
   avatar,
+  avatars = {},
   onScan,
   onView,
   onSwitch,
@@ -397,7 +398,7 @@ const AccountPage = ({
     key: item.id,
     account: item,
     isActive: item.id === activeId,
-    image: item.id === activeId ? avatar : undefined,
+    image: item.id === activeId ? avatar || avatars[item.id] : avatars[item.id],
     onView: onView,
     onSwitch: onSwitch,
     onScan: onScan,
@@ -409,7 +410,7 @@ const AccountPage = ({
     className: "empty list-empty"
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "user",
-    size: 28
+    size: 24
   }), /*#__PURE__*/React.createElement("strong", null, "\u5C1A\u672A\u6DFB\u52A0 B \u7AD9\u8D26\u53F7"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn primary sm",

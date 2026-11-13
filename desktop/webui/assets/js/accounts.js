@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"38ab24cfe197a8370448fa25e8ca8f3964946c8a3d4fce326e9ddf617d20d8b9","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"281ad5a0e18349b4bfb693fed89a52e6fb41e8d2d0c3a37c5560ad9a1168eedf"} */
+/* BiliOshi JSX {"code_sha256":"d40e9ce69ccbedc762e4598e29022e0765cc6f80803e6f0de327fc741398c703","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"0acfa6aebd569aecfde73770303ba97e810cd74435a33ae3ff26d140e005a458"} */
 (function () {
 "use strict";
 /* Account tabs. One account is displayed and active at a time; switching is
@@ -74,6 +74,7 @@ const AccountAvatar = ({
 const AccountTabs = ({
   accounts,
   activeId,
+  avatars = {},
   onSelect,
   onAdd
 }) => {
@@ -96,6 +97,7 @@ const AccountTabs = ({
   }, accounts.map((account, index) => {
     const selected = activeId === account.id;
     const state = accountStateLabel(account);
+    const image = avatars[account.id];
     const live = account.live_room_count || 0;
     const liveText = live ? ` · ${live} 个开播` : "";
     const actionText = selected ? "当前使用" : "点击切换";
@@ -116,8 +118,12 @@ const AccountTabs = ({
       className: "tab-avatar",
       style: {
         background: accountColor(account.id)
-      }
-    }, accountInitial(account.name)), /*#__PURE__*/React.createElement("span", {
+      },
+      "aria-hidden": "true"
+    }, image ? /*#__PURE__*/React.createElement("img", {
+      src: image,
+      alt: ""
+    }) : accountInitial(account.name)), /*#__PURE__*/React.createElement("span", {
       className: "tab-name"
     }, account.name), /*#__PURE__*/React.createElement("i", {
       className: `tab-state ${state.tone}`,

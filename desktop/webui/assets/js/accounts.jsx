@@ -32,7 +32,7 @@ const AccountAvatar = ({ account, size = "sm", image }) => {
     aria-hidden="true">{image ? <img src={image} alt="" /> : accountInitial(account.name)}</span>;
 };
 
-const AccountTabs = ({ accounts, activeId, onSelect, onAdd }) => {
+const AccountTabs = ({ accounts, activeId, avatars = {}, onSelect, onAdd }) => {
   if (!accounts || !accounts.length) return null;
   const move = (event, index) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -50,6 +50,7 @@ const AccountTabs = ({ accounts, activeId, onSelect, onAdd }) => {
         {accounts.map((account, index) => {
           const selected = activeId === account.id;
           const state = accountStateLabel(account);
+          const image = avatars[account.id];
           const live = account.live_room_count || 0;
           const liveText = live ? ` · ${live} 个开播` : "";
           const actionText = selected ? "当前使用" : "点击切换";
@@ -59,7 +60,9 @@ const AccountTabs = ({ accounts, activeId, onSelect, onAdd }) => {
             title={`${account.name} · ${state.label}${liveText}（${actionText}）`}
             aria-label={`${account.name} · ${state.label}${liveText}`}
             onClick={() => onSelect(account.id)} onKeyDown={(event) => move(event, index)}>
-            <span className="tab-avatar" style={{ background: accountColor(account.id) }}>{accountInitial(account.name)}</span>
+            <span className="tab-avatar" style={{ background: accountColor(account.id) }} aria-hidden="true">
+              {image ? <img src={image} alt="" /> : accountInitial(account.name)}
+            </span>
             <span className="tab-name">{account.name}</span>
             <i className={`tab-state ${state.tone}`} aria-hidden="true" />
             {live > 0 && <span className="tab-count" title="直播中的直播间数">{live}</span>}

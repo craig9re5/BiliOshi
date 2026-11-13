@@ -8,8 +8,8 @@ const THEME_KEYS = ["white", "paper", "mist", "apricot"];
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, avatar, onQuit, brandHidden, collapsed }) => (
-  <aside className="side">
+const Sidebar = ({ page, onPage, account, avatar, onQuit, brandHidden, collapsed, inert }) => (
+  <aside className="side" inert={inert ? "" : undefined}>
     {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
       <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
     </div>}
@@ -123,6 +123,7 @@ function App() {
   const [menu, setMenu] = useState(null);
   const [images, setImages] = useState({});
   const [accountAvatar, setAccountAvatar] = useState("");
+  const [accountAvatars, setAccountAvatars] = useState({});
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
   const latest = useRef(EMPTY_SNAPSHOT);
@@ -146,6 +147,8 @@ function App() {
   const qrOpen = useRef(false);
   const avatarPending = useRef(new Set());
   const avatarRetry = useRef({});
+  const avatarAccountPending = useRef(new Set());
+  const avatarAccountRetry = useRef({});
   const toastTimers = useRef(new Set());
   const userSelected = useRef(null);
 
@@ -189,6 +192,8 @@ function App() {
           if (!qrOpen.current) return;
           if (payload.state === "confirmed") {
             setAccountAvatar("");
+            setAccountAvatars({});
+            avatarAccountRetry.current = {};
             setAvatarVersion((value) => value + 1);
           }
           setQr((current) => {
@@ -273,8 +278,12 @@ function App() {
     const load = () => {
       call("account_avatar", activeId).then((result) => {
         if (!live) return;
-        if (result?.ok && result.data_uri) setAccountAvatar(result.data_uri);
-        else if (result?.error) retry = window.setTimeout(load, 60000);
+        if (result?.ok && result.data_uri) {
+          setAccountAvatar(result.data_uri);
+          if (activeId) {
+            setAccountAvatars((items) => (items[activeId] === result.data_uri ? items : { ...items, [activeId]: result.data_uri }));
+          }
+        } else if (result?.error) retry = window.setTimeout(load, 60000);
       }).catch(() => {
         if (live) retry = window.setTimeout(load, 60000);
       });
@@ -282,6 +291,31 @@ function App() {
     load();
     return () => { live = false; window.clearTimeout(retry); };
   }, [connected, account.signed_in, account.name, avatarVersion, activeId]);
+
+  const accountKeys = accounts.map((item) => `${item.id}:${item.signed_in ? 1 : 0}`).join(",");
+  useEffect(() => {
+    if (!connected || !accounts.length) return;
+    let live = true;
+    for (const item of accounts) {
+      if (!item.signed_in || !item.id || accountAvatars[item.id] || avatarAccountPending.current.has(item.id)) continue;
+      if (Date.now() < (avatarAccountRetry.current[item.id] || 0)) continue;
+      avatarAccountPending.current.add(item.id);
+      call("account_avatar", item.id).then((result) => {
+        avatarAccountPending.current.delete(item.id);
+        if (!live || !alive.current) return;
+        if (result?.ok && result.data_uri) {
+          delete avatarAccountRetry.current[item.id];
+          setAccountAvatars((items) => (items[item.id] === result.data_uri ? items : { ...items, [item.id]: result.data_uri }));
+        } else {
+          avatarAccountRetry.current[item.id] = Date.now() + 60000;
+        }
+      }).catch(() => {
+        avatarAccountPending.current.delete(item.id);
+        avatarAccountRetry.current[item.id] = Date.now() + 60000;
+      });
+    }
+    return () => { live = false; };
+  }, [connected, accountKeys, accountAvatars, avatarVersion]);
 
   const invoke = async (method, args = [], success = "") => {
     try {
@@ -506,11 +540,16 @@ function App() {
     protection: { title: "账号保护暂停", desc: "检测到平台安全验证或限制，互动操作已暂停。请先在 B 站完成验证。", confirmLabel: "知道了" }
   };
 
+  const modalOpen = Boolean(qr || dialog);
+  const modalAvatar = dialog?.account?.id
+    ? (dialog.account.id === activeId ? (accountAvatar || accountAvatars[dialog.account.id]) : accountAvatars[dialog.account.id])
+    : "";
+
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
-      <Sidebar page={page} onPage={setPage} account={account} avatar={accountAvatar}
-        onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} />
-      <main className="main" aria-busy={!connected}>
+      <Sidebar page={page} onPage={setPage} account={account} avatar={accountAvatar || accountAvatars[activeId]}
+        onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} inert={modalOpen} />
+      <main className="main" aria-busy={!connected} inert={modalOpen ? "" : undefined}>
         <header className="chrome pywebview-drag-region">
           <SidebarToggle collapsed={collapsed} onToggle={toggleSidebar} />
           <div className="chrome-brand"><span className="logo"><Pulse size={15} /></span>
@@ -524,10 +563,10 @@ function App() {
               onCheck={() => control("check_now")} checking={snap.checking}
               controlBusy={controlBusy} closing={closing} />}
           </div>
-          <WindowButtons key={page} />
+          <WindowButtons />
         </header>
         {page === "monitor" && accounts.length > 0 && <window.AccountTabs accounts={accounts} activeId={activeId}
-          onSelect={switchAccount} onAdd={() => openQr("")} />}
+          avatars={accountAvatars} onSelect={switchAccount} onAdd={() => openQr("")} />}
         <div className="page" id="monitor-body">
         {/* Keyed by account: batch selections must never survive an account
             switch, or they would apply to the other account's follow list. */}
@@ -546,7 +585,7 @@ function App() {
           scope={accounts.find((item) => item.id === activeId) || null} scopeAll={false}
           onLogs={() => invoke("open_logs", [activeId])} />}
         {page === "account" && <window.AccountPage accounts={accounts} activeId={activeId} viewId={activeId}
-          account={account} avatar={accountAvatar} onScan={openQr}
+          account={account} avatar={accountAvatar} avatars={accountAvatars} onScan={openQr}
           onView={() => setPage("monitor")} onSwitch={switchAccount}
           onLogout={(id) => setDialog({ type: "logout", account: accounts.find((item) => item.id === id) })}
           onRemove={(id) => setDialog({ type: "removeAccount", account: accounts.find((item) => item.id === id) })}
@@ -568,7 +607,7 @@ function App() {
       {dialog?.type && dialogCopy[dialog.type] && <window.ConfirmModal {...dialogCopy[dialog.type]}
         body={dialog.type === "switch" || dialog.type === "logout" || dialog.type === "removeAccount"
           ? <div className="account-preview">
-              <window.AccountAvatar account={dialog.account} size="lg" />
+              <window.AccountAvatar account={dialog.account} size="lg" image={modalAvatar} />
               <div className="account-preview-main">
                 <strong>{dialog.account?.name}</strong>
                 <span>UID {dialog.account?.uid} · 关注 {dialog.account?.room_count} 位主播</span>

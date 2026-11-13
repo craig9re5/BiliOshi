@@ -67,7 +67,7 @@ class WebHost:
             # hit-testing restores edge resizing and the drag region moves it.
             self._window = webview.create_window(
                 "ビリ推し", url=INDEX.as_uri(), js_api=self._api,
-                width=1180, height=760, min_size=(900, 600), background_color="#faf9f7",
+                width=1180, height=760, min_size=(900, 600), background_color="#fcfcfb",
                 text_select=False, hidden=not (show or login), zoomable=True,
                 frameless=True, easy_drag=True, shadow=True,
             )

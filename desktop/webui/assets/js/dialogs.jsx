@@ -122,17 +122,47 @@ const ConfirmModal = ({ title, desc, confirmLabel, danger, onConfirm, onClose, b
 
 const RoomMenu = ({ menu, room, onClose, onOpen, onAction, onRemove }) => {
   const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    const close = (event) => { if (!ref.current?.contains(event.target)) onClose(); };
-    const key = (event) => { if (event.key === "Escape") onClose(); };
+    const previous = document.activeElement;
+    const node = ref.current;
+    const items = () => Array.from(node?.querySelectorAll('[role="menuitem"]:not([disabled])') || []);
+    const focusTimer = window.setTimeout(() => { (items()[0] || node)?.focus(); }, 0);
+    const close = (event) => { if (!node?.contains(event.target)) closeRef.current(); };
+    const key = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current();
+        previous?.focus?.();
+        return;
+      }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const enabled = items();
+      if (!enabled.length) return;
+      event.preventDefault();
+      const idx = enabled.indexOf(document.activeElement);
+      const next = event.key === "Home" ? 0
+        : event.key === "End" ? enabled.length - 1
+          : idx < 0 ? (event.key === "ArrowUp" ? enabled.length - 1 : 0)
+            : (idx + (event.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length;
+      enabled[next]?.focus();
+    };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", key);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", key); };
-  }, [onClose]);
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", key);
+    };
+  }, []);
   if (!room) return null;
   const invoke = (fn) => { onClose(); fn(); };
-  return <div className="room-menu" role="menu" ref={ref}
-    style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 200) }}>
+  return <div className="room-menu" role="menu" aria-label="直播间操作" ref={ref} tabIndex={-1}
+    style={{
+      left: Math.max(8, Math.min(menu.x, window.innerWidth - 198)),
+      top: Math.max(8, Math.min(menu.y, window.innerHeight - 210)),
+    }}>
     <button type="button" role="menuitem" onClick={() => invoke(() => onOpen(room.room))}>打开直播间</button>
     <button type="button" role="menuitem" disabled={Boolean(room.actions.reconnect) || room.operation.pending}
       title={room.actions.reconnect} onClick={() => invoke(() => onAction("reconnect", room.room))}>重新连接</button>

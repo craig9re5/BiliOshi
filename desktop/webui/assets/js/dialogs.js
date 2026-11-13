@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"1fe5af42d6a5a52f80821c1af260cee324d1892132776bee053fe05ea8bd504b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"3af109f769caa419dce8ad6643327241e5575599308476b391c9abf4b158b51b"} */
+/* BiliOshi JSX {"code_sha256":"9f56baf0e3b75f086f6280e889e6230c503e736ff2baaf10ac74f5386aa76925","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"c1a75262126c48d92869e71562ea68c2b4d891cb9f04cc3b865f6f3e83a90359"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -266,20 +266,41 @@ const RoomMenu = ({
   onRemove
 }) => {
   const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
+    const previous = document.activeElement;
+    const node = ref.current;
+    const items = () => Array.from(node?.querySelectorAll('[role="menuitem"]:not([disabled])') || []);
+    const focusTimer = window.setTimeout(() => {
+      (items()[0] || node)?.focus();
+    }, 0);
     const close = event => {
-      if (!ref.current?.contains(event.target)) onClose();
+      if (!node?.contains(event.target)) closeRef.current();
     };
     const key = event => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current();
+        previous?.focus?.();
+        return;
+      }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const enabled = items();
+      if (!enabled.length) return;
+      event.preventDefault();
+      const idx = enabled.indexOf(document.activeElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? enabled.length - 1 : idx < 0 ? event.key === "ArrowUp" ? enabled.length - 1 : 0 : (idx + (event.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length;
+      enabled[next]?.focus();
     };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", key);
     return () => {
+      window.clearTimeout(focusTimer);
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", key);
     };
-  }, [onClose]);
+  }, []);
   if (!room) return null;
   const invoke = fn => {
     onClose();
@@ -288,10 +309,12 @@ const RoomMenu = ({
   return /*#__PURE__*/React.createElement("div", {
     className: "room-menu",
     role: "menu",
+    "aria-label": "\u76F4\u64AD\u95F4\u64CD\u4F5C",
     ref: ref,
+    tabIndex: -1,
     style: {
-      left: Math.min(menu.x, window.innerWidth - 200),
-      top: Math.min(menu.y, window.innerHeight - 200)
+      left: Math.max(8, Math.min(menu.x, window.innerWidth - 198)),
+      top: Math.max(8, Math.min(menu.y, window.innerHeight - 210))
     }
   }, /*#__PURE__*/React.createElement("button", {
     type: "button",

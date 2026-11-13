@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"9851ac30fcf929fb6e74033688bef6b51d5de67209e19933f04ab73cd966dd67","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"befa55dc0e42bf553b42aa2536a8e447423575fc48052913135dfa1f226f5155"} */
+/* BiliOshi JSX {"code_sha256":"73c81c8509b3a2a65674578770e6c093fae6a32db33a5288a7d9248d60ad93ee","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"d8487a16740a8e180b2ff6f96fd70e33df89eb1f9a51d54d94c12f12842cd9c2"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -49,9 +49,11 @@ const Sidebar = ({
   avatar,
   onQuit,
   brandHidden,
-  collapsed
+  collapsed,
+  inert
 }) => /*#__PURE__*/React.createElement("aside", {
-  className: "side"
+  className: "side",
+  inert: inert ? "" : undefined
 }, !brandHidden && /*#__PURE__*/React.createElement("div", {
   className: "brand"
 }, /*#__PURE__*/React.createElement("div", {
@@ -302,6 +304,7 @@ function App() {
   const [menu, setMenu] = useState(null);
   const [images, setImages] = useState({});
   const [accountAvatar, setAccountAvatar] = useState("");
+  const [accountAvatars, setAccountAvatars] = useState({});
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [toasts, setToasts] = useState([]);
   const latest = useRef(EMPTY_SNAPSHOT);
@@ -330,6 +333,8 @@ function App() {
   const qrOpen = useRef(false);
   const avatarPending = useRef(new Set());
   const avatarRetry = useRef({});
+  const avatarAccountPending = useRef(new Set());
+  const avatarAccountRetry = useRef({});
   const toastTimers = useRef(new Set());
   const userSelected = useRef(null);
   const toast = useCallback((text, tone = "info") => {
@@ -392,6 +397,8 @@ function App() {
           if (!qrOpen.current) return;
           if (payload.state === "confirmed") {
             setAccountAvatar("");
+            setAccountAvatars({});
+            avatarAccountRetry.current = {};
             setAvatarVersion(value => value + 1);
           }
           setQr(current => {
@@ -481,7 +488,15 @@ function App() {
     const load = () => {
       call("account_avatar", activeId).then(result => {
         if (!live) return;
-        if (result?.ok && result.data_uri) setAccountAvatar(result.data_uri);else if (result?.error) retry = window.setTimeout(load, 60000);
+        if (result?.ok && result.data_uri) {
+          setAccountAvatar(result.data_uri);
+          if (activeId) {
+            setAccountAvatars(items => items[activeId] === result.data_uri ? items : {
+              ...items,
+              [activeId]: result.data_uri
+            });
+          }
+        } else if (result?.error) retry = window.setTimeout(load, 60000);
       }).catch(() => {
         if (live) retry = window.setTimeout(load, 60000);
       });
@@ -492,6 +507,35 @@ function App() {
       window.clearTimeout(retry);
     };
   }, [connected, account.signed_in, account.name, avatarVersion, activeId]);
+  const accountKeys = accounts.map(item => `${item.id}:${item.signed_in ? 1 : 0}`).join(",");
+  useEffect(() => {
+    if (!connected || !accounts.length) return;
+    let live = true;
+    for (const item of accounts) {
+      if (!item.signed_in || !item.id || accountAvatars[item.id] || avatarAccountPending.current.has(item.id)) continue;
+      if (Date.now() < (avatarAccountRetry.current[item.id] || 0)) continue;
+      avatarAccountPending.current.add(item.id);
+      call("account_avatar", item.id).then(result => {
+        avatarAccountPending.current.delete(item.id);
+        if (!live || !alive.current) return;
+        if (result?.ok && result.data_uri) {
+          delete avatarAccountRetry.current[item.id];
+          setAccountAvatars(items => items[item.id] === result.data_uri ? items : {
+            ...items,
+            [item.id]: result.data_uri
+          });
+        } else {
+          avatarAccountRetry.current[item.id] = Date.now() + 60000;
+        }
+      }).catch(() => {
+        avatarAccountPending.current.delete(item.id);
+        avatarAccountRetry.current[item.id] = Date.now() + 60000;
+      });
+    }
+    return () => {
+      live = false;
+    };
+  }, [connected, accountKeys, accountAvatars, avatarVersion]);
   const invoke = async (method, args = [], success = "") => {
     try {
       const result = await call(method, ...args);
@@ -854,21 +898,25 @@ function App() {
       confirmLabel: "知道了"
     }
   };
+  const modalOpen = Boolean(qr || dialog);
+  const modalAvatar = dialog?.account?.id ? dialog.account.id === activeId ? accountAvatar || accountAvatars[dialog.account.id] : accountAvatars[dialog.account.id] : "";
   return /*#__PURE__*/React.createElement("div", {
     className: `app ${collapsed ? "side-collapsed" : ""}`
   }, /*#__PURE__*/React.createElement(Sidebar, {
     page: page,
     onPage: setPage,
     account: account,
-    avatar: accountAvatar,
+    avatar: accountAvatar || accountAvatars[activeId],
     onQuit: () => setDialog({
       type: "quit"
     }),
     brandHidden: true,
-    collapsed: collapsed
+    collapsed: collapsed,
+    inert: modalOpen
   }), /*#__PURE__*/React.createElement("main", {
     className: "main",
-    "aria-busy": !connected
+    "aria-busy": !connected,
+    inert: modalOpen ? "" : undefined
   }, /*#__PURE__*/React.createElement("header", {
     className: "chrome pywebview-drag-region"
   }, /*#__PURE__*/React.createElement(SidebarToggle, {
@@ -900,11 +948,10 @@ function App() {
     checking: snap.checking,
     controlBusy: controlBusy,
     closing: closing
-  })), /*#__PURE__*/React.createElement(WindowButtons, {
-    key: page
-  })), page === "monitor" && accounts.length > 0 && /*#__PURE__*/React.createElement(window.AccountTabs, {
+  })), /*#__PURE__*/React.createElement(WindowButtons, null)), page === "monitor" && accounts.length > 0 && /*#__PURE__*/React.createElement(window.AccountTabs, {
     accounts: accounts,
     activeId: activeId,
+    avatars: accountAvatars,
     onSelect: switchAccount,
     onAdd: () => openQr("")
   }), /*#__PURE__*/React.createElement("div", {
@@ -956,6 +1003,7 @@ function App() {
     viewId: activeId,
     account: account,
     avatar: accountAvatar,
+    avatars: accountAvatars,
     onScan: openQr,
     onView: () => setPage("monitor"),
     onSwitch: switchAccount,
@@ -1019,7 +1067,8 @@ function App() {
       className: "account-preview"
     }, /*#__PURE__*/React.createElement(window.AccountAvatar, {
       account: dialog.account,
-      size: "lg"
+      size: "lg",
+      image: modalAvatar
     }), /*#__PURE__*/React.createElement("div", {
       className: "account-preview-main"
     }, /*#__PURE__*/React.createElement("strong", null, dialog.account?.name), /*#__PURE__*/React.createElement("span", null, "UID ", dialog.account?.uid, " \xB7 \u5173\u6CE8 ", dialog.account?.room_count, " \u4F4D\u4E3B\u64AD"))) : null,

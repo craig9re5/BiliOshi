@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"67257b2b6ea478c990ba6dc436b4465d3a1d0a8050e5429ddfb68d3306e9ab91","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"d7380dfa4856786f8b5f583f02eef139bca8d2de8b6bcf028a107b932e49a8c3"} */
+/* BiliOshi JSX {"code_sha256":"330b04187ab9d0490330b201ae15c2c923b0c0396f13e56cbafa271c78d42531","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"c0248df83f11f627bc4e1e74b1e78afbc2c914967a0e6812366636943153d864"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -44,8 +44,8 @@ const RoomRow = ({
 }, managing && /*#__PURE__*/React.createElement("span", {
   className: `room-check ${checked ? "checked" : ""}`,
   "aria-hidden": "true"
-}, /*#__PURE__*/React.createElement(Icon, {
-  name: checked ? "check" : "circle",
+}, checked && /*#__PURE__*/React.createElement(Icon, {
+  name: "check",
   size: 11
 })), /*#__PURE__*/React.createElement(Avatar, {
   room: room,
@@ -365,8 +365,8 @@ const Overview = ({
   }, /*#__PURE__*/React.createElement("span", {
     className: `room-check ${allChecked ? "checked" : ""}`,
     "aria-hidden": "true"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: allChecked ? "check" : "circle",
+  }, allChecked && /*#__PURE__*/React.createElement(Icon, {
+    name: "check",
     size: 11
   })), /*#__PURE__*/React.createElement("span", null, "\u5168\u9009 (", selectedBatch.size, "/", rooms.length, ")")), /*#__PURE__*/React.createElement("span", {
     className: "spacer"
@@ -407,7 +407,7 @@ const Overview = ({
     size: 24
   }), /*#__PURE__*/React.createElement("strong", null, "\u8FD8\u6CA1\u6709\u5173\u6CE8\u4E3B\u64AD"), /*#__PURE__*/React.createElement("span", null, "\u6DFB\u52A0\u4E3B\u64AD\u6216\u540C\u6B65\u7C89\u4E1D\u724C\u540E\u5373\u53EF\u81EA\u52A8\u6302\u673A"), /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn",
+    className: "btn sm primary",
     onClick: onAddMember
   }, "\u6DFB\u52A0\u4E3B\u64AD")))), /*#__PURE__*/React.createElement(DetailPanel, {
     room: selected,

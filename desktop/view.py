@@ -81,10 +81,11 @@ class TrayUI:
                 ),
                 pystray.MenuItem("立即检查", lambda: self.commands.put("check")),
                 pystray.MenuItem("处理账号保护暂停", lambda: self.commands.put("safety")),
-                pystray.MenuItem("➕ 添加主播", lambda: self.commands.put("add_member")),
-                pystray.MenuItem("📥 同步粉丝牌", lambda: self.commands.put("sync_medals")),
-                pystray.MenuItem("⚙️ 系统设置", lambda: self.commands.put("settings")),
-                pystray.MenuItem("📂 查看日志", lambda: self.commands.put("logs")),
+                pystray.MenuItem("添加主播", lambda: self.commands.put("add_member")),
+                pystray.MenuItem("同步粉丝牌", lambda: self.commands.put("sync_medals")),
+                pystray.MenuItem("设置", lambda: self.commands.put("settings")),
+                pystray.MenuItem("账号登录", lambda: self.commands.put("login")),
+                pystray.MenuItem("查看日志", lambda: self.commands.put("logs")),
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("退出（停止全部挂机）", lambda: self.commands.put("exit")),
             ),
@@ -490,20 +491,20 @@ class TrayUI:
         account = snap.get("account", "")
         if account and snap.get("account_confirmed"):
             checked = time.strftime("%H:%M", time.localtime(snap.get("account_checked_at") or 0))
-            self.account_label.configure(text=f"🟢 {account} · {checked} 验证", fg="#065f46")
-            self.badge_frame.configure(bg="#ecfdf5", highlightbackground="#a7f3d0")
+            self.account_label.configure(text=f"● {account} · {checked} 验证", fg="#176a49")
+            self.badge_frame.configure(bg="#e9f6ef", highlightbackground="#b7e2ce")
         elif account:
-            self.account_label.configure(text="🟠 登录状态待确认", fg="#92400e")
-            self.badge_frame.configure(bg="#fffbeb", highlightbackground="#fde68a")
+            self.account_label.configure(text="● 登录状态待确认", fg="#8a5a12")
+            self.badge_frame.configure(bg="#fdf3e2", highlightbackground="#edd5ad")
         else:
-            self.account_label.configure(text="🔴 尚未登录", fg="#991b1b")
-            self.badge_frame.configure(bg="#fef2f2", highlightbackground="#fecaca")
+            self.account_label.configure(text="○ 尚未登录", fg="#9e3322")
+            self.badge_frame.configure(bg="#fcece9", highlightbackground="#efc5bd")
         color = "#f2ab55" if snap["error"] or warnings or stalled else "#9ca9af" if snap["paused"] else "#63d4b2"
         if getattr(self, "last_color", None) != color:
             self.tray.icon = icon_image(color)
             self.last_color = color
         pause_pending = "pause" in self.control_actions
-        self.pause_button.configure(text="⏳ 正在处理…" if pause_pending else "▶ 恢复挂机" if snap["paused"] else "⏸ 暂停挂机",
+        self.pause_button.configure(text="正在处理…" if pause_pending else "恢复挂机" if snap["paused"] else "暂停挂机",
                                     state="disabled" if pause_pending or self.closing else "normal")
         self.workbench.check_button.configure(state="disabled" if self.closing or "check" in self.control_actions else "normal")
         self.recovery_target = recovery_route(snap)
@@ -531,7 +532,7 @@ class TrayUI:
                 iid="_empty",
                 values=(
                     "(还没有添加主播)",
-                    "用右下角的「＋ 添加主播」开始，或「⟳ 同步粉丝牌」一键导入",
+                    "用右下角的「添加主播」开始，或「同步粉丝牌」一键导入",
                     "—",
                     "—",
                     "等待添加",

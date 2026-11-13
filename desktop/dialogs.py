@@ -138,7 +138,7 @@ class SettingsPanel(tk.Frame):
             self.engine.root / "credentials.json",
             **options,
         )
-        self.set_auth_status(f"扫码登录成功：{account}，已保存。", "#059669")
+        self.set_auth_status(f"扫码登录成功：{account}，已保存。", "#176a49")
         apply_saved_settings(self)
 
     def _scroll_to_auth(self):
@@ -307,7 +307,7 @@ class AddMemberDialog(tk.Toplevel):
         query = self.query_var.get().strip()
         if not query:
             self.preview_text.set("请先输入房间号、UID 或直播间链接")
-            self.preview_label.configure(fg="#d97706")
+            self.preview_label.configure(fg="#8a5a12")
             return
         self.last_query = query
         self.searching = True
@@ -338,7 +338,7 @@ class AddMemberDialog(tk.Toplevel):
             return
         if not info:
             self.preview_text.set(error or "没有找到这个主播，请检查房间号或 UID。")
-            self.preview_label.configure(fg="#dc2626")
+            self.preview_label.configure(fg="#9e3322")
             self.add_btn.configure(state="disabled")
             self.resolved_info = None
             return
@@ -490,7 +490,7 @@ class SyncMedalsDialog(tk.Toplevel):
             return
         self.fetching = False
         self.btn_retry.configure(state="normal")
-        self.status_var.set("⚠️ 登录信息缺失或无法读取，请点击扫码登录。")
+        self.status_var.set("登录信息缺失或无法读取，请点击扫码登录。")
         if hasattr(self, "btn_goto"):
             return
         self.btn_goto = ModernButton(

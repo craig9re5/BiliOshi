@@ -114,8 +114,8 @@ def build_auth(self, container, cookies, p, focus_auth):
     )
     self.status_label.pack(fill="x", pady=(p(6), 0))
     if cookies.get("SESSDATA") and cookies.get("bili_jct"):
-        self.set_auth_status("🟢 已保存登录，可重新扫码更换账号", "#059669")
+        self.set_auth_status("已保存登录，可重新扫码更换账号", "#176a49")
     else:
-        self.set_auth_status("🔴 尚未登录，请点击【扫码登录】", "#dc2626")
+        self.set_auth_status("尚未登录，请点击【扫码登录】", "#9e3322")
     if focus_auth:
         self.after(120, self._scroll_to_auth)

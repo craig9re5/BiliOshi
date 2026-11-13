@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"fb6d9ee13537309c20800de69333023910fbe5f325bfd2321e2b94037f7246a1","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"5bc2bb19d3b5b50b43be589653733d5af1b215afad24f1f3909e963ead989bfa"} */
+/* BiliOshi JSX {"code_sha256":"5f1708703afbe1740752950709762ad6bb4a12cf4841d1e8f9b8cba02d009d7c","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"2618ddc45634549a405620359da57613bf5fa815e027c071df94466f8ba4add6"} */
 (function () {
 "use strict";
 /* Hand-drawn 16px stroke icons — one weight, round caps, currentColor.
@@ -197,23 +197,33 @@ const Icon = ({
 const Pulse = ({
   size = 16,
   className = ""
-}) => /*#__PURE__*/React.createElement("svg", {
-  width: size,
-  height: size,
-  viewBox: "0 0 24 24",
-  fill: "none",
-  className: className,
-  "aria-hidden": "true"
-}, /*#__PURE__*/React.createElement("path", {
-  d: "M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z",
-  fill: "currentColor"
-}), /*#__PURE__*/React.createElement("path", {
-  d: "M4.6 12h4.1l1.5-3.2 2.2 6.1 1.6-3.4 1.1 2.5h4.3",
-  stroke: "#16383a",
-  strokeWidth: "1.9",
-  strokeLinecap: "round",
-  strokeLinejoin: "round"
-}));
+}) => {
+  const maskId = React.useId();
+  return /*#__PURE__*/React.createElement("svg", {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    className: className,
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("mask", {
+    id: maskId
+  }, /*#__PURE__*/React.createElement("rect", {
+    width: "24",
+    height: "24",
+    fill: "white"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M4.5 12H8.5L10.2 8.6L12 15.6L13.8 9.8L15.4 12H19.5",
+    stroke: "black",
+    strokeWidth: "1.9",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }))), /*#__PURE__*/React.createElement("path", {
+    d: "M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z",
+    fill: "currentColor",
+    mask: `url(#${maskId})`
+  }));
+};
 Object.assign(window, {
   Icon,
   Pulse

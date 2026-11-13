@@ -28,7 +28,7 @@ def configure_table_style(p):
         padding=p(6),
     )
     style.map(
-        "Treeview", background=[("selected", "#dbeafe")], foreground=[("selected", "#1e3a8a")]
+        "Treeview", background=[("selected", "#e8f1ee")], foreground=[("selected", "#245550")]
     )
 
 
@@ -49,8 +49,8 @@ def build_header(self, body, p):
     ).pack(side="left", pady=(p(6), 0))
     self.badge_frame = tk.Frame(
         header,
-        bg="#ecfdf5",
-        highlightbackground="#a7f3d0",
+        bg="#e9f6ef",
+        highlightbackground="#b7e2ce",
         highlightthickness=1,
         padx=p(10),
         pady=p(4),
@@ -61,8 +61,8 @@ def build_header(self, body, p):
         self.badge_frame,
         text="正在检测登录…",
         font=(FONT_FAMILY, 9, "bold"),
-        bg="#ecfdf5",
-        fg="#065f46",
+        bg="#e9f6ef",
+        fg="#176a49",
         cursor="hand2",
     )
     self.account_label.pack()
@@ -101,10 +101,10 @@ def build_table(self, body, p):
     for column, title, width, stretch, anchor in columns_def:
         self.tree.heading(column, text=title)
         self.tree.column(column, width=p(width), minwidth=p(width), stretch=stretch, anchor=anchor)
-    self.tree.tag_configure("live", background="#f0fdf4")
+    self.tree.tag_configure("live", background="#e9f6ef")
     self.tree.tag_configure("even", background="#ffffff")
-    self.tree.tag_configure("odd", background="#f8fafc")
-    self.tree.tag_configure("placeholder", foreground="#94a3b8")
+    self.tree.tag_configure("odd", background="#fafaf8")
+    self.tree.tag_configure("placeholder", foreground="#63635e")
     self.tree.pack(side="left", fill="both", expand=True)
     scrollbar = ttk.Scrollbar(table_card, orient="vertical", command=self.tree.yview)
     scrollbar.pack(side="right", fill="y")
@@ -133,10 +133,10 @@ def build_controls(self, body, p):
         px=p,
     ).pack(side="left", padx=(p(6), 0))
     for text, callback in [
-        ("➕ 添加主播", self.open_add_member),
-        ("📥 同步粉丝牌", self.open_sync_medals),
-        ("⚙️ 系统设置", self.open_settings),
-        ("📂 查看日志", lambda: os.startfile(str(self.engine.root / "logs"))),
+        ("添加主播", self.open_add_member),
+        ("同步粉丝牌", self.open_sync_medals),
+        ("设置", self.open_settings),
+        ("查看日志", lambda: os.startfile(str(self.engine.root / "logs"))),
     ]:
         ModernButton(buttons, text=text, command=callback, px=p).pack(side="left", padx=(p(6), 0))
     recovery = tk.Frame(body, bg=BG_WINDOW)
@@ -173,16 +173,16 @@ def build_room_menu(self):
         font=(FONT_FAMILY, 10),
         bg=BG_CARD,
         fg=TEXT_MAIN,
-        activebackground="#e0f2fe",
-        activeforeground="#0369a1",
+        activebackground="#e8f1ee",
+        activeforeground="#245550",
     )
-    self.menu.add_command(label="🌐 在浏览器打开直播间", command=self.on_open_room)
+    self.menu.add_command(label="在浏览器打开直播间", command=self.on_open_room)
     self.menu.add_separator()
-    self.menu.add_command(label="⟳ 重连此直播间（只恢复看播）", command=self.on_reconnect_room)
-    self.menu.add_command(label="💬 补齐弹幕", command=lambda: self.on_redo_task("danmaku"))
-    self.menu.add_command(label="👍 补齐点赞", command=lambda: self.on_redo_task("like"))
-    self.menu.add_command(label="✓ 补齐全部任务", command=lambda: self.on_redo_task("all"))
-    self.menu.add_command(label="🏅 佩戴粉丝牌", command=self.on_wear_medal)
+    self.menu.add_command(label="重连此直播间（只恢复看播）", command=self.on_reconnect_room)
+    self.menu.add_command(label="补齐弹幕", command=lambda: self.on_redo_task("danmaku"))
+    self.menu.add_command(label="补齐点赞", command=lambda: self.on_redo_task("like"))
+    self.menu.add_command(label="补齐全部任务", command=lambda: self.on_redo_task("all"))
+    self.menu.add_command(label="佩戴粉丝牌", command=self.on_wear_medal)
     self.menu.add_separator()
-    self.menu.add_command(label="✕ 移除主播", command=self.on_remove_member)
+    self.menu.add_command(label="移除主播", command=self.on_remove_member)
     self.tree.bind("<Button-3>", self.on_right_click)

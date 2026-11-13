@@ -7,12 +7,12 @@ from .presentation import gain_label
 from .widgets import FONT_FAMILY, SlimScrollbar
 
 BACKGROUND = "#ffffff"
-SELECTED = "#edf3f1"
-LIVE = "#f0fdf4"
-LIVE_DOT = "#22c55e"
-INK = "#253638"
-MUTED = "#657477"
-PLACEHOLDER = "#94a3b8"
+SELECTED = "#e8f1ee"
+LIVE = "#e9f6ef"
+LIVE_DOT = "#1f8a5f"
+INK = "#1f1f1d"
+MUTED = "#63635e"
+PLACEHOLDER = "#63635e"
 ROW_HEIGHT = 70
 
 # Measuring a string costs ~0.15ms, but emoji fall back through the font stack and
@@ -201,7 +201,7 @@ class RoomList(tk.Frame):
         headline.columnconfigure(2, weight=1)
         metadata = tk.Frame(frame, bg=BACKGROUND)
         metadata.grid(row=1, column=1, sticky="ew")
-        for column, (name, color) in enumerate((("phase", MUTED), ("medal", INK), ("gain", "#2d6763"))):
+        for column, (name, color) in enumerate((("phase", MUTED), ("medal", INK), ("gain", "#245550"))):
             metadata.columnconfigure(column, weight=1, uniform="metadata")
             labels[name] = tk.Label(metadata, bg=BACKGROUND, fg=color,
                                     anchor="e" if name == "gain" else "w", font=(FONT_FAMILY, 9), width=1, padx=0, pady=0)
@@ -215,7 +215,7 @@ class RoomList(tk.Frame):
         labels["heartbeat"] = tk.Label(progress, bg=BACKGROUND, fg=MUTED, anchor="e",
                                        font=(FONT_FAMILY, 8), padx=0, pady=0)
         labels["heartbeat"].grid(row=0, column=1, sticky="e", padx=(p(8), 0))
-        line = tk.Frame(frame, height=1, bg="#e2e8e6")
+        line = tk.Frame(frame, height=1, bg="#eaeae6")
         line.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(p(1), 0))
         self.items[iid] = {"frame": frame, "avatar": avatar, "metadata": metadata, "headline": headline,
                            "progress": progress, "values": values, "tags": tags, **labels}
@@ -258,7 +258,7 @@ class RoomList(tk.Frame):
         item["tasks_text"] = "" if values[3] == "—" else values[3]
         item["heartbeat_text"] = "" if values[5] == "—" else values[5]
         self._fit_headline(item, self.canvas.winfo_width())
-        item["phase"].configure(fg="#a65c00" if row.get("watch_warning") or row.get("connection_warning") else MUTED)
+        item["phase"].configure(fg="#8a5a12" if row.get("watch_warning") or row.get("connection_warning") else MUTED)
         if "placeholder" in item.get("tags", ()):
             for key in ("name", "title", "phase", "medal", "gain", "tasks", "heartbeat"):
                 item[key].configure(fg=PLACEHOLDER)

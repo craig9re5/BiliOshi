@@ -498,7 +498,7 @@ class WebHost:
                 item(lambda _: "恢复挂机" if self._paused() else "暂停挂机", "toggle"),
                 item("立即检查", "check"), item("处理账号保护暂停", "safety"),
                 item("添加主播", "add_member"), item("同步粉丝牌", "sync_medals"),
-                item("系统设置", "settings"), item("账号登录", "login"), item("查看日志", "logs"),
+                item("设置", "settings"), item("账号登录", "login"), item("查看日志", "logs"),
                 pystray.Menu.SEPARATOR, item("退出（停止全部挂机）", "exit"),
             )
             self._tray = pystray.Icon("BiliOshi", icon_image(), "ビリ推し", menu)
@@ -568,7 +568,7 @@ class WebHost:
             title = f"{active} 个直播间挂机中"
         else:
             title = "等待开播"
-        self._tray.title = "BiliOshi · " + title
+        self._tray.title = "ビリ推し · " + title
         color = "#f2ab55" if warnings else "#9ca9af" if snap.get("paused") else "#63d4b2"
         if color != self._last_tray_color:
             from desktop.widgets import icon_image

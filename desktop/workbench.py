@@ -11,11 +11,11 @@ from .interaction import action_reason
 from .widgets import ModernButton, SlimScrollbar, FONT_FAMILY, icon_image, navigation_icon
 from .dialogs import SettingsPanel
 
-BG = "#f5f6f5"
-INK = "#253638"
-MUTED = "#657477"
+BG = "#fcfcfb"
+INK = "#1f1f1d"
+MUTED = "#63635e"
 ACCENT = "#2d6763"
-SIDE = "#1e2c2f"
+SIDE = "#f5f5f2"
 
 
 def label(parent, text="", *, size=10, color=INK, bg="white", bold=False):
@@ -33,24 +33,25 @@ class Workbench:
         shell = tk.Frame(ui.root, bg=BG)
         shell.pack(fill="both", expand=True)
         self._build_sidebar(shell)
+        tk.Frame(shell, bg="#e6e6e1", width=1).pack(side="left", fill="y")
         self.body = tk.Frame(shell, bg=BG, padx=p(14), pady=p(14))
         self.body.pack(side="left", fill="both", expand=True)
         header = tk.Frame(self.body, bg=BG)
         header.pack(fill="x", pady=(0,p(10)))
-        self.heading = label(header, "监控总览", size=18, bg=BG, bold=True)
+        self.heading = label(header, "直播总览", size=18, bg=BG, bold=True)
         self.heading.pack(side="left")
-        ui.badge_frame = tk.Frame(header, bg="#ecfdf5", padx=p(8), pady=p(5),
-                                  highlightbackground="#a7f3d0", highlightthickness=1)
+        ui.badge_frame = tk.Frame(header, bg="#e9f6ef", padx=p(8), pady=p(5),
+                                  highlightbackground="#b7e2ce", highlightthickness=1)
         ui.badge_frame.pack(side="right")
-        ui.account_label = label(ui.badge_frame, "正在验证登录…", size=9, bg="#ecfdf5")
+        ui.account_label = label(ui.badge_frame, "正在验证登录…", size=9, bg="#e9f6ef")
         ui.account_label.pack()
         ui.account_label.bind("<Button-1>", lambda _: ui.open_settings(focus_auth=True))
         self._build_toolbar()
         self._build_footer()
         self.area = tk.Frame(self.body, bg=BG)
         self.area.pack(fill="both", expand=True)
-        self.list_frame = tk.Frame(self.area, bg="white", highlightbackground="#e2e8e6",
-                                   highlightcolor="#e2e8e6", highlightthickness=1, bd=0)
+        self.list_frame = tk.Frame(self.area, bg="white", highlightbackground="#e6e6e1",
+                                   highlightcolor="#e6e6e1", highlightthickness=1, bd=0)
         self.list_frame.pack(side="left", fill="both", expand=True, padx=(0,p(12)))
         label(self.list_frame, "关注的直播间", size=10, bold=True).pack(anchor="w", padx=p(12), pady=p(8))
         ui.tree = RoomList(self.list_frame, ui)
@@ -63,12 +64,12 @@ class Workbench:
     def _build_detail(self):
         ui, p = self.ui, self.ui.px
         self.detail_outer = tk.Frame(self.area, bg="white", width=p(340), bd=0,
-                                    highlightbackground="#e2e8e6", highlightcolor="#e2e8e6", highlightthickness=1)
+                                    highlightbackground="#e6e6e1", highlightcolor="#e6e6e1", highlightthickness=1)
         self.detail_outer.pack(side="left", fill="y")
         self.detail_outer.pack_propagate(False)
         self.detail_actions = tk.Frame(self.detail_outer, bg="white", padx=p(16), pady=p(12))
         self.detail_actions.pack(side="bottom", fill="x")
-        tk.Frame(self.detail_outer, bg="#edf1ef", height=1).pack(side="bottom", fill="x")
+        tk.Frame(self.detail_outer, bg="#eaeae6", height=1).pack(side="bottom", fill="x")
         detail_scroll_area = tk.Frame(self.detail_outer, bg="white")
         detail_scroll_area.pack(fill="both", expand=True)
         self.detail_canvas = tk.Canvas(detail_scroll_area, bg="white", highlightthickness=0)
@@ -90,29 +91,29 @@ class Workbench:
         self.detail_title.pack(fill="x")
         self.detail_live_title = label(self.detail_frame, "", size=9, color=MUTED)
         self.detail_live_title.pack(fill="x", pady=(p(3),p(10)))
-        self.connection_card = tk.Frame(self.detail_frame, bg="#f0f6f3", padx=p(10), pady=p(10))
+        self.connection_card = tk.Frame(self.detail_frame, bg="#f5f5f2", padx=p(10), pady=p(10))
         self.connection_card.pack(fill="x", pady=(0, p(10)))
-        status_row = tk.Frame(self.connection_card, bg="#f0f6f3")
+        status_row = tk.Frame(self.connection_card, bg="#f5f5f2")
         status_row.pack(fill="x")
-        self.reconnect_button = ModernButton(status_row, text="⟳ 重连", command=ui.on_reconnect_room,
+        self.reconnect_button = ModernButton(status_row, text="重连", command=ui.on_reconnect_room,
                                             primary=True, px=p, state="disabled")
         self.reconnect_button.pack(side="right", padx=(p(8), 0))
-        self.detail_phase = label(status_row, "", size=9, color=ACCENT, bg="#f0f6f3", bold=True)
+        self.detail_phase = label(status_row, "", size=9, color=ACCENT, bg="#f5f5f2", bold=True)
         self.detail_phase.configure(width=1)
         self.detail_phase.pack(side="left", fill="x", expand=True)
-        self.detail_heartbeat = label(self.connection_card, "", size=8, color=MUTED, bg="#f0f6f3")
+        self.detail_heartbeat = label(self.connection_card, "", size=8, color=MUTED, bg="#f5f5f2")
         self.detail_heartbeat.pack(fill="x", pady=(p(5), 0))
-        self.detail_warning = label(self.connection_card, "", size=9, color="#875818", bg="#fff3df")
+        self.detail_warning = label(self.connection_card, "", size=9, color="#8a5a12", bg="#fdf3e2")
         self.detail_warning.configure(padx=p(8), pady=p(7))
-        summary = tk.Frame(self.detail_frame, bg="#f7f9f8", padx=p(12), pady=p(12))
+        summary = tk.Frame(self.detail_frame, bg="#f5f5f2", padx=p(12), pady=p(12))
         summary.pack(fill="x", pady=(0, p(14)))
-        self.detail_gain = label(summary, "今日亲密度：待更新", size=14, color=ACCENT, bg="#f7f9f8", bold=True)
+        self.detail_gain = label(summary, "今日亲密度：待更新", size=14, color=ACCENT, bg="#f5f5f2", bold=True)
         self.detail_gain.pack(fill="x")
-        self.detail_medal = label(summary, "粉丝牌信息待更新", size=9, bg="#f7f9f8")
+        self.detail_medal = label(summary, "粉丝牌信息待更新", size=9, bg="#f5f5f2")
         self.detail_medal.pack(fill="x", pady=(p(6), p(4)))
-        self.detail_exp = label(summary, "", size=8, color=MUTED, bg="#f7f9f8")
+        self.detail_exp = label(summary, "", size=8, color=MUTED, bg="#f5f5f2")
         self.detail_exp.pack(fill="x")
-        self.experience_bar = tk.Canvas(summary, bg="#e4ece8", height=p(4), bd=0, highlightthickness=0)
+        self.experience_bar = tk.Canvas(summary, bg="#e6e6e1", height=p(4), bd=0, highlightthickness=0)
         self.experience_bar.pack(fill="x", pady=(p(8), 0))
         self.experience_fraction = 0
         self.experience_bar.bind("<Configure>", lambda _: self._draw_experience())
@@ -128,16 +129,16 @@ class Workbench:
             value = label(row, "待更新", size=9, color=MUTED)
             value.pack(side="right")
             self.task_labels.append((title, value))
-            tk.Frame(self.detail_frame, bg="#edf1ef", height=1).pack(fill="x")
+            tk.Frame(self.detail_frame, bg="#eaeae6", height=1).pack(fill="x")
         note = label(self.detail_frame, "亲密度以服务端实际结算为准", size=8, color=MUTED)
         note.configure(wraplength=p(285))
         note.pack(fill="x", pady=(p(8), 0))
         action = self.detail_actions
         action_row = tk.Frame(action, bg="white")
         action_row.pack(fill="x")
-        self.open_button = ModernButton(action_row, text="↗ 直播间", command=ui.on_open_room, px=p)
+        self.open_button = ModernButton(action_row, text="打开直播间", command=ui.on_open_room, px=p)
         self.open_button.pack(side="left")
-        self.redo_button = ModernButton(action_row, text="✓ 补齐任务", command=lambda: ui.on_redo_task("all"), px=p)
+        self.redo_button = ModernButton(action_row, text="补齐任务", command=lambda: ui.on_redo_task("all"), px=p)
         self.redo_button.pack(side="left", padx=(p(8),0))
         self.action_hint = label(action, "", size=8, color=MUTED)
         self.action_hint.configure(wraplength=p(285))
@@ -157,45 +158,45 @@ class Workbench:
         self.experience_bar.delete("all")
         if self.experience_fraction:
             self.experience_bar.create_rectangle(0, 0, self.experience_bar.winfo_width() * self.experience_fraction,
-                                                 self.experience_bar.winfo_height(), fill="#6aae96", outline="")
+                                                 self.experience_bar.winfo_height(), fill=ACCENT, outline="")
 
     def _build_sidebar(self, shell):
         from PIL import ImageTk
         ui, p = self.ui, self.ui.px
-        side = tk.Frame(shell, bg=SIDE, width=p(194), padx=p(15), pady=p(25))
+        side = tk.Frame(shell, bg=SIDE, width=p(194), padx=p(12), pady=p(18))
         side.pack(side="left", fill="y")
         side.pack_propagate(False)
         brand = tk.Frame(side, bg=SIDE)
-        brand.pack(fill="x", pady=(0, p(32)))
-        self.brand_photo = ImageTk.PhotoImage(icon_image(size=p(34)), master=side)
-        tk.Label(brand, image=self.brand_photo, bg=SIDE, bd=0).pack(side="left", padx=(0, p(8)))
+        brand.pack(fill="x", padx=p(6), pady=(0, p(22)))
+        self.brand_photo = ImageTk.PhotoImage(icon_image(size=p(30)), master=side)
+        tk.Label(brand, image=self.brand_photo, bg=SIDE, bd=0).pack(side="left", padx=(0, p(9)))
         brand_text = tk.Frame(brand, bg=SIDE)
         brand_text.pack(side="left")
-        label(brand_text, "ビリ推し", size=12, color="#e5eeeb", bg=SIDE, bold=True).pack(anchor="w")
+        label(brand_text, "ビリ推し", size=12, color=INK, bg=SIDE, bold=True).pack(anchor="w")
         self.nav_buttons, self.nav_photos = {}, {}
         for page, text, command in (
-            ("monitor", "监控总览", lambda: self.show_page("monitor")),
-            ("automation", "自动化设置", ui.open_settings),
-            ("account", "账号管理", lambda: ui.open_settings(focus_auth=True)),
-            ("history", "打开日志目录", lambda: os.startfile(str(ui.engine.root / "logs"))),
+            ("monitor", "直播总览", lambda: self.show_page("monitor")),
+            ("automation", "设置", ui.open_settings),
+            ("account", "账号", lambda: ui.open_settings(focus_auth=True)),
+            ("history", "查看日志", lambda: os.startfile(str(ui.engine.root / "logs"))),
         ):
-            self.nav_photos[page] = [ImageTk.PhotoImage(navigation_icon(page, p(17), color), master=side)
-                                     for color in ("#aac1b9", "#88dfc4")]
+            self.nav_photos[page] = [ImageTk.PhotoImage(navigation_icon(page, p(16), color), master=side)
+                                     for color in (MUTED, ACCENT)]
             button = tk.Button(side, text="  " + text, image=self.nav_photos[page][0], compound="left",
-                               command=command, bg=SIDE, fg="#c0ceca", activebackground="#334647",
-                               activeforeground="white", relief="flat", bd=0, anchor="w",
-                               padx=p(10), pady=p(12), font=(FONT_FAMILY, 10), cursor="hand2")
+                               command=command, bg=SIDE, fg="#42423e", activebackground="#efefec",
+                               activeforeground=INK, relief="flat", bd=0, anchor="w",
+                               padx=p(10), pady=p(9), font=(FONT_FAMILY, 10), cursor="hand2")
             self.nav_buttons[page] = button
             if page != "history":
                 button.pack(fill="x", pady=p(2))
         self.activity_button = self.nav_buttons["history"]
-        self.activity_button.pack(side="bottom", fill="x", pady=(0, p(12)))
+        self.activity_button.pack(side="bottom", fill="x", pady=(0, p(6)))
         self._select_navigation("monitor")
 
     def _select_navigation(self, page):
         for key, button in self.nav_buttons.items():
             selected = key == page
-            button.configure(bg="#2b4443" if selected else SIDE, fg="#e5f7ef" if selected else "#c0ceca",
+            button.configure(bg="#ffffff" if selected else SIDE, fg=INK if selected else "#42423e",
                              image=self.nav_photos[key][int(selected)])
 
     def show_page(self, page):
@@ -212,7 +213,7 @@ class Workbench:
             self.toolbar.pack(fill="x", pady=(0,self.ui.px(10)))
             self.footer_bar.pack(side="bottom", fill="x", pady=(self.ui.px(8),0))
             self.area.pack(fill="both", expand=True)
-            self.heading.configure(text="监控总览")
+            self.heading.configure(text="直播总览")
             return None
         self.toolbar.pack_forget()
         self.footer_bar.pack_forget()
@@ -223,23 +224,23 @@ class Workbench:
                                                      lambda: self.ui.commands.put("check"), scope=page)
         panel = self.settings_pages[page]
         panel.pack(fill="both", expand=True)
-        self.heading.configure(text="自动化设置" if page == "automation" else "账号管理")
+        self.heading.configure(text="设置" if page == "automation" else "账号")
         return panel
 
     def _build_toolbar(self):
         ui, p = self.ui, self.ui.px
-        self.toolbar = tk.Frame(self.body, bg="#e9f4ed", padx=p(8), pady=p(5))
+        self.toolbar = tk.Frame(self.body, bg="#f5f5f2", padx=p(10), pady=p(6))
         self.toolbar.pack(fill="x", pady=(0,p(10)))
-        ui.safety_button = ModernButton(self.toolbar, text="⚠ 处理异常", command=ui.on_recovery_action,
+        ui.safety_button = ModernButton(self.toolbar, text="处理异常", command=ui.on_recovery_action,
                                        px=p, state="disabled")
         ui.safety_button.pack(side="right", padx=(p(6),0))
-        ui.pause_button = ModernButton(self.toolbar, text="⏸ 暂停挂机", command=lambda: ui.commands.put("toggle"),
+        ui.pause_button = ModernButton(self.toolbar, text="暂停挂机", command=lambda: ui.commands.put("toggle"),
                                       primary=True, accent=ACCENT, accent_hover="#245550", px=p)
         ui.pause_button.pack(side="right", padx=(p(6),0))
-        self.check_button = ModernButton(self.toolbar, text="⟳ 立即检查", command=lambda: ui.commands.put("check"), px=p)
+        self.check_button = ModernButton(self.toolbar, text="立即检查", command=lambda: ui.commands.put("check"), px=p)
         self.check_button.pack(side="right", padx=(p(6),0))
         ui.summary = tk.StringVar(value="正在启动…")
-        ui.summary_label = tk.Label(self.toolbar, textvariable=ui.summary, bg="#e9f4ed", fg="#24634e",
+        ui.summary_label = tk.Label(self.toolbar, textvariable=ui.summary, bg="#f5f5f2", fg="#42423e",
                                    font=(FONT_FAMILY, 9), anchor="w", width=1)
         ui.summary_label.pack(side="left", fill="x", expand=True)
 
@@ -247,7 +248,7 @@ class Workbench:
         ui, p = self.ui, self.ui.px
         self.footer_bar = tk.Frame(self.body, bg=BG)
         self.footer_bar.pack(side="bottom", fill="x", pady=(p(8),0))
-        for text, command in (("＋ 添加主播", ui.open_add_member), ("⟳ 同步粉丝牌", ui.open_sync_medals)):
+        for text, command in (("添加主播", ui.open_add_member), ("同步粉丝牌", ui.open_sync_medals)):
             ModernButton(self.footer_bar, text=text, command=command, px=p).pack(side="right", padx=(p(6),0))
         ui.footer = tk.StringVar()
         ui.footer_label = tk.Label(self.footer_bar, textvariable=ui.footer, bg=BG, fg=MUTED,
@@ -292,7 +293,7 @@ class Workbench:
         self.detail_notice_key = notice_key
         self.detail_title.configure(text=row.get("name", "选择主播查看详情"))
         self.detail_phase.configure(text=phase_label(row),
-                                    fg="#875818" if row.get("connection_warning") or row.get("watch_warning") else ACCENT)
+                                    fg="#8a5a12" if row.get("connection_warning") or row.get("watch_warning") else ACCENT)
         self.detail_live_title.configure(text=row.get("title", ""))
         self.detail_medal.configure(text=f"{row['medal_name']} Lv.{row.get('medal_level',0)}" if row.get("medal_name") else "暂无粉丝牌")
         self.detail_gain.configure(text=gain_label(row) if row.get("medal_name") else "")
@@ -327,11 +328,11 @@ class Workbench:
         else:
             self.detail_warning.pack_forget()
         redo_reason = action_reason(self.snap, row, "redo", operation.get("pending", False))
-        self.redo_button.configure(state="disabled" if redo_reason else "normal", text="✓ 补齐中…" if operation.get("pending") and operation.get("kind") == "redo" else "✓ 补齐任务")
+        self.redo_button.configure(state="disabled" if redo_reason else "normal", text="补齐中…" if operation.get("pending") and operation.get("kind") == "redo" else "补齐任务")
         pending = operation.get("pending", False) and operation.get("kind") == "reconnect"
         reconnect_reason = action_reason(self.snap, row, "reconnect", operation.get("pending", False) or pending)
         self.reconnect_button.configure(state="disabled" if reconnect_reason else "normal",
-                                        text="⟳ 重连中…" if row.get("reconnecting") or pending else "⟳ 重连")
+                                        text="重连中…" if row.get("reconnecting") or pending else "重连")
         self.open_button.configure(state="disabled" if action_reason(self.snap, row, "open") else "normal")
         reasons = list(dict.fromkeys(reason for reason in (reconnect_reason, redo_reason) if reason))
         hint = "\n".join(reasons)

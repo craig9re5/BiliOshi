@@ -19,19 +19,19 @@ def format_task_result(name, result):
     return f"【{name}】任务未完成：{detail}"
 
 
-BG_WINDOW = "#f5f6f5"
+BG_WINDOW = "#fcfcfb"
 BG_CARD = "#ffffff"
-BORDER_CARD = "#e2e8f0"
-BORDER_LIGHT = "#f1f5f9"
-TEXT_MAIN = "#253638"
-TEXT_MUTED = "#657477"
+BORDER_CARD = "#deded9"
+BORDER_LIGHT = "#eaeae6"
+TEXT_MAIN = "#1f1f1d"
+TEXT_MUTED = "#63635e"
 ACCENT_GREEN = "#2d6763"
 ACCENT_GREEN_HOVER = "#245550"
-ACCENT_BLUE = "#3b82f6"
-ACCENT_BLUE_HOVER = "#2563eb"
-BTN_BG = "#f1f5f9"
-BTN_BG_HOVER = "#e2e8f0"
-BTN_FG = "#334155"
+ACCENT_BLUE = "#2d6763"
+ACCENT_BLUE_HOVER = "#245550"
+BTN_BG = "#ffffff"
+BTN_BG_HOVER = "#f2f2ee"
+BTN_FG = "#1f1f1d"
 FONT_FAMILY = "Microsoft YaHei UI"
 
 
@@ -250,7 +250,7 @@ class ModernButton(tk.Button):
         font = tkfont.Font(font=self.cget("font"))
         size = (max(1, font.measure(self.cget("text"))) + self.px(28), font.metrics("linespace") + self.px(10))
         self._photos = []
-        for fill in (*self._fills, "#e8eeec"):
+        for fill in (*self._fills, "#f2f2ee"):
             picture = Image.new("RGBA", size)
             draw = ImageDraw.Draw(picture)
             draw.rounded_rectangle((0, 0, size[0]-1, size[1]-1), radius=self.px(8), fill=fill,
@@ -343,16 +343,16 @@ class ToggleSwitch(tk.Canvas):
         image = Image.new("RGBA", (w * scale, h * scale))
         draw = ImageDraw.Draw(image)
         val = bool(self.var.get())
-        fill = (ACCENT_GREEN_HOVER if self.hovered else ACCENT_GREEN) if val else ("#b8c6c5" if self.hovered else "#d5dfdd")
+        fill = (ACCENT_GREEN_HOVER if self.hovered else ACCENT_GREEN) if val else ("#c5c6c0" if self.hovered else "#d9dad5")
         margin = scale
         draw.rounded_rectangle((margin, margin, w * scale - margin - 1, h * scale - margin - 1),
                                radius=h * scale / 2, fill=fill,
-                               outline="#71b6a6" if self.focused else (fill if val else "#c4d1ce"),
+                               outline="#71b6a6" if self.focused else (fill if val else "#c9cac4"),
                                width=scale)
         pad = max(2, self.px(3)) * scale
         diameter = h * scale - 2 * pad
         x = w * scale - pad - diameter if val else pad
-        draw.ellipse((x, pad + scale / 2, x + diameter, pad + diameter + scale / 2), fill="#9eafab")
+        draw.ellipse((x, pad + scale / 2, x + diameter, pad + diameter + scale / 2), fill="#b2b3ad")
         draw.ellipse((x, pad, x + diameter, pad + diameter), fill="white")
         self.photo = ImageTk.PhotoImage(image.resize((w, h), Image.Resampling.LANCZOS), master=self)
         self.create_image(0, 0, anchor="nw", image=self.photo)
@@ -491,7 +491,7 @@ class Tooltip:
             lines.append(f"今日已得亲密度: {today_int} / {limit}")
         else:
             lines.append("勋章: 未拥有该主播粉丝勋章")
-            lines.append("💡 提示：前往该主播直播间投喂 1 电池或赠送灯牌即可获取勋章")
+            lines.append("提示：前往该主播直播间投喂 1 电池或赠送灯牌即可获取勋章")
         lines.append("─" * 32)
         tasks = data.get("tasks", [])
         if tasks:
@@ -503,7 +503,7 @@ class Tooltip:
         else:
             lines.append("• 暂无详细任务数据，巡检后自动刷新")
         lines.append("─" * 32)
-        lines.append("💡 双击进入直播间 · 右键可补齐弹幕/点赞")
+        lines.append("双击进入直播间 · 右键可补齐弹幕/点赞")
         text = "\n".join(lines)
         label = tk.Label(
             frame,

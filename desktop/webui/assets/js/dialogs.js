@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"05e0dab82c7ad645d7e355ccd6584bb989362637039877cdf695cbc2a5afd7d1","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"eaba7bf5b6916166f8f91945668ae09ecbfd6dd791c2aabcbaeace46971030a6"} */
+/* BiliOshi JSX {"code_sha256":"2b2d2bc96111179fbcb2a18c6791b96b614aaaa19eeb520e1283d70783258c97","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"f5a0a7e45bf631c82206ce14ea8e1e363fb38fef468e9ddd9432fe6db3bdc49b"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -516,6 +516,18 @@ const DiagnosticModal = ({
     size: 13
   }), exporting ? "正在打包…" : exported ? "重新导出 (.zip)" : "导出诊断包 (.zip)"))));
 };
+const formatCountdown = (targetSec, nowSec) => {
+  const diff = Math.max(0, Math.floor((targetSec || 0) - nowSec));
+  if (diff <= 0) return "即将执行";
+  const mins = Math.floor(diff / 60);
+  const secs = diff % 60;
+  if (mins >= 60) {
+    const hours = Math.floor(mins / 60);
+    return `约 ${hours} 小时 ${mins % 60} 分钟后`;
+  }
+  if (mins > 0) return `${mins} 分 ${String(secs).padStart(2, "0")} 秒后`;
+  return `${secs} 秒后`;
+};
 const SafetyModal = ({
   hold,
   account,
@@ -530,9 +542,14 @@ const SafetyModal = ({
 }) => {
   const dialogRef = useModalDialog(onClose);
   const info = hold || {};
-  const nowSec = Math.floor(Date.now() / 1000);
+  const [nowSec, setNowSec] = React.useState(() => Math.floor(Date.now() / 1000));
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   const cooldown = Boolean(info.blocked && info.until && info.until > nowSec);
   const needsLogin = info.kind === "auth" || info.kind === "credentials";
+  const canAct = Boolean(isActive || account?.id);
   const lastProbe = probeState?.result || info.last_probe || null;
   const checking = Boolean(probeState?.loading);
   const checks = Array.isArray(lastProbe?.checks) ? lastProbe.checks : [];
@@ -567,9 +584,11 @@ const SafetyModal = ({
     className: "safety-meta-item"
   }, /*#__PURE__*/React.createElement("span", null, "\u89E6\u53D1\u4F4D\u7F6E"), /*#__PURE__*/React.createElement("strong", null, locationParts.join(" · "))), cooldown && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
-  }, /*#__PURE__*/React.createElement("span", null, "\u81EA\u52A8\u6062\u590D\u65F6\u95F4"), /*#__PURE__*/React.createElement("strong", null, absoluteTime(info.until))), !cooldown && info.next_probe_at && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u81EA\u52A8\u6062\u590D\u65F6\u95F4"), /*#__PURE__*/React.createElement("strong", null, absoluteTime(info.until), "\uFF08", formatCountdown(info.until, nowSec), "\uFF09")), !cooldown && info.next_probe_at && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
-  }, /*#__PURE__*/React.createElement("span", null, "\u4E0B\u6B21\u81EA\u52A8\u590D\u68C0"), /*#__PURE__*/React.createElement("strong", null, absoluteTime(info.next_probe_at), typeof info.auto_recover_remaining === "number" && `（今日自动恢复剩余 ${info.auto_recover_remaining} 次）`)), !cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u4E0B\u6B21\u81EA\u52A8\u590D\u68C0"), /*#__PURE__*/React.createElement("strong", null, absoluteTime(info.next_probe_at), "\uFF08", formatCountdown(info.next_probe_at, nowSec), "\uFF09", typeof info.auto_recover_remaining === "number" && ` · 今日自动恢复剩余 ${info.auto_recover_remaining} 次`)), info.pace_multiplier > 1 && /*#__PURE__*/React.createElement("div", {
+    className: "safety-meta-item"
+  }, /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5\u9632\u98CE\u63A7\u964D\u9891"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u81EA\u52A8\u653E\u6162\u81F3 ", info.pace_multiplier, "\xD7 \u4E92\u52A8\u53D1\u9001\u95F4\u9694")), !cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
   }, /*#__PURE__*/React.createElement("span", null, "\u81EA\u52A8\u590D\u68C0\u72B6\u6001"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u8FBE\u672C\u8F6E\u81EA\u52A8\u590D\u68C0\u6216\u4ECA\u65E5\u6062\u590D\u4E0A\u9650\uFF0C\u8BF7\u4EBA\u5DE5\u786E\u8BA4\u540E\u6062\u590D"))), steps.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "safety-steps"
@@ -618,7 +637,7 @@ const SafetyModal = ({
     className: "btn",
     onClick: () => dialogRef.current?.close(),
     disabled: busy || checking
-  }, "\u5173\u95ED"), isActive && needsLogin && /*#__PURE__*/React.createElement("button", {
+  }, "\u5173\u95ED"), canAct && needsLogin && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn primary",
     onClick: () => {
@@ -626,7 +645,7 @@ const SafetyModal = ({
       onScan(account?.id || "");
     },
     disabled: busy
-  }, "\u91CD\u65B0\u626B\u7801\u767B\u5F55"), isActive && !needsLogin && !cooldown && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+  }, "\u91CD\u65B0\u626B\u7801\u767B\u5F55"), canAct && !needsLogin && !cooldown && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn",
     onClick: onResume,
@@ -638,8 +657,9 @@ const SafetyModal = ({
     disabled: busy || checking
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "refresh",
-    size: 13
-  }), checking ? "检测中…" : "检测并自动恢复")), !isActive && /*#__PURE__*/React.createElement("button", {
+    size: 13,
+    className: checking ? "spin" : ""
+  }), checking ? "检测中…" : "检测并自动恢复")), !canAct && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn primary",
     onClick: () => dialogRef.current?.close()

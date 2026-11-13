@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"66e8328dd8b0d2ae637156105e9ba72cfb225b6c79a0fd9dd3dce602ba073704","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"e8d58c6d2da719743519b6cedb794adefa79d385aea0099c048d5754b06be353"} */
+/* BiliOshi JSX {"code_sha256":"5e932b143be4eb033c3e1fbd026578ac44c2d1fefba1b3d1ad57c5c6446a1d52","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"e8e0f8513b6b77814feb8d672fa878ed5d2b8030589747a2102042d396c02065"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -26,15 +26,25 @@ const DEFAULT_SETTINGS = {
   check_minutes: 5,
   autostart: false
 };
-const THEME_KEYS = ["system", "white", "paper", "mist", "apricot", "dark"];
+const THEME_KEYS = ["system", "white", "paper", "mist", "dark"];
+const DAY_THEME_KEYS = ["white", "paper", "mist"];
+const normalizeThemeKey = (value, allowed, fallback) => {
+  const mapped = value === "apricot" ? "paper" : value;
+  return allowed.includes(mapped) ? mapped : fallback;
+};
 const applyDocumentTheme = value => {
-  const theme = THEME_KEYS.includes(value) ? value : "system";
+  const theme = normalizeThemeKey(value, THEME_KEYS, "system");
   document.documentElement.dataset.theme = theme;
   const meta = document.querySelector('meta[name="color-scheme"]');
   if (meta) {
     meta.content = theme === "dark" ? "dark" : theme === "system" ? "light dark" : "light";
   }
   return theme;
+};
+const applyDocumentDayTheme = value => {
+  const dayTheme = normalizeThemeKey(value, DAY_THEME_KEYS, "white");
+  document.documentElement.dataset.dayTheme = dayTheme;
+  return dayTheme;
 };
 const EMPTY_SNAPSHOT = {
   rows: [],
@@ -264,10 +274,8 @@ const SidebarToggle = ({
 }))));
 function App() {
   const [page, setPage] = useState("monitor");
-  const [theme, setTheme] = useState(() => {
-    const current = document.documentElement.dataset.theme;
-    return THEME_KEYS.includes(current) ? current : "system";
-  });
+  const [theme, setTheme] = useState(() => normalizeThemeKey(document.documentElement.dataset.theme, THEME_KEYS, "system"));
+  const [dayTheme, setDayTheme] = useState(() => normalizeThemeKey(document.documentElement.dataset.dayTheme, DAY_THEME_KEYS, "white"));
   const chooseTheme = useCallback(value => {
     if (!THEME_KEYS.includes(value)) return;
     setTheme(applyDocumentTheme(value));
@@ -275,10 +283,20 @@ function App() {
       if (value === "system") window.localStorage.removeItem("bilioshi.theme");else window.localStorage.setItem("bilioshi.theme", value);
     } catch {}
   }, []);
+  const chooseDayTheme = useCallback(value => {
+    if (!DAY_THEME_KEYS.includes(value)) return;
+    setDayTheme(applyDocumentDayTheme(value));
+    try {
+      if (value === "white") window.localStorage.removeItem("bilioshi.dayTheme");else window.localStorage.setItem("bilioshi.dayTheme", value);
+    } catch {}
+  }, []);
   useEffect(() => {
     const onStorage = event => {
-      if (event.key !== "bilioshi.theme") return;
-      setTheme(applyDocumentTheme(event.newValue || "system"));
+      if (event.key === "bilioshi.theme") {
+        setTheme(applyDocumentTheme(event.newValue || "system"));
+      } else if (event.key === "bilioshi.dayTheme") {
+        setDayTheme(applyDocumentDayTheme(event.newValue || "white"));
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -856,13 +874,15 @@ function App() {
       account: targetAccount || accounts.find(item => item.id === activeId) || null
     });
   };
-  const checkSafety = async (autoResume = true) => {
+  const checkSafety = async (autoResume = true, accountId = null) => {
     setSafetyProbe(prev => ({
       ...prev,
       loading: true
     }));
+    const targetId = accountId || null;
     try {
-      const result = await invoke("check_safety", [Boolean(autoResume)]);
+      const args = targetId ? [Boolean(autoResume), targetId] : [Boolean(autoResume)];
+      const result = await invoke("check_safety", args);
       if (!alive.current) return;
       const probeResult = {
         passed: Boolean(result?.passed),
@@ -883,6 +903,7 @@ function App() {
         await refresh();
       } else if (result && result.passed === false) {
         toast(result.summary || "只读自检未通过", "error");
+        await refresh();
       }
     } catch {
       if (alive.current) {
@@ -894,6 +915,10 @@ function App() {
     }
   };
   const openSafetyLink = (kind, room) => invoke("open_safety_link", [kind || "live", room || null]);
+  const clearRoomBlock = async (room, capability = null) => {
+    const result = await invoke("clear_room_block", [room, capability || null], "已解除该直播间互动限制");
+    if (result?.ok) await refresh();
+  };
   const switchAccount = async accountId => {
     if (!accountId) return;
     if (accountId === activeId) {
@@ -928,7 +953,10 @@ function App() {
       if (kind === "remove") result = await invoke("remove_member", [dialog.room.room], `已移除 ${dialog.room.name}`);else if (kind === "logout") {
         closeQr();
         result = await invoke("logout", [dialog.account?.id || ""], "已退出登录");
-      } else if (kind === "safety") result = await invoke("resume_safety", [], "保护暂停已解除");else if (kind === "quit") result = await invoke("quit");else if (kind === "switch") {
+      } else if (kind === "safety") {
+        const args = dialog.account?.id ? [dialog.account.id] : [];
+        result = await invoke("resume_safety", args, "保护暂停已解除");
+      } else if (kind === "quit") result = await invoke("quit");else if (kind === "switch") {
         result = await invoke("switch_account", [dialog.account.id]);
         if (result?.ok) {
           selectionInitialized.current = false;
@@ -1040,8 +1068,8 @@ function App() {
   };
   const modalOpen = Boolean(qr || dialog && dialog !== "diagnostic");
   const modalAvatar = dialog?.account?.id ? dialog.account.id === activeId ? accountAvatar || accountAvatars[dialog.account.id] : accountAvatars[dialog.account.id] : "";
-  const safetyAccount = dialog?.type === "safety" ? dialog.account || accounts.find(item => item.id === activeId) || null : null;
-  const isSafetyActive = !safetyAccount || !activeId || safetyAccount.id === activeId;
+  const safetyAccount = dialog?.type === "safety" ? dialog.account?.id && accounts.find(item => item.id === dialog.account.id) || dialog.account || accounts.find(item => item.id === activeId) || null : null;
+  const isSafetyActive = Boolean(!safetyAccount || activeId && safetyAccount.id === activeId);
   const safetyHold = isSafetyActive ? snap.safety : safetyAccount?.safety?.blocked ? safetyAccount.safety : {
     blocked: true,
     kind: "review",
@@ -1128,7 +1156,8 @@ function App() {
     signedIn: account.signed_in,
     closing: closing,
     bridgeConnected: connected,
-    onBatchRemove: batchRemove
+    onBatchRemove: batchRemove,
+    onClearRoomBlock: clearRoomBlock
   }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
     viewId: activeId,
     images: images,
@@ -1141,6 +1170,8 @@ function App() {
     pendingSettings: pendingSettings,
     theme: theme,
     onTheme: chooseTheme,
+    dayTheme: dayTheme,
+    onDayTheme: chooseDayTheme,
     scope: accounts.find(item => item.id === activeId) || null,
     scopeAll: false,
     onLogs: () => invoke("open_logs", [activeId]),
@@ -1237,7 +1268,7 @@ function App() {
     isActive: isSafetyActive,
     probeState: safetyProbe,
     busy: dialogBusy,
-    onCheck: checkSafety,
+    onCheck: autoResume => checkSafety(autoResume, safetyAccount?.id),
     onResume: confirmAction,
     onOpenLink: openSafetyLink,
     onScan: openQr,

@@ -75,7 +75,25 @@ class AppContext:
                 "kind": "credentials",
                 "reason": "凭证无法解密，请重新扫码登录",
             }
-        return safety.status(saved.get("SESSDATA"), self.root)
+        hold = safety.status(saved.get("SESSDATA"), self.root)
+        mult = safety.pace_multiplier(saved.get("SESSDATA"), self.root)
+        if mult > 1.0:
+            hold["pace_multiplier"] = mult
+        return hold
+
+    def room_safety_blocks(self):
+        try:
+            saved = read_json(self.root / "credentials.json", {})
+        except RuntimeError:
+            return {}
+        return safety.room_blocks(saved.get("SESSDATA"), self.root)
+
+    def clear_room_safety_block(self, room, capability=None):
+        credentials = self.credentials()
+        cleared = safety.clear_room_block(credentials[0], room, capability, root=self.root)
+        if cleared:
+            return True, "已解除该直播间的互动限制"
+        return False, "该直播间当前没有生效中的互动限制"
 
     def resume_safety(self, confirmed=False):
         credentials = self.credentials()

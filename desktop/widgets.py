@@ -1,5 +1,6 @@
 import re
 import tkinter as tk
+from bilioshi.safety import format_task_errors
 
 try:
     import pystray
@@ -12,10 +13,7 @@ except ImportError:
 def format_task_result(name, result):
     if result.get("success"):
         return f"【{name}】所选任务已确认完成"
-    errors = [result.get("error")] + [
-        (result.get(key) or {}).get("error") for key in ("danmaku", "like")
-    ]
-    detail = "；".join((str(error) for error in errors if error)) or "任务进度尚未确认完成"
+    detail = format_task_errors(result) or "任务进度尚未确认完成"
     return f"【{name}】任务未完成：{detail}"
 
 

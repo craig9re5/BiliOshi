@@ -23,6 +23,7 @@ from .check_auth import check_login
 from .credentials import cookie_path, parse_cookie_header
 from .danmaku_pacing import send_paced
 from .operating_mode import current_profile
+from . import safety
 from .members import MEMBERS, load_members
 from .videos import _sign_wbi, get_mixin_key
 from .runtime import (
@@ -133,7 +134,7 @@ def _send_danmaku(room_id: int, msg: str, sessdata: str, bili_jct: str) -> bool:
     headers = _make_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room_id}")
     try:
         resp = send_paced(lambda: _post_form(url, data, headers),
-                          min_interval=current_profile().danmaku_send_seconds)
+                          min_interval=current_profile().danmaku_send_seconds * safety.pace_multiplier(sessdata))
     except (OSError, TimeoutError) as exc:
         resp = {"code": -1, "message": type(exc).__name__}
     if resp and resp.get("code") == 0:

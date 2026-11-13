@@ -1,6 +1,7 @@
-/* BiliOshi JSX {"code_sha256":"2bc214e8194c9c929d09d8354bea5697e6d1c2334006e681129850ee5ae2c389","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"17881edd1f2deb1449839aa3f7cb2d9278dd306ba87e538de5ac4ce1a160956b"} */
+/* BiliOshi JSX {"code_sha256":"380ac8c5a8e9d664e9fd44bb5c662091df04627f99e7cf92c2b057b58fb8349c","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"a7813d387f2d473445990031183fd260ce5cbec0fa67f1d20b26c14b621afd67"} */
 (function () {
 "use strict";
+function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
 
 const {
@@ -131,31 +132,40 @@ const Choice = ({
     size: 12
   })))));
 };
-const THEME_CHOICES = [{
+
+/* 暖杏灰（apricot）暂时灰度下线，置 enabled: true 即可重新开放选项。 */
+const ALL_THEME_CHOICES = [{
   key: "system",
   name: "跟随系统",
   hint: "随系统深浅外观切换"
 }, {
   key: "white",
   name: "纸白",
-  hint: "中性纸面"
+  hint: "中性纸面",
+  day: true
 }, {
   key: "paper",
   name: "暖纸白",
-  hint: "温和纸感"
+  hint: "温和纸感",
+  day: true
 }, {
   key: "mist",
   name: "雾青灰",
-  hint: "清爽青灰"
+  hint: "清爽青灰",
+  day: true
 }, {
   key: "apricot",
   name: "暖杏灰",
-  hint: "温暖柔和"
+  hint: "温暖柔和",
+  day: true,
+  enabled: false
 }, {
   key: "dark",
   name: "墨青暗",
   hint: "夜间深色"
 }];
+const THEME_CHOICES = ALL_THEME_CHOICES.filter(item => item.enabled !== false);
+const DAY_THEME_CHOICES = THEME_CHOICES.filter(item => item.day);
 const useSystemDark = () => {
   const [dark, setDark] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   useEffect(() => {
@@ -173,30 +183,43 @@ const useSystemDark = () => {
   return dark;
 };
 const ThemeOptions = ({
+  choices = THEME_CHOICES,
   value,
   onChange,
-  systemDark
+  systemDark,
+  dayThemeName,
+  ariaLabel = "界面主题",
+  isDayPicker = false
 }) => /*#__PURE__*/React.createElement("div", {
   className: "theme-options",
   role: "group",
-  "aria-label": "\u754C\u9762\u4E3B\u9898"
-}, THEME_CHOICES.map(theme => {
-  const active = theme.key === value;
-  const hint = theme.key === "system" ? `当前${systemDark ? "深色" : "浅色"}` : theme.hint;
-  return /*#__PURE__*/React.createElement("button", {
+  "aria-label": ariaLabel
+}, choices.map(item => {
+  const active = item.key === value;
+  const hint = item.key === "system" ? `当前${systemDark ? "深色 · 墨青暗" : `浅色 · ${dayThemeName}`}` : item.hint;
+  const dataProps = isDayPicker ? {
+    "data-day-theme": item.key
+  } : {
+    "data-theme": item.key
+  };
+  return /*#__PURE__*/React.createElement("button", _extends({
     type: "button",
-    key: theme.key,
-    className: "theme-option",
-    "data-theme": theme.key,
+    key: item.key,
+    className: "theme-option"
+  }, dataProps, {
     "aria-pressed": active,
-    title: `${theme.name} · ${hint}`,
-    onClick: () => onChange(theme.key)
-  }, /*#__PURE__*/React.createElement("span", {
-    className: `theme-chip ${theme.key}`,
-    "aria-hidden": "true"
+    title: `${item.name} · ${hint}`,
+    onClick: () => onChange(item.key)
   }), /*#__PURE__*/React.createElement("span", {
+    className: `theme-chip ${item.key}`,
+    "aria-hidden": "true"
+  }, item.key === "system" && /*#__PURE__*/React.createElement(Icon, {
+    name: "contrast",
+    size: 12,
+    stroke: 1.7
+  })), /*#__PURE__*/React.createElement("span", {
     className: "theme-name"
-  }, theme.name), active && /*#__PURE__*/React.createElement(Icon, {
+  }, item.name), active && /*#__PURE__*/React.createElement(Icon, {
     name: "check",
     size: 11
   }));
@@ -207,6 +230,8 @@ const SettingsPage = ({
   pendingSettings,
   theme = "system",
   onTheme,
+  dayTheme = "white",
+  onDayTheme,
   scope,
   onLogs,
   onHostLogs,
@@ -216,6 +241,7 @@ const SettingsPage = ({
   const systemDark = useSystemDark();
   const disabled = key => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
+  const dayThemeName = (DAY_THEME_CHOICES.find(item => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8BBE\u7F6E"
@@ -328,11 +354,21 @@ const SettingsPage = ({
     className: "group-head"
   }, "\u5916\u89C2"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u754C\u9762\u4E3B\u9898",
-    desc: theme === "system" ? `跟随系统，当前为${systemDark ? "深色" : "浅色"}外观` : "自定义应用配色风格"
+    desc: theme === "system" ? `跟随系统，当前为${systemDark ? "深色 · 墨青暗" : `浅色 · ${dayThemeName}`}` : "自定义应用配色风格"
   }, /*#__PURE__*/React.createElement(ThemeOptions, {
     value: theme,
     onChange: onTheme,
-    systemDark: systemDark
+    systemDark: systemDark,
+    dayThemeName: dayThemeName
+  })), theme === "system" && /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u767D\u5929\u9ED8\u8BA4\u4E3B\u9898",
+    desc: "\u7CFB\u7EDF\u5904\u4E8E\u6D45\u8272\u5916\u89C2\u65F6\u4F18\u5148\u4F7F\u7528\u7684\u914D\u8272"
+  }, /*#__PURE__*/React.createElement(ThemeOptions, {
+    choices: DAY_THEME_CHOICES,
+    value: dayTheme,
+    onChange: onDayTheme,
+    ariaLabel: "\u767D\u5929\u9ED8\u8BA4\u4E3B\u9898",
+    isDayPicker: true
   }))))));
 };
 const AccountRow = ({
@@ -500,7 +536,9 @@ const AccountPage = ({
     className: "safety-time"
   }, "\u6700\u65E9\u81EA\u52A8\u6062\u590D\uFF1A", absoluteTime(hold.until)), !cooldown && hold.blocked && hold.next_probe_at && /*#__PURE__*/React.createElement("small", {
     className: "safety-time"
-  }, "\u4E0B\u6B21\u81EA\u52A8\u590D\u68C0\uFF1A", absoluteTime(hold.next_probe_at))), /*#__PURE__*/React.createElement("div", {
+  }, "\u4E0B\u6B21\u81EA\u52A8\u590D\u68C0\uFF1A", absoluteTime(hold.next_probe_at)), hold.pace_multiplier > 1 && /*#__PURE__*/React.createElement("small", {
+    className: "safety-time"
+  }, "\u4ECA\u65E5\u9632\u98CE\u63A7\u964D\u9891\u4FDD\u62A4\uFF1A\u4E92\u52A8\u53D1\u9001\u95F4\u9694\u5DF2\u8C03\u6574\u4E3A ", hold.pace_multiplier, "\xD7")), /*#__PURE__*/React.createElement("div", {
     className: "safety-actions"
   }, (!account.signed_in || needsLogin) && /*#__PURE__*/React.createElement("button", {
     type: "button",

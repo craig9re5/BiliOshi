@@ -624,3 +624,81 @@ class SafetyAutoRecoveryTests(unittest.TestCase):
             watch.assert_called_once()
             self.assertFalse(engine.safety["blocked"])
             self.assertEqual(engine.error, "")
+
+    def test_room_permission_isolates_single_room_and_skips_daily_tasks(self):
+        from bilioshi.services.daily_tasks import DailyTaskRunner
+
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"BILIOSHI_APP_DATA": folder}):
+            root = Path(folder)
+            safety.bind_account(SESSION, 123, root=root)
+            url = "https://api.live.bilibili.com/msg/send"
+            op = safety.operation(url, b"roomid=1001&msg=hi", "POST")
+            safety.observe(SESSION, url, {"code": 403, "message": "你已被该直播间禁言"}, mutation=True, op=op)
+
+            self.assertFalse(safety.status(SESSION, root)["blocked"])
+            block = safety.room_capability_blocked(SESSION, 1001, "danmaku", root=root)
+            self.assertEqual(block.get("room"), "1001")
+            self.assertEqual(block.get("kind"), "danmaku")
+            self.assertEqual(safety.room_capability_blocked(SESSION, 1001, "like", root=root), {})
+            self.assertEqual(safety.room_capability_blocked(SESSION, 1002, "danmaku", root=root), {})
+
+            self.assertIsNotNone(safety.reserve(SESSION, {"room": "1001", "kind": "danmaku"}))
+            self.assertIsNone(safety.reserve(SESSION, {"room": "1001", "kind": "like"}))
+            self.assertIsNone(safety.reserve(SESSION, {"room": "1002", "kind": "danmaku"}))
+            self.assertIsNone(safety.reserve(SESSION, {"room": "1001", "kind": "heartbeat"}))
+
+            from bilioshi.runtime import FileLock
+
+            (root / "state/tasks").mkdir(parents=True, exist_ok=True)
+            (root / "locks").mkdir(parents=True, exist_ok=True)
+            gateway = Mock()
+            gateway.DANMAKU_SESSION_ATTEMPT_LIMIT = 10
+            gateway._runtime_path.side_effect = lambda name: (
+                root / "state/tasks" if name == "_TASK_STATE_DIR" else root / "locks"
+            )
+            gateway.task_day = safety.task_day
+            gateway.FileLock = FileLock
+            gateway.read_json = read_json
+            gateway.write_json = write_json
+            runner = DailyTaskRunner(
+                1001,
+                888,
+                SESSION,
+                CSRF,
+                auto_revive=True,
+                auto_intimacy=False,
+                auto_like=False,
+                _gateway=gateway,
+            )
+            out = runner.check()
+            self.assertFalse(out["success"])
+            self.assertTrue(out["danmaku"]["skipped"])
+            self.assertTrue(out["danmaku"]["room_blocked"])
+            gateway.send_medal_danmaku_tasks.assert_not_called()
+
+            self.assertTrue(safety.clear_room_block(SESSION, 1001, "danmaku", root=root))
+            self.assertEqual(safety.room_blocks(SESSION, root), {})
+            self.assertIsNone(safety.reserve(SESSION, {"room": "1001", "kind": "danmaku"}))
+
+    def test_adaptive_pace_multiplier_increases_on_same_day_risk_hits(self):
+        from bilioshi.application import AppContext
+        from desktop.storage import initialize
+
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"BILIOSHI_APP_DATA": folder}):
+            root = Path(folder)
+            initialize(root, [{"room": 1, "uid": 1001, "name": "主播A"}])
+            save_login(SESSION, CSRF, root / "credentials.json")
+            safety.bind_account(SESSION, 123, root=root)
+            self.assertEqual(safety.pace_multiplier(SESSION, root), 1.0)
+
+            safety.hold_account(SESSION, "rate", "请求频繁", code=429, root=root)
+            self.assertEqual(safety.pace_multiplier(SESSION, root), 2.0)
+            safety.resume(SESSION, confirmed=True, root=root)
+            self.assertEqual(safety.pace_multiplier(SESSION, root), 2.0)
+
+            safety.hold_account(SESSION, "review", "风控验证", code=-352, root=root)
+            self.assertEqual(safety.pace_multiplier(SESSION, root), 3.0)
+            safety.resume(SESSION, confirmed=True, root=root)
+            status = AppContext(root).safety_status()
+            self.assertFalse(status["blocked"])
+            self.assertEqual(status["pace_multiplier"], 3.0)

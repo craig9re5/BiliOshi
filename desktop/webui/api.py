@@ -22,13 +22,14 @@ import webbrowser
 from pathlib import Path
 
 from bilioshi.accounts import ALL_ACCOUNTS, AccountStoreError
+from bilioshi.application import AppContext
 from bilioshi.diagnostics_bundle import collect_diagnostic_preview, export_diagnostic_bundle
 from bilioshi.growth import CHINA_TZ, load_history
 from bilioshi.members import load_account_members, load_members
 from bilioshi.operating_mode import PROFILES, profile_for
 from bilioshi.redaction import redact, redact_paths
 from bilioshi.runtime import read_json, update_json
-from bilioshi.safety import describe_hold
+from bilioshi.safety import describe_hold, format_task_errors
 from bilioshi.secret_store import is_envelope
 from desktop.interaction import action_reason, recovery_route
 from desktop.storage import load_config
@@ -48,13 +49,18 @@ _PENDING_MESSAGES = {
     "remove": "正在移除主播", "settings": "正在保存并应用设置", "pause": "正在调整挂机状态",
     "check": "正在请求检查", "safety": "正在检查账号并解除保护暂停",
     "safety_check": "正在检测账号风控与会话状态", "logout": "正在退出登录",
+    "account_safety": "正在检查账号并解除保护暂停",
+    "account_safety_check": "正在检测账号风控与会话状态",
+    "clear_room_block": "正在解除该直播间互动限制",
+    "dismiss_task_error": "正在清除任务提醒",
     "add": "正在添加主播", "import": "正在导入粉丝牌主播",
     "export_diagnostic": "正在导出脱敏诊断包",
 }
 # These operations always touch the active Engine. A view of another account
 # must stay read-only rather than silently mutating the running account.
 _ACTIVE_VIEW_ONLY = {
-    "add", "import", "resolve", "medals", "check", "pause", "safety", "safety_check", "remove",
+    "add", "import", "resolve", "medals", "check", "pause",
+    "safety", "safety_check", "remove", "clear_room_block", "dismiss_task_error",
 }
 
 
@@ -670,7 +676,9 @@ class Api:
             # Pause/reconnect/check remain usable while a room task waits on IO.
             # Engine and task services own the actual shared-data locks.
             control = kind in {
-                "pause", "check", "settings", "safety", "safety_check", "reconnect", "remove", "logout",
+                "pause", "check", "settings", "safety", "safety_check",
+                "account_safety", "account_safety_check", "clear_room_block", "dismiss_task_error",
+                "reconnect", "remove", "logout",
             }
             lock = self._control_mutations if control else self._mutations
             with lock if mutating else nullcontext():
@@ -821,40 +829,115 @@ class Api:
 
         return self._run("check", check)
 
-    def _sync_unblocked_status(self):
-        if self._store is None or self._host is None:
-            return
-        active_id = self._host.active_id
-        if not active_id or not self._store.has(active_id):
-            return
-        row = self._store.get(active_id)
-        if row.get("status") == "blocked":
-            next_status = "ok" if self._store.has_credentials(active_id) else "needs_login"
-            self._store.update(active_id, status=next_status)
+    def _safety_target(self, account_id=None):
+        active_id = self._active_account_id()
+        explicit = account_id not in (None, "")
+        target_id = str(account_id).strip() if explicit else active_id
+        if self._store is not None and explicit and not self._store.has(target_id):
+            return None, False, None
+        is_active = (not target_id) or (target_id == active_id)
+        engine = None
+        if is_active and self._engine is not None:
+            engine = self._engine
+        elif target_id and self._host is not None and hasattr(self._host, "engine_for"):
+            engine = self._host.engine_for(target_id)
+        return target_id, is_active, engine
 
-    def resume_safety(self):
+    def _sync_unblocked_status(self, account_id=None, *, safety=None):
+        if self._store is None:
+            return
+        target_id = account_id or (self._host.active_id if self._host is not None else "")
+        if not target_id or not self._store.has(target_id):
+            return
+        row = self._store.get(target_id)
+        blocked = bool((safety or {}).get("blocked"))
+        if not blocked and row.get("status") == "blocked":
+            next_status = "ok" if self._store.has_credentials(target_id) else "needs_login"
+            self._store.update(target_id, status=next_status)
+        if safety is not None:
+            acc_root = self._store.account_root(target_id)
+            update_json(
+                acc_root / "status.json",
+                lambda s: {**s, "safety": safety} if isinstance(s, dict) else {"safety": safety},
+                {},
+            )
+            last_snap = acc_root / "state" / "last-snapshot.json"
+            if last_snap.is_file():
+                update_json(
+                    last_snap,
+                    lambda s: {**s, "safety": safety} if isinstance(s, dict) else s,
+                    {},
+                )
+
+    def resume_safety(self, account_id=None):
+        explicit = account_id not in (None, "")
+
         def resume():
-            ok, message = self._engine.resume_safety(confirmed=True)
+            target_id, is_active, engine = self._safety_target(account_id)
+            if explicit and target_id is None:
+                return {"ok": False, "error": "未找到对应账号。"}
+            if engine is not None:
+                ok, message = engine.resume_safety(confirmed=True)
+                hold = engine.safety
+            else:
+                acc_root = self._account_root(target_id)
+                app = AppContext(acc_root)
+                ok, message = app.resume_safety(confirmed=True)
+                hold = app.safety_status()
             if ok:
-                self._sync_unblocked_status()
-                check_now = getattr(self._engine, "check_now", None)
-                if callable(check_now):
-                    check_now()
-            return {"ok": bool(ok), "message" if ok else "error": message}
+                self._sync_unblocked_status(target_id, safety=hold)
+                if is_active and self._engine is not None:
+                    check_now = getattr(self._engine, "check_now", None)
+                    if callable(check_now):
+                        check_now()
+            return {"ok": bool(ok), "hold": hold, "message" if ok else "error": message}
 
-        return self._run("safety", resume)
+        return self._run(
+            "account_safety" if explicit else "safety",
+            resume,
+            allow_without_engine=explicit,
+        )
 
-    def check_safety(self, auto_resume=False):
+    def check_safety(self, auto_resume=False, account_id=None):
+        explicit = account_id not in (None, "")
+
         def check():
-            result = self._engine.check_safety(auto_resume=bool(auto_resume))
-            if result.get("resumed") or not (result.get("hold") or {}).get("blocked"):
-                self._sync_unblocked_status()
+            target_id, is_active, engine = self._safety_target(account_id)
+            if explicit and target_id is None:
+                return {"ok": False, "error": "未找到对应账号。"}
+            if engine is not None:
+                result = engine.check_safety(auto_resume=bool(auto_resume))
+            else:
+                acc_root = self._account_root(target_id)
+                app = AppContext(acc_root)
+                result = app.probe_safety(auto=False, auto_resume=bool(auto_resume))
+            hold = result.get("hold") or {"blocked": False}
+            self._sync_unblocked_status(target_id, safety=hold)
+            if (result.get("resumed") or not hold.get("blocked")) and is_active and self._engine is not None:
                 check_now = getattr(self._engine, "check_now", None)
                 if callable(check_now):
                     check_now()
             return result
 
-        return self._run("safety_check", check)
+        return self._run(
+            "account_safety_check" if explicit else "safety_check",
+            check,
+            allow_without_engine=explicit,
+        )
+
+    def clear_room_block(self, room, capability=None):
+        target_room = _positive_id(room)
+        if target_room is None:
+            return {"ok": False, "error": "直播间号必须是正整数。"}
+        if capability not in (None, "", "danmaku", "like"):
+            return {"ok": False, "error": "未知的互动限制类型。"}
+        cap = capability or None
+
+        def clear():
+            ok, message = self._engine.clear_room_block(target_room, cap)
+            return {"ok": bool(ok), "message" if ok else "error": message}
+
+        return self._run("clear_room_block", clear)
 
     def open_safety_link(self, kind="live", room=None):
         try:
@@ -871,15 +954,28 @@ class Api:
             ok = False
         return {"ok": bool(ok), **({} if ok else {"error": "无法打开 B 站页面，请检查默认浏览器。"})}
 
+    def dismiss_task_error(self, room):
+        target_room = _positive_id(room)
+        if target_room is None:
+            return {"ok": False, "error": "直播间号必须是正整数。"}
+
+        def clear():
+            ok, message = self._engine.dismiss_task_error(target_room)
+            return {"ok": bool(ok), "message" if ok else "error": message}
+
+        return self._run("dismiss_task_error", clear)
+
     def redo(self, room, task_type="all"):
         if task_type not in ("all", "danmaku", "like"):
             return {"ok": False, "error": "未知任务类型，请重新选择。"}
 
         def redo(row):
             result = self._engine.application.redo(row["room"], row.get("uid"), task_type) or {}
+            record_result = getattr(self._engine, "record_task_result", None)
+            if callable(record_result):
+                record_result(row["room"], result)
             ok = bool(result.get("success"))
-            errors = [result.get("error")] + [(result.get(key) or {}).get("error") for key in ("danmaku", "like")]
-            detail = "；".join(str(error) for error in errors if error) or "任务进度尚未确认完成"
+            detail = format_task_errors(result) or "任务进度尚未确认完成"
             message = f"【{row.get('name', room)}】" + ("所选任务已确认完成" if ok else "任务未完成：" + detail)
             if ok:
                 self._engine.check_now()

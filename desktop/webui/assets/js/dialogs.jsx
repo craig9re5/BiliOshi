@@ -298,6 +298,19 @@ const DiagnosticModal = ({
   );
 };
 
+const formatCountdown = (targetSec, nowSec) => {
+  const diff = Math.max(0, Math.floor((targetSec || 0) - nowSec));
+  if (diff <= 0) return "即将执行";
+  const mins = Math.floor(diff / 60);
+  const secs = diff % 60;
+  if (mins >= 60) {
+    const hours = Math.floor(mins / 60);
+    return `约 ${hours} 小时 ${mins % 60} 分钟后`;
+  }
+  if (mins > 0) return `${mins} 分 ${String(secs).padStart(2, "0")} 秒后`;
+  return `${secs} 秒后`;
+};
+
 const SafetyModal = ({
   hold,
   account,
@@ -312,9 +325,14 @@ const SafetyModal = ({
 }) => {
   const dialogRef = useModalDialog(onClose);
   const info = hold || {};
-  const nowSec = Math.floor(Date.now() / 1000);
+  const [nowSec, setNowSec] = React.useState(() => Math.floor(Date.now() / 1000));
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   const cooldown = Boolean(info.blocked && info.until && info.until > nowSec);
   const needsLogin = info.kind === "auth" || info.kind === "credentials";
+  const canAct = Boolean(isActive || account?.id);
   const lastProbe = probeState?.result || info.last_probe || null;
   const checking = Boolean(probeState?.loading);
   const checks = Array.isArray(lastProbe?.checks) ? lastProbe.checks : [];
@@ -357,16 +375,22 @@ const SafetyModal = ({
         {cooldown && (
           <div className="safety-meta-item">
             <span>自动恢复时间</span>
-            <strong>{absoluteTime(info.until)}</strong>
+            <strong>{absoluteTime(info.until)}（{formatCountdown(info.until, nowSec)}）</strong>
           </div>
         )}
         {!cooldown && info.next_probe_at && (
           <div className="safety-meta-item">
             <span>下次自动复检</span>
             <strong>
-              {absoluteTime(info.next_probe_at)}
-              {typeof info.auto_recover_remaining === "number" && `（今日自动恢复剩余 ${info.auto_recover_remaining} 次）`}
+              {absoluteTime(info.next_probe_at)}（{formatCountdown(info.next_probe_at, nowSec)}）
+              {typeof info.auto_recover_remaining === "number" && ` · 今日自动恢复剩余 ${info.auto_recover_remaining} 次`}
             </strong>
+          </div>
+        )}
+        {info.pace_multiplier > 1 && (
+          <div className="safety-meta-item">
+            <span>今日防风控降频</span>
+            <strong>已自动放慢至 {info.pace_multiplier}× 互动发送间隔</strong>
           </div>
         )}
         {!cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && (
@@ -425,23 +449,23 @@ const SafetyModal = ({
         <button type="button" className="btn" onClick={() => dialogRef.current?.close()} disabled={busy || checking}>
           关闭
         </button>
-        {isActive && needsLogin && (
+        {canAct && needsLogin && (
           <button type="button" className="btn primary" onClick={() => { dialogRef.current?.close(); onScan(account?.id || ""); }} disabled={busy}>
             重新扫码登录
           </button>
         )}
-        {isActive && !needsLogin && !cooldown && (
+        {canAct && !needsLogin && !cooldown && (
           <>
             <button type="button" className="btn" onClick={onResume} disabled={busy || checking}>
               {busy ? "处理中…" : "确认已处理并恢复"}
             </button>
             <button type="button" className="btn primary" onClick={() => onCheck(true)} disabled={busy || checking}>
-              <Icon name="refresh" size={13} />
+              <Icon name="refresh" size={13} className={checking ? "spin" : ""} />
               {checking ? "检测中…" : "检测并自动恢复"}
             </button>
           </>
         )}
-        {!isActive && (
+        {!canAct && (
           <button type="button" className="btn primary" onClick={() => dialogRef.current?.close()}>
             知道了
           </button>

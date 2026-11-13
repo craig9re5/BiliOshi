@@ -74,6 +74,7 @@ class WebHost:
         self._watch_notice_day = None
         self._watch_notices = set()
         self._notified_safety_holds = {}
+        self._notified_room_blocks = set()
         self._last_tray_color = None
         self._last_zoomed = False
 
@@ -385,6 +386,7 @@ class WebHost:
                             self._update_tray(snapshot)
                             self._notify_watch_warnings(snapshot)
                             self._notify_safety_events(snapshot)
+                            self._notify_room_blocks(snapshot)
                         else:
                             self._ready.clear()
                         next_snapshot = now + PUSH_INTERVAL
@@ -647,7 +649,7 @@ class WebHost:
                     prefix = f"【{acct}】" if acct else ""
                     msg = f"{prefix}账号保护状态已解除，挂机监控已恢复。"
                     self._notify(msg, "ビリ推し · 保护暂停已解除")
-                    self.emit("toast", {"message": msg, "kind": "info"})
+                    self.emit("toast", {"message": msg, "tone": "info"})
             return
         kind = safety.get("kind") or "review"
         if kind == "network":
@@ -669,7 +671,25 @@ class WebHost:
         elif safety.get("until"):
             msg += f"（预计 {time.strftime('%H:%M:%S', time.localtime(safety['until']))} 恢复）"
         self._notify(msg, title)
-        self.emit("toast", {"message": msg, "kind": "error"})
+        self.emit("toast", {"message": msg, "tone": "error"})
+
+    def _notify_room_blocks(self, snap):
+        account_id = snap.get("active_account_id") or ""
+        current = set()
+        for row in snap.get("rows", []):
+            for block in row.get("room_blocks") or []:
+                if not isinstance(block, dict):
+                    continue
+                key = (account_id, str(block.get("room")), block.get("kind"), block.get("since"))
+                current.add(key)
+                if key in self._notified_room_blocks:
+                    continue
+                self._notified_room_blocks.add(key)
+                name = row.get("name") or block.get("room")
+                msg = f"【{name}】{block.get('reason', '该直播间互动权限受限，不影响看播')}"
+                self._notify(msg, "ビリ推し · 单房间权限降级")
+                self.emit("toast", {"message": msg, "tone": "warn"})
+        self._notified_room_blocks.intersection_update(current)
 
 
 def _js(value):

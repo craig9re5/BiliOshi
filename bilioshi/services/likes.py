@@ -116,7 +116,7 @@ def report_live_likes(
     try:
         resp = send_paced(send,
                           lock_path=data_dir() / "locks" / f"like-send-{safety.identity(sessdata)}.lock",
-                          min_interval=current_profile().like_send_seconds)
+                          min_interval=current_profile().like_send_seconds * safety.pace_multiplier(sessdata))
     except TimeoutError:
         raise TaskDeferred("点赞队列繁忙，等待下次检查")
     return {"success": resp.get("code") == 0,

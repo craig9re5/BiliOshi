@@ -279,6 +279,12 @@ class _DiagnosticSession:
         self.check("system theme clears stored override", eval_js(
             "document.querySelector('meta[name=\"color-scheme\"]')?.content === 'light dark'"
             " && localStorage.getItem('bilioshi.theme') === null"))
+        self.click('.theme-option[data-day-theme="mist"]')
+        self.wait("document.documentElement.dataset.dayTheme === 'mist'")
+        self.check("system day theme updates attribute", eval_js("localStorage.getItem('bilioshi.dayTheme') === 'mist'"))
+        self.click('.theme-option[data-day-theme="white"]')
+        self.wait("document.documentElement.dataset.dayTheme === 'white'")
+        self.check("default day theme clears stored override", eval_js("localStorage.getItem('bilioshi.dayTheme') === null"))
         self.click(f'.theme-option[data-theme="{original_theme}"]')
         self.wait(f"document.documentElement.dataset.theme === {json.dumps(original_theme)}")
         expected_storage = "null" if original_theme == "system" else json.dumps(original_theme)

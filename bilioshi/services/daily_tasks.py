@@ -122,7 +122,9 @@ class DailyTaskRunner:
                     and (deadline is None or time.monotonic() < deadline)):
                 hold = safety.status(self.sessdata, self.root)
                 if hold["blocked"]:
-                    output.update(success=False, error=hold["reason"], safety=hold)
+                    output.update(success=False, safety=hold)
+                    if not safety.format_task_errors(output):
+                        output["error"] = hold["reason"]
                 else:
                     self._check_like(saved, output, like_batches)
             saved.update(
@@ -131,7 +133,9 @@ class DailyTaskRunner:
             self.gateway.write_json(self.path, saved)
             hold = safety.status(self.sessdata, self.root)
             if hold["blocked"]:
-                output.update(success=False, error=hold["reason"], safety=hold)
+                output.update(success=False, safety=hold)
+                if not safety.format_task_errors(output):
+                    output["error"] = hold["reason"]
         self.gateway._log({"type": "task_check", "room_id": self.room, "day": day, **output})
         return output
 
@@ -140,6 +144,16 @@ class DailyTaskRunner:
         saved.pop("like_context", None)
 
     def _check_danmaku(self, saved, output, deadline=None):
+        room_block = safety.room_capability_blocked(self.sessdata, self.room, "danmaku", self.root)
+        if room_block:
+            output["danmaku"] = {
+                "done": False,
+                "skipped": True,
+                "room_blocked": True,
+                "error": room_block["reason"],
+            }
+            output["success"] = False
+            return
         used = saved.get("attempted", 0)
         allowance = min(
             self.gateway.DANMAKU_ATTEMPTS_PER_CHECK,
@@ -183,6 +197,17 @@ class DailyTaskRunner:
         output["success"] = output["success"] and self.danmaku_done
 
     def _check_like(self, saved, output, batches=None):
+        room_block = safety.room_capability_blocked(self.sessdata, self.room, "like", self.root)
+        if room_block:
+            output["like"] = {
+                "success": False,
+                "done": False,
+                "skipped": True,
+                "room_blocked": True,
+                "error": room_block["reason"],
+            }
+            output["success"] = False
+            return
         # The HTTP boundary reserves the actual POST budget. A read, a deferred
         # check, or a completed task must not spend a legacy five-batch allowance.
         batches = batches if batches is not None else self.like_batches

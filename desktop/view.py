@@ -297,6 +297,7 @@ class TrayUI:
             self._render_footer(snap)
             self._notify_watch_warnings(snap)
             self._notify_safety_events(snap)
+            self._notify_room_blocks(snap)
         except Exception:
             logging.exception("Desktop refresh failed")
             self.ui_error = "界面刷新失败，正在自动重试。"
@@ -691,3 +692,27 @@ class TrayUI:
             )
         except Exception:
             logging.exception("Safety notification failed")
+
+    def _notify_room_blocks(self, snap):
+        if not getattr(self, "tray", None):
+            return
+        seen = self.safety_notices.setdefault("rooms", set())
+        current = set()
+        for row in snap.get("rows", []):
+            for block in row.get("room_blocks") or []:
+                if not isinstance(block, dict):
+                    continue
+                key = (str(block.get("room")), block.get("kind"), block.get("since"))
+                current.add(key)
+                if key in seen:
+                    continue
+                seen.add(key)
+                name = row.get("name") or block.get("room")
+                try:
+                    self.tray.notify(
+                        f"【{name}】{block.get('reason', '该直播间互动权限受限，不影响看播')}",
+                        title="ビリ推し · 单房间权限降级",
+                    )
+                except Exception:
+                    logging.exception("Room safety notification failed")
+        seen.intersection_update(current)

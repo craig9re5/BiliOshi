@@ -18,8 +18,10 @@ from .redaction import redact
 
 RATE_COOLDOWN = 300
 NETWORK_COOLDOWN = 60
+ROOM_CAPABILITY_COOLDOWN = 43200
+ACCOUNT_BAN_WORDS = ("封禁", "封号", "冻结", "注销")
 AUTO_PROBE_DELAYS = {
-    "uncertain": (120, 300, 600),
+    "uncertain": (60, 180, 300),
     "review": (900, 1800, 3600),
 }
 AUTO_RECOVER_DAILY_LIMIT = {
@@ -102,7 +104,7 @@ def describe_hold(hold, members=None):
         steps = [
             f"刚才在{room_desc or '直播间'}执行「{op_label or '互动操作'}」时遇到网络超时或服务端异常，为避免重复发送已暂时停机。",
             "可打开直播间或粉丝团任务面板，确认今日弹幕/点赞计数是否已实际到账。",
-            "程序会在约 2 分钟后自动做只读复检并尝试恢复；你也可以直接点击下方「检测是否已恢复」。",
+            "程序会在约 1 分钟后自动做只读复检并尝试恢复；你也可以直接点击下方「检测是否已恢复」。",
         ]
         action_url = f"https://live.bilibili.com/{room_id}" if room_id else "https://live.bilibili.com/"
         action_label = "打开触发直播间" if room_id else "打开 B 站直播"
@@ -167,6 +169,49 @@ def blocked_response(hold):
         "safety": hold,
         "success": False,
     }
+
+
+def _is_safety_entry(entry):
+    if not isinstance(entry, dict):
+        return False
+    return bool(
+        entry.get("error_kind") == "safety"
+        or (isinstance(entry.get("safety"), dict) and entry["safety"].get("blocked"))
+    )
+
+
+def format_task_errors(result, *, separator="；", skip_kinds=(), suppress_safety=False):
+    """Collect unique non-empty error messages from a task check result."""
+    if not isinstance(result, dict) or result.get("dismissed"):
+        return ""
+    skip = set(skip_kinds or ())
+    safety_info = result.get("safety") if isinstance(result.get("safety"), dict) else {}
+    safety_reason = str(safety_info.get("reason") or "").strip()
+
+    def _entry_text(entry, allow_top_safety=False):
+        if not isinstance(entry, dict):
+            return ""
+        text = str(entry.get("error") or "").strip()
+        if not text:
+            return ""
+        if suppress_safety and (
+            _is_safety_entry(entry)
+            or (allow_top_safety and _is_safety_entry(result))
+            or (safety_reason and text == safety_reason)
+            or text.startswith("操作结果未知")
+        ):
+            return ""
+        return text
+
+    seen = []
+    candidates = [_entry_text(result, allow_top_safety=True)]
+    for key in ("danmaku", "like"):
+        if key not in skip:
+            candidates.append(_entry_text(result.get(key), allow_top_safety=False))
+    for text in candidates:
+        if text and text not in seen:
+            seen.append(text)
+    return separator.join(seen)
 
 
 def bind_account(sessdata, uid, root=None):
@@ -262,11 +307,130 @@ def classify(response):
         )
     ):
         return "rate", "收到频率限制，账号操作已冷却", RATE_COOLDOWN
-    if code in (403, -403) or any(word in message for word in ("禁言", "权限不足", "封禁")):
+    if code in (403, -403) or any(
+        word in message
+        for word in ("禁言", "权限不足", "封禁", "黑名单", "等级不足", "仅粉丝")
+    ):
         return "permission", "收到权限或禁言限制，请先在平台确认账号状态", None
     if code in (412, -412, -352) or any(word in message for word in ("验证码", "安全验证", "风控")):
         return "review", "收到验证或异常拒绝，请在平台检查后手动恢复", None
     return None
+
+
+def pace_multiplier(sessdata, root=None):
+    """Slow down same-day write cadence after recent rate or review triggers."""
+    if not sessdata:
+        return 1.0
+    value = read_json(_path(identity(sessdata, root), root), {})
+    hits = int((value.get("counts") or {}).get(f"{task_day()}:risk_hits", 0) or 0)
+    if hits >= 2:
+        return 3.0
+    if hits == 1:
+        return 2.0
+    return 1.0
+
+
+def _prune_room_blocks(blocks, now, today):
+    return {
+        k: v
+        for k, v in (blocks or {}).items()
+        if isinstance(v, dict) and v.get("day") == today and (not v.get("until") or now < v["until"])
+    }
+
+
+def block_room_capability(
+    sessdata,
+    room,
+    op_kind,
+    reason,
+    *,
+    code=-1,
+    seconds=ROOM_CAPABILITY_COOLDOWN,
+    raw_message="",
+    root=None,
+):
+    """Pause one interaction capability in a single room without stopping account watching."""
+    now = time.time()
+    today = task_day()
+    room_str = str(room or "").strip()
+    if not room_str or not op_kind:
+        return {}
+    clean_raw = redact(str(raw_message or "")).strip()[:160]
+    key = f"{room_str}:{op_kind}"
+    entry = {
+        "room": room_str,
+        "kind": op_kind,
+        "kind_label": OPERATION_LABELS.get(op_kind, op_kind),
+        "code": code,
+        "reason": reason,
+        "raw_message": clean_raw,
+        "since": now,
+        "until": now + seconds if seconds else None,
+        "day": today,
+    }
+    added = []
+
+    def change(current):
+        blocks = _prune_room_blocks(current.get("room_blocks"), now, today)
+        if key not in blocks:
+            added.append(entry)
+        else:
+            entry["since"] = blocks[key].get("since", now)
+        blocks[key] = entry
+        current["room_blocks"] = blocks
+        return current
+
+    result = update_json(_path(identity(sessdata, root), root), change, {}).get("room_blocks") or {}
+    if added:
+        append_event(
+            _root(root) / "logs/activity.jsonl",
+            {
+                "type": "room_capability_blocked",
+                "room": room_str,
+                "capability": op_kind,
+                "code": code,
+                "until": entry["until"],
+            },
+        )
+    return result.get(key, {})
+
+
+def room_blocks(sessdata, root=None):
+    if not sessdata:
+        return {}
+    value = read_json(_path(identity(sessdata, root), root), {})
+    return _prune_room_blocks(value.get("room_blocks"), time.time(), task_day())
+
+
+def room_capability_blocked(sessdata, room, op_kind, root=None):
+    room_str = str(room or "").strip()
+    if not room_str or not op_kind:
+        return {}
+    return room_blocks(sessdata, root).get(f"{room_str}:{op_kind}", {})
+
+
+def clear_room_block(sessdata, room, op_kind=None, root=None):
+    room_str = str(room or "").strip()
+    if not sessdata or not room_str:
+        return False
+    removed = []
+
+    def change(current):
+        blocks = dict(current.get("room_blocks") or {})
+        targets = [f"{room_str}:{op_kind}"] if op_kind else [k for k in blocks if k.startswith(f"{room_str}:")]
+        for k in targets:
+            if k in blocks:
+                removed.append(blocks.pop(k))
+        current["room_blocks"] = blocks
+        return current
+
+    update_json(_path(identity(sessdata, root), root), change, {})
+    if removed:
+        append_event(
+            _root(root) / "logs/activity.jsonl",
+            {"type": "room_capability_cleared", "room": room_str, "capability": op_kind or "all"},
+        )
+    return bool(removed)
 
 
 def hold_account(
@@ -299,7 +463,14 @@ def hold_account(
         if same_active:
             return current
         if not permanent or kind in ("review", "permission"):
-            counts = current.get("counts") or {}
+            counts = {
+                name: n
+                for name, n in (current.get("counts") or {}).items()
+                if name.startswith(today + ":")
+            }
+            if kind in ("rate", "review"):
+                counts[f"{today}:risk_hits"] = int(counts.get(f"{today}:risk_hits", 0) or 0) + 1
+                current["counts"] = counts
             recovered_today = int(counts.get(f"{today}:auto_recover:{kind}", 0) or 0)
             probe_delay = None if seconds else _next_probe_delay(kind, 0, recovered_today)
             hold = {
@@ -344,7 +515,9 @@ def hold_account(
 def operation(url, data, method):
     parsed = urlsplit(url)
     params = parse_qs(parsed.query)
-    if isinstance(data, bytes):
+    if isinstance(data, dict):
+        params.update({str(key): [str(value)] for key, value in data.items()})
+    elif isinstance(data, bytes):
         body = data.decode("utf-8", errors="replace")
         try:
             payload = json.loads(body)
@@ -376,6 +549,10 @@ def reserve(sessdata, op):
         return blocked_response(hold)
     if op["kind"] not in ("danmaku", "like"):
         return None
+    if op.get("room"):
+        room_hold = room_capability_blocked(sessdata, op["room"], op["kind"])
+        if room_hold:
+            return blocked_response({**room_hold, "kind": "room_permission"})
     counter = f"{task_day()}:{op['room']}:{op['kind']}"
     limit = DANMAKU_SESSION_ATTEMPT_LIMIT if op["kind"] == "danmaku" else LIVE_LIKE_BATCHES * 3
     allowed = [False]
@@ -435,11 +612,27 @@ def observe(sessdata, url, response, *, mutation=False, op=None):
             )
     elif decision:
         kind, reason, delay = decision
+        op_info = op or operation(url, None, "POST" if mutation else "GET")
+        raw_msg = str(response.get("message", ""))
+        if (
+            kind == "permission"
+            and op_info.get("room")
+            and op_info.get("kind") in ("danmaku", "like")
+            and not any(word in raw_msg for word in ACCOUNT_BAN_WORDS)
+        ):
+            block_room_capability(
+                sessdata,
+                op_info["room"],
+                op_info["kind"],
+                "该直播间互动权限受限（禁言或发言限制），已仅暂停此房操作，不影响看播与其他主播",
+                code=response.get("code", -1),
+                raw_message=raw_msg,
+            )
+            return
         if kind == "rate" and response.get("retry_after"):
             delay = max(delay, response["retry_after"])
         hold_account(sessdata, kind, reason, code=response.get("code"), seconds=delay,
-                     operation=op or operation(url, None, "POST" if mutation else "GET"),
-                     raw_message=response.get("message", ""))
+                     operation=op_info, raw_message=raw_msg)
 
 
 def record_probe(sessdata, checks, *, passed, summary="", auto=False, root=None):

@@ -4,15 +4,25 @@ const { useState, useEffect, useRef, useCallback } = React;
 const { Icon, Pulse, call, bridgeReady, toRoom } = window;
 const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false,
   notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false };
-const THEME_KEYS = ["system", "white", "paper", "mist", "apricot", "dark"];
+const THEME_KEYS = ["system", "white", "paper", "mist", "dark"];
+const DAY_THEME_KEYS = ["white", "paper", "mist"];
+const normalizeThemeKey = (value, allowed, fallback) => {
+  const mapped = value === "apricot" ? "paper" : value;
+  return allowed.includes(mapped) ? mapped : fallback;
+};
 const applyDocumentTheme = (value) => {
-  const theme = THEME_KEYS.includes(value) ? value : "system";
+  const theme = normalizeThemeKey(value, THEME_KEYS, "system");
   document.documentElement.dataset.theme = theme;
   const meta = document.querySelector('meta[name="color-scheme"]');
   if (meta) {
     meta.content = theme === "dark" ? "dark" : theme === "system" ? "light dark" : "light";
   }
   return theme;
+};
+const applyDocumentDayTheme = (value) => {
+  const dayTheme = normalizeThemeKey(value, DAY_THEME_KEYS, "white");
+  document.documentElement.dataset.dayTheme = dayTheme;
+  return dayTheme;
 };
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
@@ -95,10 +105,12 @@ const SidebarToggle = ({ collapsed, onToggle }) => (
 
 function App() {
   const [page, setPage] = useState("monitor");
-  const [theme, setTheme] = useState(() => {
-    const current = document.documentElement.dataset.theme;
-    return THEME_KEYS.includes(current) ? current : "system";
-  });
+  const [theme, setTheme] = useState(() =>
+    normalizeThemeKey(document.documentElement.dataset.theme, THEME_KEYS, "system")
+  );
+  const [dayTheme, setDayTheme] = useState(() =>
+    normalizeThemeKey(document.documentElement.dataset.dayTheme, DAY_THEME_KEYS, "white")
+  );
   const chooseTheme = useCallback((value) => {
     if (!THEME_KEYS.includes(value)) return;
     setTheme(applyDocumentTheme(value));
@@ -107,10 +119,21 @@ function App() {
       else window.localStorage.setItem("bilioshi.theme", value);
     } catch {}
   }, []);
+  const chooseDayTheme = useCallback((value) => {
+    if (!DAY_THEME_KEYS.includes(value)) return;
+    setDayTheme(applyDocumentDayTheme(value));
+    try {
+      if (value === "white") window.localStorage.removeItem("bilioshi.dayTheme");
+      else window.localStorage.setItem("bilioshi.dayTheme", value);
+    } catch {}
+  }, []);
   useEffect(() => {
     const onStorage = (event) => {
-      if (event.key !== "bilioshi.theme") return;
-      setTheme(applyDocumentTheme(event.newValue || "system"));
+      if (event.key === "bilioshi.theme") {
+        setTheme(applyDocumentTheme(event.newValue || "system"));
+      } else if (event.key === "bilioshi.dayTheme") {
+        setDayTheme(applyDocumentDayTheme(event.newValue || "white"));
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -573,10 +596,12 @@ function App() {
     });
   };
 
-  const checkSafety = async (autoResume = true) => {
+  const checkSafety = async (autoResume = true, accountId = null) => {
     setSafetyProbe((prev) => ({ ...prev, loading: true }));
+    const targetId = accountId || null;
     try {
-      const result = await invoke("check_safety", [Boolean(autoResume)]);
+      const args = targetId ? [Boolean(autoResume), targetId] : [Boolean(autoResume)];
+      const result = await invoke("check_safety", args);
       if (!alive.current) return;
       const probeResult = {
         passed: Boolean(result?.passed),
@@ -594,6 +619,7 @@ function App() {
         await refresh();
       } else if (result && result.passed === false) {
         toast(result.summary || "只读自检未通过", "error");
+        await refresh();
       }
     } catch {
       if (alive.current) {
@@ -603,6 +629,11 @@ function App() {
   };
 
   const openSafetyLink = (kind, room) => invoke("open_safety_link", [kind || "live", room || null]);
+
+  const clearRoomBlock = async (room, capability = null) => {
+    const result = await invoke("clear_room_block", [room, capability || null], "已解除该直播间互动限制");
+    if (result?.ok) await refresh();
+  };
 
   const switchAccount = async (accountId) => {
     if (!accountId) return;
@@ -638,7 +669,10 @@ function App() {
       let result;
       if (kind === "remove") result = await invoke("remove_member", [dialog.room.room], `已移除 ${dialog.room.name}`);
       else if (kind === "logout") { closeQr(); result = await invoke("logout", [dialog.account?.id || ""], "已退出登录"); }
-      else if (kind === "safety") result = await invoke("resume_safety", [], "保护暂停已解除");
+      else if (kind === "safety") {
+        const args = dialog.account?.id ? [dialog.account.id] : [];
+        result = await invoke("resume_safety", args, "保护暂停已解除");
+      }
       else if (kind === "quit") result = await invoke("quit");
       else if (kind === "switch") {
         result = await invoke("switch_account", [dialog.account.id]);
@@ -697,9 +731,12 @@ function App() {
     ? (dialog.account.id === activeId ? (accountAvatar || accountAvatars[dialog.account.id]) : accountAvatars[dialog.account.id])
     : "";
   const safetyAccount = dialog?.type === "safety"
-    ? (dialog.account || accounts.find((item) => item.id === activeId) || null)
+    ? ((dialog.account?.id && accounts.find((item) => item.id === dialog.account.id))
+       || dialog.account
+       || accounts.find((item) => item.id === activeId)
+       || null)
     : null;
-  const isSafetyActive = !safetyAccount || !activeId || safetyAccount.id === activeId;
+  const isSafetyActive = Boolean(!safetyAccount || (activeId && safetyAccount.id === activeId));
   const safetyHold = isSafetyActive
     ? snap.safety
     : (safetyAccount?.safety?.blocked ? safetyAccount.safety : { blocked: true, kind: "review", reason: "该账号处于保护暂停状态" });
@@ -736,11 +773,12 @@ function App() {
           error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
           interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
           images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected}
-          onBatchRemove={batchRemove} />}
+          onBatchRemove={batchRemove} onClearRoomBlock={clearRoomBlock} />}
         {page === "growth" && <window.GrowthPage viewId={activeId} images={images} onNeedAvatar={fetchAvatar}
           onOpenAccount={() => setPage("account")} onOpenMonitor={() => setPage("monitor")} />}
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
           pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme}
+          dayTheme={dayTheme} onDayTheme={chooseDayTheme}
           scope={accounts.find((item) => item.id === activeId) || null} scopeAll={false}
           onLogs={() => invoke("open_logs", [activeId])}
           onHostLogs={() => invoke("open_logs", [""])}
@@ -779,7 +817,7 @@ function App() {
       {dialog?.type === "safety" && <window.SafetyModal
         hold={safetyHold} account={safetyAccount} isActive={isSafetyActive}
         probeState={safetyProbe} busy={dialogBusy}
-        onCheck={checkSafety} onResume={confirmAction}
+        onCheck={(autoResume) => checkSafety(autoResume, safetyAccount?.id)} onResume={confirmAction}
         onOpenLink={openSafetyLink} onScan={openQr} onClose={closeDialog} />}
       {dialog?.type && dialogCopy[dialog.type] && <window.ConfirmModal {...dialogCopy[dialog.type]}
         body={dialog.type === "switch" || dialog.type === "logout" || dialog.type === "removeAccount"

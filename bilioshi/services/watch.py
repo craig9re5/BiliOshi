@@ -464,10 +464,7 @@ def _run_tasks(task_runner, room_id, _gateway, deadline=None, like_batches=None,
             options["likes_only"] = True
         result = task_runner.check(**options)
         if not result["success"]:
-            errors = [result.get("error")] + [
-                (result.get(k) or {}).get("error") for k in ("danmaku", "like")
-            ]
-            detail = "；".join(e for e in errors if e)
+            detail = safety.format_task_errors(result)
             if detail:
                 print("    ⚠️  " + detail, file=sys.stderr)
         return result

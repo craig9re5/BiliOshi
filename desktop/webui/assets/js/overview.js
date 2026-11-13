@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"330b04187ab9d0490330b201ae15c2c923b0c0396f13e56cbafa271c78d42531","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"c0248df83f11f627bc4e1e74b1e78afbc2c914967a0e6812366636943153d864"} */
+/* BiliOshi JSX {"code_sha256":"a8360a7143b13bc1e0245955bd96164ef8d6fca762375ea4235181c195225409","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"607ab3c04e0209b5850fcb9e83bbbcb4b29ab518ee20ce8a1bfa36f54039e38b"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -75,6 +75,7 @@ const DetailPanel = ({
   onAction,
   onOpen,
   onMore,
+  onClearRoomBlock,
   dimmed
 }) => {
   const classes = `detail card${dimmed ? " detail-dim" : ""}`;
@@ -178,7 +179,21 @@ const DetailPanel = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "info",
     size: 14
-  }), /*#__PURE__*/React.createElement("span", null, note)), room.reconnect_message && /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("span", null, note)), Array.isArray(room.room_blocks) && room.room_blocks.map(block => /*#__PURE__*/React.createElement("div", {
+    className: "notice notice-action",
+    key: `${block.kind || "cap"}-${block.since || 0}`,
+    role: "status"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "alert",
+    size: 14
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "notice-body"
+  }, /*#__PURE__*/React.createElement("strong", null, block.kind_label || "单房间互动受限"), /*#__PURE__*/React.createElement("span", null, block.reason || "该直播间互动权限受限，不影响挂机看播。")), onClearRoomBlock && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    disabled: pending,
+    onClick: () => onClearRoomBlock(room.room, block.kind || null)
+  }, "\u89E3\u9664\u9650\u5236"))), room.reconnect_message && /*#__PURE__*/React.createElement("div", {
     className: "inline-status",
     role: "status"
   }, room.reconnect_message), /*#__PURE__*/React.createElement("section", {
@@ -279,7 +294,8 @@ const Overview = ({
   signedIn,
   closing,
   bridgeConnected,
-  onBatchRemove
+  onBatchRemove,
+  onClearRoomBlock
 }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
@@ -414,6 +430,7 @@ const Overview = ({
     busy: busyRoom === selected?.room,
     onAction: onAction,
     onOpen: onOpen,
+    onClearRoomBlock: onClearRoomBlock,
     dimmed: managing,
     onMore: event => {
       if (!selected) return;

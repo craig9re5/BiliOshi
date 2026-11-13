@@ -13,7 +13,8 @@ import uuid
 from pathlib import Path
 from desktop.storage import load_config, read_json, write_json, read_status
 from desktop.windows import Job
-from bilioshi.runtime import update_json, append_event
+from bilioshi.runtime import update_json, append_event, task_day
+from bilioshi.safety import format_task_errors
 from bilioshi.growth import record_samples
 from bilioshi.operating_mode import profile_for
 try:
@@ -68,6 +69,7 @@ class Engine:
         self.account = ""
         self.account_checked_at = 0
         self.safety = {"blocked": False}
+        self.room_blocks = {}
         self.statuses = {}
         self.status_times = {}
         self.status_errors = {}
@@ -360,6 +362,7 @@ class Engine:
                 self._was_safety_blocked = False
                 self.error = ""
                 self.next_check = 0
+                self._clear_safety_task_results()
             self.persist()
             return ok, message
 
@@ -367,12 +370,114 @@ class Engine:
         with self.lock:
             result = self.application.probe_safety(auto=False, auto_resume=auto_resume)
             self.safety = result.get("hold") or self.application.safety_status()
+            self.room_blocks = self.application.room_safety_blocks()
             if not self.safety.get("blocked"):
                 self._was_safety_blocked = False
                 self.error = ""
                 self.next_check = 0
+                self._clear_safety_task_results()
             self.persist()
             return result
+
+    def _update_room_task_result(self, room, updater):
+        path = self.root / "state" / f"{room}.json"
+        if not path.is_file():
+            return False
+
+        def change(current):
+            if not isinstance(current, dict):
+                return current
+            task_result = current.get("task_result")
+            if not isinstance(task_result, dict):
+                return current
+            updated = updater(dict(task_result))
+            return {**current, "task_result": updated}
+
+        try:
+            update_json(path, change, {})
+            return True
+        except (OSError, ValueError):
+            logging.warning("Cannot update room task result room=%s", room)
+            return False
+
+    def _clear_safety_task_results(self):
+        def strip_safety(task_result):
+            if not format_task_errors(task_result):
+                return task_result
+            remaining = format_task_errors(task_result, suppress_safety=True)
+            if not remaining:
+                return {**task_result, "error": "", "dismissed": True}
+            out = {**task_result, "error": remaining}
+            for key in ("danmaku", "like"):
+                branch = out.get(key)
+                if isinstance(branch, dict) and branch.get("error"):
+                    if not format_task_errors({key: branch}, suppress_safety=True):
+                        out[key] = {**branch, "error": ""}
+            return out
+
+        for member in list(self.members):
+            self._update_room_task_result(member["room"], strip_safety)
+
+    def record_task_result(self, room, result):
+        with self.lock:
+            path = self.root / "state" / f"{room}.json"
+            payload = dict(result or {})
+            payload.setdefault("day", task_day())
+
+            def change(current):
+                base = dict(current) if isinstance(current, dict) else {"room": room}
+                base["task_result"] = payload
+                base["task_updated"] = time.time()
+                return base
+
+            try:
+                update_json(path, change, {})
+            except (OSError, ValueError):
+                logging.warning("Cannot save room task result room=%s", room)
+
+    def dismiss_task_error(self, room):
+        with self.lock:
+            if not any(m["room"] == room for m in self.members):
+                return False, "该直播间已不在关注列表中。"
+
+            def clear_error(task_result):
+                out = {**task_result, "dismissed": True}
+                out.pop("error", None)
+                for key in ("danmaku", "like"):
+                    branch = out.get(key)
+                    if isinstance(branch, dict) and "error" in branch:
+                        updated_branch = dict(branch)
+                        updated_branch.pop("error", None)
+                        out[key] = updated_branch
+                return out
+
+            self._update_room_task_result(room, clear_error)
+            self.persist()
+            return True, "已清除该直播间的任务提示。"
+
+    def clear_room_block(self, room, capability=None):
+        with self.lock:
+            ok, message = self.application.clear_room_safety_block(room, capability)
+            self.room_blocks = self.application.room_safety_blocks()
+            if ok:
+                targets = (capability,) if capability else ("danmaku", "like")
+
+                def strip_room_block(task_result):
+                    out = dict(task_result)
+                    for key in targets:
+                        branch = out.get(key)
+                        if isinstance(branch, dict) and branch.get("room_blocked"):
+                            if out.get("error") == branch.get("error"):
+                                out.pop("error", None)
+                            cleaned = dict(branch)
+                            cleaned.pop("error", None)
+                            cleaned.pop("room_blocked", None)
+                            out[key] = cleaned
+                    return out
+
+                self._update_room_task_result(room, strip_room_block)
+            self.persist()
+            return ok, message
 
     def close(self):
         self.stopping.set()
@@ -519,6 +624,7 @@ class Engine:
         self.reload_settings()
         now = time.time()
         self.safety = self.application.safety_status()
+        self.room_blocks = self.application.room_safety_blocks()
         if self.safety["blocked"]:
             self._was_safety_blocked = True
             if self.safety.get("kind") in ("auth", "credentials"):
@@ -545,6 +651,7 @@ class Engine:
                     self._was_safety_blocked = False
                     self.error = ""
                     self.next_check = 0
+                    self._clear_safety_task_results()
                     self.persist()
                     self._watch_workers(now)
                     return
@@ -566,6 +673,7 @@ class Engine:
             self._was_safety_blocked = False
             self.error = ""
             self.next_check = 0
+            self._clear_safety_task_results()
             self.persist()
         self._watch_workers(now)
         if self.probe:

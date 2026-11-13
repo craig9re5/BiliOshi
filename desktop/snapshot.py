@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 import os
 import time
 from bilioshi.runtime import APP_VERSION, task_day
-from bilioshi.safety import describe_hold
+from bilioshi.safety import describe_hold, format_task_errors
 from bilioshi.services.watch_progress import CHECK_INTERVAL, parse_watch_task
 
 
@@ -66,13 +66,28 @@ def project_row(engine, member, state, now):
     medals_stale = tasks_stale
     live_time_val = live_info.get("live_time")
     live_duration = elapsed_label(live_status, live_time_val, now)
-    task_result = state.get("task_result", {})
-    task_errors = [task_result.get("error")] + [
-        (task_result.get(k) or {}).get("error") for k in ("danmaku", "like")
+    safety = getattr(engine, "safety", {})
+    safety_blocked = bool(safety.get("blocked"))
+    room_blocks = [
+        item
+        for item in (getattr(engine, "room_blocks", None) or {}).values()
+        if isinstance(item, dict) and str(item.get("room")) == str(room)
     ]
+    task_result = state.get("task_result") or {}
+    blocked_caps = {
+        item.get("kind")
+        for item in room_blocks
+        if (task_result.get(item.get("kind") or "") or {}).get("room_blocked")
+    }
     task_error = (
-        "；".join((str(e) for e in task_errors if e))
+        format_task_errors(
+            task_result,
+            skip_kinds=blocked_caps,
+            suppress_safety=not safety_blocked,
+        )
         if task_result.get("day") == task_day()
+        and not task_result.get("success")
+        and not task_result.get("dismissed")
         else ""
     )
     active = room in engine.workers and engine.workers[room].poll() is None
@@ -111,8 +126,7 @@ def project_row(engine, member, state, now):
     if state.get("state_error"):
         phase = "状态记录异常"
         task_error = state["state_error"]
-    safety = getattr(engine, "safety", {})
-    if safety.get("blocked"):
+    if safety_blocked:
         phase = "账号保护暂停"
         task_error = safety.get("reason", "需要处理账号异常")
     recovery = getattr(engine, "manual_reconnects", {}).get(room, {})
@@ -147,6 +161,7 @@ def project_row(engine, member, state, now):
     return {
         **member,
         "phase": phase,
+        "room_blocks": room_blocks,
         "active": active,
         "status_stale": status_stale,
         "status_error": query_error,

@@ -33,10 +33,16 @@ def send_danmaku_batch(
     sent_ok = 0
     attempted = 0
     limit = max_attempts if max_attempts is not None else count + min(count, 3)
+    pace_mult = safety.pace_multiplier(sessdata)
+    effective_delay = delay * pace_mult if delay > 0 and pace_mult > 1.0 else delay
     with task_window(deadline):
         try:
             for i in range(max(0, limit)):
-                if safety.status(sessdata)["blocked"] or sent_ok >= count:
+                if (
+                    safety.status(sessdata)["blocked"]
+                    or safety.room_capability_blocked(sessdata, room_id, "danmaku")
+                    or sent_ok >= count
+                ):
                     break
                 check_window()
                 msg = available[i % len(available)]
@@ -45,10 +51,12 @@ def send_danmaku_batch(
                 if accepted:
                     sent_ok += 1
                     used.add(msg)
-                elif safety.status(sessdata)["blocked"]:
+                elif safety.status(sessdata)["blocked"] or safety.room_capability_blocked(
+                    sessdata, room_id, "danmaku"
+                ):
                     break
-                if delay > 0 and sent_ok < count and (i + 1 < limit):
-                    wait(delay)
+                if effective_delay > 0 and sent_ok < count and (i + 1 < limit):
+                    wait(effective_delay)
         except TaskDeferred:
             pass
     return (sent_ok, used, attempted)
@@ -152,6 +160,18 @@ class MedalDanmakuTask:
         self.progress = None
         self.is_lighted = None
         self.progress_before = "未知"
+        room_block = safety.room_capability_blocked(self.sessdata, self.room_id, "danmaku")
+        if room_block:
+            return {
+                "light_sent": 0,
+                "intimacy_sent": 0,
+                "total_sent": 0,
+                "attempted": 0,
+                "done": False,
+                "skipped": True,
+                "room_blocked": True,
+                "error": room_block.get("reason", "该直播间弹幕权限受限"),
+            }
         with task_window(self.deadline):
             try:
                 check_window()

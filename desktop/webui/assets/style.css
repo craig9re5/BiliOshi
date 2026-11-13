@@ -105,7 +105,8 @@
 
 /* Warm paper, mist teal and apricot keep the same components and semantics;
    only surrounding surfaces and neutral interaction washes move. */
-html[data-theme="paper"] {
+html[data-theme="paper"],
+html[data-theme="system"][data-day-theme="paper"] {
   --paper: #f6f3ec;
   --surface: #fffdf9;
   --surface-sunk: #efece4;
@@ -142,7 +143,8 @@ html[data-theme="paper"] {
   --shadow-2: 0 1px 2px rgba(45, 38, 27, 0.05), 0 6px 18px rgba(45, 38, 27, 0.055);
 }
 
-html[data-theme="mist"] {
+html[data-theme="mist"],
+html[data-theme="system"][data-day-theme="mist"] {
   --paper: #f2f6f5;
   --surface: #fbfdfc;
   --surface-sunk: #e9f0ee;
@@ -179,6 +181,7 @@ html[data-theme="mist"] {
   --shadow-2: 0 1px 2px rgba(24, 45, 42, 0.045), 0 6px 18px rgba(24, 45, 42, 0.05);
 }
 
+/* 暖杏灰暂时灰度下线，保留主题令牌以便随时重新开放。 */
 html[data-theme="apricot"] {
   --paper: #f8f0e5;
   --surface: #fffaf2;
@@ -225,7 +228,8 @@ html[data-theme="apricot"] {
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]),
-  :root[data-theme="system"] {
+  :root[data-theme="system"],
+  :root[data-theme="system"][data-day-theme] {
     color-scheme: dark;
     --paper: #141716;
     --surface: #1b1f1e;
@@ -1277,7 +1281,7 @@ button:disabled { cursor: default; }
 
 /* Surface theme choices: a tiny two-tone swatch is enough to preview the
    paper, sidebar and card relationship without adding another illustration. */
-.theme-options { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: min(100%, 420px); }
+.theme-options { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: min(100%, 540px); }
 
 .theme-option {
   display: flex;
@@ -1309,7 +1313,7 @@ button:disabled { cursor: default; }
   box-shadow: 0 0 0 2px var(--focus-ring-soft);
 }
 .theme-option[aria-pressed="true"]:hover { background: var(--accent-soft); color: var(--accent); }
-.theme-option svg { flex: 0 0 11px; opacity: 0.9; }
+.theme-option > svg { flex: 0 0 11px; opacity: 0.9; }
 
 .theme-chip {
   width: 18px;
@@ -1318,7 +1322,17 @@ button:disabled { cursor: default; }
   border-radius: 5px;
   border: 1px solid var(--line-strong);
 }
-.theme-chip.system { background: linear-gradient(135deg, #ffffff 0 50%, #141716 50% 100%); }
+.theme-chip.system {
+  display: grid;
+  place-items: center;
+  background: var(--surface-sunk);
+  color: var(--ink-2);
+}
+.theme-option[aria-pressed="true"] .theme-chip.system {
+  border-color: var(--accent-line);
+  background: var(--surface);
+  color: var(--accent);
+}
 .theme-chip.white { background: linear-gradient(135deg, #ffffff 0 52%, #f5f5f2 52% 100%); }
 .theme-chip.paper { background: linear-gradient(135deg, #fffdf9 0 52%, #efece4 52% 100%); }
 .theme-chip.mist { background: linear-gradient(135deg, #fbfdfc 0 52%, #e9f0ee 52% 100%); }
@@ -1623,6 +1637,10 @@ button:disabled { cursor: default; }
 .inline-status { padding-top: 9px; font-size: 11px; color: var(--ink-2); }
 .notice { overflow-wrap: anywhere; }
 .notice.neutral { background: var(--surface-sunk); color: var(--ink-2); }
+.notice-action { align-items: center; }
+.notice-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.notice-body strong { font-size: 12px; font-weight: 600; }
+.notice-action > .btn { flex: 0 0 auto; }
 .banner { flex-shrink: 0; }
 .banner > span { flex: 1; }
 .banner > .btn { flex: 0 0 auto; }

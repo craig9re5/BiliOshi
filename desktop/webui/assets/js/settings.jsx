@@ -87,14 +87,17 @@ const Choice = ({ value, options, onChange, label, disabled }) => {
   );
 };
 
-const THEME_CHOICES = [
+/* 暖杏灰（apricot）暂时灰度下线，置 enabled: true 即可重新开放选项。 */
+const ALL_THEME_CHOICES = [
   { key: "system", name: "跟随系统", hint: "随系统深浅外观切换" },
-  { key: "white", name: "纸白", hint: "中性纸面" },
-  { key: "paper", name: "暖纸白", hint: "温和纸感" },
-  { key: "mist", name: "雾青灰", hint: "清爽青灰" },
-  { key: "apricot", name: "暖杏灰", hint: "温暖柔和" },
+  { key: "white", name: "纸白", hint: "中性纸面", day: true },
+  { key: "paper", name: "暖纸白", hint: "温和纸感", day: true },
+  { key: "mist", name: "雾青灰", hint: "清爽青灰", day: true },
+  { key: "apricot", name: "暖杏灰", hint: "温暖柔和", day: true, enabled: false },
   { key: "dark", name: "墨青暗", hint: "夜间深色" }
 ];
+const THEME_CHOICES = ALL_THEME_CHOICES.filter((item) => item.enabled !== false);
+const DAY_THEME_CHOICES = THEME_CHOICES.filter((item) => item.day);
 
 const useSystemDark = () => {
   const [dark, setDark] = useState(() =>
@@ -115,16 +118,24 @@ const useSystemDark = () => {
   return dark;
 };
 
-const ThemeOptions = ({ value, onChange, systemDark }) => (
-  <div className="theme-options" role="group" aria-label="界面主题">
-    {THEME_CHOICES.map((theme) => {
-      const active = theme.key === value;
-      const hint = theme.key === "system" ? `当前${systemDark ? "深色" : "浅色"}` : theme.hint;
-      return <button type="button" key={theme.key} className="theme-option" data-theme={theme.key}
-        aria-pressed={active} title={`${theme.name} · ${hint}`}
-        onClick={() => onChange(theme.key)}>
-        <span className={`theme-chip ${theme.key}`} aria-hidden="true" />
-        <span className="theme-name">{theme.name}</span>
+const ThemeOptions = ({
+  choices = THEME_CHOICES, value, onChange, systemDark, dayThemeName,
+  ariaLabel = "界面主题", isDayPicker = false
+}) => (
+  <div className="theme-options" role="group" aria-label={ariaLabel}>
+    {choices.map((item) => {
+      const active = item.key === value;
+      const hint = item.key === "system"
+        ? `当前${systemDark ? "深色 · 墨青暗" : `浅色 · ${dayThemeName}`}`
+        : item.hint;
+      const dataProps = isDayPicker ? { "data-day-theme": item.key } : { "data-theme": item.key };
+      return <button type="button" key={item.key} className="theme-option" {...dataProps}
+        aria-pressed={active} title={`${item.name} · ${hint}`}
+        onClick={() => onChange(item.key)}>
+        <span className={`theme-chip ${item.key}`} aria-hidden="true">
+          {item.key === "system" && <Icon name="contrast" size={12} stroke={1.7} />}
+        </span>
+        <span className="theme-name">{item.name}</span>
         {active && <Icon name="check" size={11} />}
       </button>;
     })}
@@ -132,12 +143,13 @@ const ThemeOptions = ({ value, onChange, systemDark }) => (
 );
 
 const SettingsPage = ({
-  settings, onSetting, pendingSettings, theme = "system", onTheme,
+  settings, onSetting, pendingSettings, theme = "system", onTheme, dayTheme = "white", onDayTheme,
   scope, onLogs, onHostLogs, onDiagnostics, version
 }) => {
   const systemDark = useSystemDark();
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
+  const dayThemeName = (DAY_THEME_CHOICES.find((item) => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
   return (<>
     <div className="settings" data-screen-label="设置"><div className="settings-inner">
       <section className="group card">
@@ -199,9 +211,15 @@ const SettingsPage = ({
       <section className="group card">
         <header className="group-head">外观</header>
         <SettingRow name="界面主题"
-          desc={theme === "system" ? `跟随系统，当前为${systemDark ? "深色" : "浅色"}外观` : "自定义应用配色风格"}>
-          <ThemeOptions value={theme} onChange={onTheme} systemDark={systemDark} />
+          desc={theme === "system" ? `跟随系统，当前为${systemDark ? "深色 · 墨青暗" : `浅色 · ${dayThemeName}`}` : "自定义应用配色风格"}>
+          <ThemeOptions value={theme} onChange={onTheme} systemDark={systemDark} dayThemeName={dayThemeName} />
         </SettingRow>
+        {theme === "system" && (
+          <SettingRow name="白天默认主题" desc="系统处于浅色外观时优先使用的配色">
+            <ThemeOptions choices={DAY_THEME_CHOICES} value={dayTheme} onChange={onDayTheme}
+              ariaLabel="白天默认主题" isDayPicker />
+          </SettingRow>
+        )}
       </section>
     </div></div>
   </>);
@@ -306,6 +324,9 @@ const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, onScan
             {cooldown && <small className="safety-time">最早自动恢复：{absoluteTime(hold.until)}</small>}
             {!cooldown && hold.blocked && hold.next_probe_at && (
               <small className="safety-time">下次自动复检：{absoluteTime(hold.next_probe_at)}</small>
+            )}
+            {hold.pace_multiplier > 1 && (
+              <small className="safety-time">今日防风控降频保护：互动发送间隔已调整为 {hold.pace_multiplier}×</small>
             )}
           </div>
           <div className="safety-actions">

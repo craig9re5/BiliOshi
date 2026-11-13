@@ -222,11 +222,16 @@ class WebUiTests(unittest.TestCase):
         html = (ASSETS / "index.html").read_text(encoding="utf-8")
         css = (ASSETS / "style.css").read_text(encoding="utf-8")
         theme_js = (ASSETS / "js/theme.js").read_text(encoding="utf-8")
+        settings_jsx = (ASSETS / "js/settings.jsx").read_text(encoding="utf-8")
         self.assertIn('<meta name="color-scheme" content="light dark">', html)
         self.assertIn("@media (prefers-color-scheme: dark)", css)
         self.assertIn('html[data-theme="dark"]', css)
-        for key in ("system", "white", "paper", "mist", "apricot", "dark"):
+        self.assertIn('html[data-theme="system"][data-day-theme="mist"]', css)
+        self.assertIn("enabled: false", settings_jsx)
+        self.assertIn('name="白天默认主题"', settings_jsx)
+        for key in ("system", "white", "paper", "mist", "dark"):
             self.assertIn(key, theme_js)
+        self.assertIn("bilioshi.dayTheme", theme_js)
 
     def test_safety_check_syncs_blocked_account_status_and_notifications(self):
         from bilioshi.accounts import AccountStore
@@ -289,6 +294,93 @@ class WebUiTests(unittest.TestCase):
         web_host._notify_safety_events(recovered_snap)
         self.assertEqual(web_host._notify.call_count, 2)
         self.assertEqual(web_host.emit.call_count, 2)
+
+    def test_inactive_account_safety_recovery_and_room_block_clear(self):
+        from bilioshi.accounts import AccountStore
+        from bilioshi import safety
+        from bilioshi.runtime import read_json, save_login
+
+        store = AccountStore(self.root)
+        active_acc, _ = store.upsert(uid=101, name="活跃账号", status="ok")
+        inactive_acc, _ = store.upsert(uid=202, name="暂停账号", status="blocked")
+
+        active_root = store.account_root(active_acc["id"])
+        inactive_root = store.account_root(inactive_acc["id"])
+        initialize(active_root, [{"room": 11, "uid": 501, "name": "主播甲"}])
+        initialize(inactive_root, [{"room": 22, "uid": 502, "name": "主播乙"}])
+        save_login("synthetic-session-active", "synthetic-csrf-active", active_root / "credentials.json")
+        save_login("synthetic-session-inactive", "synthetic-csrf-inactive", inactive_root / "credentials.json")
+        safety.bind_account("synthetic-session-active", 101, root=active_root)
+        safety.bind_account("synthetic-session-inactive", 202, root=inactive_root)
+        safety.hold_account(
+            "synthetic-session-inactive",
+            "review",
+            "请先完成平台安全验证后恢复",
+            code=-352,
+            operation={"room": "22", "kind": "danmaku"},
+            root=inactive_root,
+        )
+
+        engine = Engine(active_root, job=Mock())
+        host = SimpleNamespace(
+            root=self.root,
+            store=store,
+            active_id=active_acc["id"],
+            view_id=active_acc["id"],
+            global_paused=False,
+            active_engine=lambda: engine,
+            engine_for=lambda aid: engine if aid == active_acc["id"] else None,
+            summaries=lambda: [],
+        )
+        api = Api(host, self.ui)
+
+        # Inactive blocked account probe + auto-resume without switching away from active_acc.
+        with patch("bilioshi.application.AppContext.validate_credentials_profile", return_value=(True, "暂停账号", {"uid": 202})), \
+             patch("bilioshi.http._once", return_value={"code": 0, "data": {}}):
+            check_res = api.check_safety(True, inactive_acc["id"])
+        self.assertTrue(check_res["ok"])
+        self.assertTrue(check_res["resumed"])
+        self.assertEqual(store.get(inactive_acc["id"])["status"], "ok")
+        self.assertFalse(read_json(inactive_root / "status.json", {}).get("safety", {}).get("blocked"))
+
+        # Inactive manual resume_safety also restores AccountStore status.
+        store.update(inactive_acc["id"], status="blocked")
+        safety.hold_account("synthetic-session-inactive", "review", "再次触发风控", code=-352, root=inactive_root)
+        with patch("bilioshi.application.AppContext.validate_credentials_profile", return_value=(True, "暂停账号", {"uid": 202})):
+            resume_res = api.resume_safety(inactive_acc["id"])
+        self.assertTrue(resume_res["ok"])
+        self.assertFalse(resume_res["hold"]["blocked"])
+        self.assertEqual(store.get(inactive_acc["id"])["status"], "ok")
+
+        # Room-level block surfaces in snapshot, notifies once per block, and clears via Api.clear_room_block.
+        safety.block_room_capability(
+            "synthetic-session-active",
+            11,
+            "danmaku",
+            "该直播间发言受限",
+            code=403,
+            root=active_root,
+        )
+        engine.room_blocks = engine.application.room_safety_blocks()
+        snap = api.snapshot()
+        row_11 = next(r for r in snap["rows"] if r["room"] == 11)
+        self.assertEqual(len(row_11["room_blocks"]), 1)
+        self.assertEqual(row_11["room_blocks"][0]["kind"], "danmaku")
+
+        web_host = WebHost(self.engine)
+        web_host._notify = Mock(return_value=True)
+        web_host.emit = Mock()
+        web_host._notify_room_blocks(snap)
+        web_host._notify_room_blocks(snap)
+        self.assertEqual(web_host._notify.call_count, 1)
+        self.assertEqual(web_host.emit.call_count, 1)
+        self.assertEqual(web_host.emit.call_args.args[1]["tone"], "warn")
+
+        cleared = api.clear_room_block(11, "danmaku")
+        self.assertTrue(cleared["ok"])
+        snap_after = api.snapshot()
+        row_11_after = next(r for r in snap_after["rows"] if r["room"] == 11)
+        self.assertEqual(row_11_after["room_blocks"], [])
 
 
 if __name__ == "__main__":

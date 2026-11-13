@@ -36,7 +36,7 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, che
   </button>
 );
 
-const DetailPanel = ({ room, busy, onAction, onOpen, onMore, dimmed }) => {
+const DetailPanel = ({ room, busy, onAction, onOpen, onMore, onClearRoomBlock, dimmed }) => {
   const classes = `detail card${dimmed ? " detail-dim" : ""}`;
   if (!room) return (
     <aside className={classes} aria-label="直播间详情" aria-hidden={dimmed || undefined}>
@@ -108,6 +108,21 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore, dimmed }) => {
           <Icon name="alert" size={14} /><span>{room.connection_warning || room.watch_warning || room.task_error}</span>
         </div>}
         {note && <div className="notice neutral"><Icon name="info" size={14} /><span>{note}</span></div>}
+        {Array.isArray(room.room_blocks) && room.room_blocks.map((block) => (
+          <div className="notice notice-action" key={`${block.kind || "cap"}-${block.since || 0}`} role="status">
+            <Icon name="alert" size={14} />
+            <div className="notice-body">
+              <strong>{block.kind_label || "单房间互动受限"}</strong>
+              <span>{block.reason || "该直播间互动权限受限，不影响挂机看播。"}</span>
+            </div>
+            {onClearRoomBlock && (
+              <button type="button" className="btn sm" disabled={pending}
+                onClick={() => onClearRoomBlock(room.room, block.kind || null)}>
+                解除限制
+              </button>
+            )}
+          </div>
+        ))}
         {room.reconnect_message && <div className="inline-status" role="status">{room.reconnect_message}</div>}
         <section className="block">
           <div className="block-head"><span className="block-title">今日任务</span>
@@ -155,7 +170,7 @@ const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy
 const Overview = ({ rooms, selectedId, onSelect, paused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, busyRoom, controlBusy,
   error, recovery, onRecovery, interval, lastCheck, checking, images, signedIn, closing, bridgeConnected,
-  onBatchRemove }) => {
+  onBatchRemove, onClearRoomBlock }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
 
@@ -248,7 +263,8 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
               <button type="button" className="btn sm primary" onClick={onAddMember}>添加主播</button></div>}
         </div>
       </section>
-      <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen} dimmed={managing}
+      <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen}
+        onClearRoomBlock={onClearRoomBlock} dimmed={managing}
         onMore={(event) => {
           if (!selected) return;
           const rect = event.currentTarget.getBoundingClientRect();

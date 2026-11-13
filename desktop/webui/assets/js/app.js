@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"5e932b143be4eb033c3e1fbd026578ac44c2d1fefba1b3d1ad57c5c6446a1d52","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"e8e0f8513b6b77814feb8d672fa878ed5d2b8030589747a2102042d396c02065"} */
+/* BiliOshi JSX {"code_sha256":"44c65375c04ffa703fe24d4d0f67a8e8944b9ff9929b833979637d9f41c7c2ab","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"8990b01e7c95cedf052342e2fc4e17f8b212f0fe98019aececdacf464fe0383d"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -919,6 +919,10 @@ function App() {
     const result = await invoke("clear_room_block", [room, capability || null], "已解除该直播间互动限制");
     if (result?.ok) await refresh();
   };
+  const dismissTaskError = async room => {
+    const result = await invoke("dismiss_task_error", [room]);
+    if (result?.ok) await refresh();
+  };
   const switchAccount = async accountId => {
     if (!accountId) return;
     if (accountId === activeId) {
@@ -1157,7 +1161,8 @@ function App() {
     closing: closing,
     bridgeConnected: connected,
     onBatchRemove: batchRemove,
-    onClearRoomBlock: clearRoomBlock
+    onClearRoomBlock: clearRoomBlock,
+    onDismissTaskError: dismissTaskError
   }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
     viewId: activeId,
     images: images,

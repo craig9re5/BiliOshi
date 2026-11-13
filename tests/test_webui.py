@@ -382,6 +382,67 @@ class WebUiTests(unittest.TestCase):
         row_11_after = next(r for r in snap_after["rows"] if r["room"] == 11)
         self.assertEqual(row_11_after["room_blocks"], [])
 
+    def test_stale_task_error_deduplicated_retired_and_dismissible(self):
+        from bilioshi.runtime import task_day
+
+        uncertain_msg = "操作结果未知，已停止重复发送；请核对服务端进度"
+        write_json(
+            self.root / "state/7.json",
+            {
+                "room": 7,
+                "task_result": {
+                    "day": task_day(),
+                    "success": False,
+                    "error": uncertain_msg,
+                    "like": {
+                        "success": False,
+                        "error": uncertain_msg,
+                        "safety": {"blocked": True, "kind": "uncertain", "reason": uncertain_msg},
+                    },
+                    "safety": {"blocked": True, "kind": "uncertain", "reason": uncertain_msg},
+                },
+            },
+        )
+        # Once the safety hold has cleared, stale uncertain errors must not persist on offline rooms.
+        self.engine.safety = {"blocked": False}
+        snap = self.api.snapshot()
+        self.assertEqual(snap["rows"][0]["task_error"], "")
+
+        # Non-safety duplicate errors are deduplicated and can be dismissed even when the room is offline.
+        write_json(
+            self.root / "state/7.json",
+            {
+                "room": 7,
+                "task_result": {
+                    "day": task_day(),
+                    "success": False,
+                    "error": "网络请求超时",
+                    "danmaku": {"done": False, "error": "网络请求超时"},
+                    "like": {"success": False, "error": "点赞未确认"},
+                },
+            },
+        )
+        snap = self.api.snapshot()
+        self.assertEqual(snap["rows"][0]["task_error"], "网络请求超时；点赞未确认")
+
+        dismissed = self.api.dismiss_task_error(7)
+        self.assertTrue(dismissed["ok"])
+        self.assertEqual(self.api.snapshot()["rows"][0]["task_error"], "")
+
+        # Successful manual redo records latest task_result and clears prior room task errors.
+        self.confirmed_room()
+        self.engine.application.redo = Mock(return_value={"success": True, "day": task_day()})
+        write_json(
+            self.root / "state/7.json",
+            {
+                "room": 7,
+                "task_result": {"day": task_day(), "success": False, "error": "旧失败"},
+            },
+        )
+        res = self.api.redo(7)
+        self.assertTrue(res["ok"])
+        self.assertEqual(self.api.snapshot()["rows"][0]["task_error"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

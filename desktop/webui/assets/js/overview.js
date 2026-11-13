@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"a8360a7143b13bc1e0245955bd96164ef8d6fca762375ea4235181c195225409","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"607ab3c04e0209b5850fcb9e83bbbcb4b29ab518ee20ce8a1bfa36f54039e38b"} */
+/* BiliOshi JSX {"code_sha256":"78c4b4274c9da11b989a799155288a439c4640064e58e3db6f25bf186b0da7e5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"8d9bfb04b6cb01e3e3687c87cc6e49c8b2e5498815d5f644b0e4e1cec5cb74a9"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -76,6 +76,7 @@ const DetailPanel = ({
   onOpen,
   onMore,
   onClearRoomBlock,
+  onDismissTaskError,
   dimmed
 }) => {
   const classes = `detail card${dimmed ? " detail-dim" : ""}`;
@@ -168,13 +169,23 @@ const DetailPanel = ({
     className: "gain-foot"
   }, /*#__PURE__*/React.createElement("span", null, "\u7B49\u7EA7\u7ECF\u9A8C"), /*#__PURE__*/React.createElement("span", {
     className: "tnum"
-  }, numberLabel(room.intimacy), " / ", numberLabel(room.next_intimacy))))), (room.connection_warning || room.watch_warning || room.task_error) && /*#__PURE__*/React.createElement("div", {
-    className: "notice",
-    role: "status"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "alert",
-    size: 14
-  }), /*#__PURE__*/React.createElement("span", null, room.connection_warning || room.watch_warning || room.task_error)), note && /*#__PURE__*/React.createElement("div", {
+  }, numberLabel(room.intimacy), " / ", numberLabel(room.next_intimacy))))), (room.connection_warning || room.watch_warning || room.task_error) && (() => {
+    const canDismissTask = Boolean(onDismissTaskError && !room.connection_warning && !room.watch_warning && room.task_error && !room.protectedAccount);
+    return /*#__PURE__*/React.createElement("div", {
+      className: `notice${canDismissTask ? " notice-action" : ""}`,
+      role: "status"
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "alert",
+      size: 14
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "notice-body"
+    }, room.connection_warning || room.watch_warning || room.task_error), canDismissTask && /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn sm",
+      disabled: pending,
+      onClick: () => onDismissTaskError(room.room)
+    }, "\u77E5\u9053\u4E86"));
+  })(), note && /*#__PURE__*/React.createElement("div", {
     className: "notice neutral"
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "info",
@@ -295,7 +306,8 @@ const Overview = ({
   closing,
   bridgeConnected,
   onBatchRemove,
-  onClearRoomBlock
+  onClearRoomBlock,
+  onDismissTaskError
 }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
@@ -431,6 +443,7 @@ const Overview = ({
     onAction: onAction,
     onOpen: onOpen,
     onClearRoomBlock: onClearRoomBlock,
+    onDismissTaskError: onDismissTaskError,
     dimmed: managing,
     onMore: event => {
       if (!selected) return;

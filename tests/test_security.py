@@ -702,3 +702,46 @@ class SafetyAutoRecoveryTests(unittest.TestCase):
             status = AppContext(root).safety_status()
             self.assertFalse(status["blocked"])
             self.assertEqual(status["pace_multiplier"], 3.0)
+
+    def test_format_task_errors_deduplicates_and_retires_resolved_safety_holds(self):
+        from desktop.storage import initialize
+
+        reason = "操作结果未知，已停止重复发送；请核对服务端进度"
+        duplicate_result = {
+            "day": task_day(),
+            "success": False,
+            "error": reason,
+            "like": {
+                "success": False,
+                "needs_confirmation": True,
+                "error": reason,
+                "safety": {"blocked": True, "kind": "uncertain", "reason": reason},
+            },
+            "safety": {"blocked": True, "kind": "uncertain", "reason": reason},
+        }
+        self.assertEqual(safety.format_task_errors(duplicate_result), reason)
+        self.assertEqual(safety.format_task_errors(duplicate_result, suppress_safety=True), "")
+
+        mixed_result = {
+            "day": task_day(),
+            "success": False,
+            "error": "弹幕失败",
+            "danmaku": {"done": False, "error": "弹幕失败"},
+            "like": {"success": False, "error": "点赞失败"},
+        }
+        self.assertEqual(safety.format_task_errors(mixed_result), "弹幕失败；点赞失败")
+
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"BILIOSHI_APP_DATA": folder}):
+            root = Path(folder)
+            initialize(root, [{"room": 1, "uid": 1001, "name": "主播A"}])
+            save_login(SESSION, CSRF, root / "credentials.json")
+            safety.bind_account(SESSION, 123, root=root)
+            safety.hold_account(SESSION, "uncertain", reason, code=-1, root=root)
+
+            write_json(root / "state/1.json", {"room": 1, "task_result": duplicate_result})
+            engine = Engine(root, job=Mock())
+            with patch.object(engine.application, "validate_credentials", return_value=(True, "ok")):
+                ok, _ = engine.resume_safety(confirmed=True)
+            self.assertTrue(ok)
+            snap = engine.snapshot()
+            self.assertEqual(snap["rows"][0]["task_error"], "")

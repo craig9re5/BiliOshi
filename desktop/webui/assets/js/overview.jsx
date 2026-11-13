@@ -36,7 +36,7 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, che
   </button>
 );
 
-const DetailPanel = ({ room, busy, onAction, onOpen, onMore, onClearRoomBlock, dimmed }) => {
+const DetailPanel = ({ room, busy, onAction, onOpen, onMore, onClearRoomBlock, onDismissTaskError, dimmed }) => {
   const classes = `detail card${dimmed ? " detail-dim" : ""}`;
   if (!room) return (
     <aside className={classes} aria-label="直播间详情" aria-hidden={dimmed || undefined}>
@@ -104,9 +104,27 @@ const DetailPanel = ({ room, busy, onAction, onOpen, onMore, onClearRoomBlock, d
             </div>
           </>}
         </div>
-        {(room.connection_warning || room.watch_warning || room.task_error) && <div className="notice" role="status">
-          <Icon name="alert" size={14} /><span>{room.connection_warning || room.watch_warning || room.task_error}</span>
-        </div>}
+        {(room.connection_warning || room.watch_warning || room.task_error) && (() => {
+          const canDismissTask = Boolean(
+            onDismissTaskError
+            && !room.connection_warning
+            && !room.watch_warning
+            && room.task_error
+            && !room.protectedAccount
+          );
+          return (
+            <div className={`notice${canDismissTask ? " notice-action" : ""}`} role="status">
+              <Icon name="alert" size={14} />
+              <span className="notice-body">{room.connection_warning || room.watch_warning || room.task_error}</span>
+              {canDismissTask && (
+                <button type="button" className="btn sm" disabled={pending}
+                  onClick={() => onDismissTaskError(room.room)}>
+                  知道了
+                </button>
+              )}
+            </div>
+          );
+        })()}
         {note && <div className="notice neutral"><Icon name="info" size={14} /><span>{note}</span></div>}
         {Array.isArray(room.room_blocks) && room.room_blocks.map((block) => (
           <div className="notice notice-action" key={`${block.kind || "cap"}-${block.since || 0}`} role="status">
@@ -170,7 +188,7 @@ const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy
 const Overview = ({ rooms, selectedId, onSelect, paused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, busyRoom, controlBusy,
   error, recovery, onRecovery, interval, lastCheck, checking, images, signedIn, closing, bridgeConnected,
-  onBatchRemove, onClearRoomBlock }) => {
+  onBatchRemove, onClearRoomBlock, onDismissTaskError }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
 
@@ -264,7 +282,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
         </div>
       </section>
       <DetailPanel room={selected} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen}
-        onClearRoomBlock={onClearRoomBlock} dimmed={managing}
+        onClearRoomBlock={onClearRoomBlock} onDismissTaskError={onDismissTaskError} dimmed={managing}
         onMore={(event) => {
           if (!selected) return;
           const rect = event.currentTarget.getBoundingClientRect();

@@ -88,27 +88,84 @@ const AddMemberModal = ({ query, onQuery, result, loading, adding, onSearch, onA
   </Modal>
 );
 
-const MedalsModal = ({ data, selected, onToggle, onImport, onClose, loading, importing, error, onRetry }) => (
-  <Modal title="同步粉丝牌" desc="选择要关注的主播（已关注的自动跳过）" wide onClose={onClose}
-    actions={<>
-      <button type="button" className="btn" onClick={onClose}>取消</button>
-      <button type="button" className="btn primary" onClick={onImport} disabled={loading || importing || selected.size === 0 || Boolean(error)}>
-        {importing ? "正在导入…" : selected.size ? `导入 ${selected.size} 位主播` : "导入主播"}</button>
-    </>}>
-    <div className="medal-list">
-      {loading ? <div className="field-note">正在读取粉丝牌…</div>
-        : error ? <div className="field-note"><p>{error}</p><button type="button" className="btn sm" onClick={onRetry}>重试</button></div>
-        : !data.length ? <div className="field-note">暂无可同步的粉丝牌</div>
-        : data.map((medal) => <label key={medal.uid} className={`medal-row ${medal.watched ? "watched" : ""}`}>
-          <input type="checkbox" checked={selected.has(medal.uid)} disabled={medal.watched || importing}
-            onChange={() => onToggle(medal.uid)} />
-          <span className="account-avatar small">{Array.from(medal.name || medal.medal_name || "?")[0]}</span>
-          <span className="medal-main"><span className="account-name">{medal.name || medal.medal_name}</span>
-            <span className="account-meta">{medal.medal_name} Lv.{medal.level}{medal.watched ? " · 已关注" : ""}</span></span>
-        </label>)}
-    </div>
-  </Modal>
-);
+const MedalsModal = ({ data, selected, onToggle, onSetSelection, onImport, onClose, loading, importing, error, onRetry }) => {
+  const [filter, setFilter] = useState("");
+  const keyword = filter.trim().toLowerCase();
+  const importable = data.filter((item) => !item.watched);
+  const visible = keyword
+    ? data.filter((medal) => [medal.name, medal.medal_name, medal.uid, medal.room]
+        .some((field) => String(field || "").toLowerCase().includes(keyword)))
+    : data;
+  const visibleImportable = visible.filter((item) => !item.watched);
+  const allVisibleSelected = visibleImportable.length > 0 && visibleImportable.every((item) => selected.has(item.uid));
+
+  const toggleAllVisible = () => {
+    if (typeof onSetSelection === "function") {
+      onSetSelection((current) => {
+        const next = new Set(current);
+        for (const item of visibleImportable) {
+          if (allVisibleSelected) next.delete(item.uid);
+          else next.add(item.uid);
+        }
+        return next;
+      });
+      return;
+    }
+    for (const item of visibleImportable) {
+      if (allVisibleSelected === selected.has(item.uid)) onToggle(item.uid);
+    }
+  };
+
+  return (
+    <Modal title="同步粉丝牌" desc="选择要关注的主播（已关注的自动跳过）" wide onClose={onClose}
+      actions={<>
+        <button type="button" className="btn" onClick={onClose}>取消</button>
+        <button type="button" className="btn primary" onClick={onImport} disabled={loading || importing || selected.size === 0 || Boolean(error)}>
+          {importing ? "正在导入…" : selected.size ? `导入 ${selected.size} 位主播` : "导入主播"}</button>
+      </>}>
+      {!loading && !error && data.length > 0 && (
+        <div className="medal-toolbar">
+          <div className="medal-summary">
+            <span>共 {data.length} 枚粉丝牌 · 可导入 {importable.length} 位</span>
+            {visibleImportable.length > 0 && (
+              <button type="button" className="link-btn" disabled={importing} onClick={toggleAllVisible}>
+                {allVisibleSelected ? "取消全选" : (keyword ? "全选筛选结果" : "全选未关注")}
+              </button>
+            )}
+          </div>
+          {data.length >= 6 && (
+            <div className="search-box">
+              <Icon name="search" size={13} />
+              <input className="search-input" value={filter} onChange={(e) => setFilter(e.target.value)}
+                aria-label="筛选粉丝牌或主播" placeholder="搜索主播名称或粉丝牌…" disabled={importing} />
+              {filter && (
+                <button type="button" className="search-clear" aria-label="清除搜索" onClick={() => setFilter("")}>
+                  <Icon name="close" size={11} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="medal-list">
+        {loading ? <div className="field-note">正在读取粉丝牌…</div>
+          : error ? <div className="field-note"><p>{error}</p><button type="button" className="btn sm" onClick={onRetry}>重试</button></div>
+          : !data.length ? <div className="field-note">暂无可同步的粉丝牌</div>
+          : !visible.length ? <div className="field-note">没有匹配的粉丝牌</div>
+          : visible.map((medal) => <label key={medal.uid} className={`medal-row ${medal.watched ? "watched" : ""}`}>
+            <input type="checkbox" checked={selected.has(medal.uid)} disabled={medal.watched || importing}
+              onChange={() => onToggle(medal.uid)} />
+            <span className="account-avatar small">{Array.from(medal.name || medal.medal_name || "?")[0]}</span>
+            <span className="medal-main">
+              <span className="account-name">{medal.name || medal.medal_name}</span>
+              <span className="account-meta">{medal.medal_name}{medal.watched ? " · 已关注" : ""}</span>
+            </span>
+            <span className="medal-level">Lv.{medal.level}</span>
+          </label>)}
+      </div>
+    </Modal>
+  );
+};
 
 const ConfirmModal = ({ title, desc, confirmLabel, danger, onConfirm, onClose, busy, body }) => (
   <Modal title={title} desc={desc} onClose={onClose} actions={<>
@@ -262,10 +319,7 @@ const RoomMenu = ({ menu, room, onClose, onOpen, onAction, onRemove }) => {
   </div>;
 };
 
-const DiagnosticModal = ({
-  preview, loading, anonymize, includeState, onChangeAnonymize, onChangeIncludeState,
-  exporting, exported, statusText, onExport, onCopySummary, onOpenExports, onClose
-}) => {
+function useModalDialog(onClose) {
   const dialogRef = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -289,8 +343,8 @@ const DiagnosticModal = ({
         return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
       };
       let pressedOutside = false;
-      const onDown = (e) => { pressedOutside = outside(e); };
-      const onUp = (e) => { if (pressedOutside && outside(e)) dialog.close(); };
+      const onDown = (e) => { pressedOutside = e.target === dialog && outside(e); };
+      const onUp = (e) => { if (pressedOutside && e.target === dialog && outside(e)) dialog.close(); };
       dialog.addEventListener("pointerdown", onDown);
       dialog.addEventListener("pointerup", onUp);
       cleanupOutside = () => {
@@ -305,6 +359,15 @@ const DiagnosticModal = ({
       if (dialog.open) dialog.close();
     };
   }, []);
+
+  return dialogRef;
+}
+
+const DiagnosticModal = ({
+  preview, loading, anonymize, includeState, onChangeAnonymize, onChangeIncludeState,
+  exporting, exported, statusText, onExport, onCopySummary, onOpenExports, onClose
+}) => {
+  const dialogRef = useModalDialog(onClose);
 
   const errors = exported?.recent_errors || preview?.recent_errors || [];
   const env = preview?.environment || {};

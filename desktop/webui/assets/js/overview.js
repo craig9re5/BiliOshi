@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"724d77c62099aa1a2c2fb7fe4562684add203c20f8a2ff118c6ebfbeca801161","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"5cccb7514941b3ece037e315c050d45f215a76a8aae20304d61f55d8f8a3e236"} */
+/* BiliOshi JSX {"code_sha256":"8c90328b474f13c7438628a4c43f505fcd2affb37b31a1f55492bdc75d7c066e","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"c716e28339229a0026c5aeb3e97f58be4175806bc4640ef4b559b4e3fd3a5eaa"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -23,6 +23,12 @@ const Avatar = ({
   src: image,
   alt: ""
 }) : room.initial);
+const TASK_ICONS = {
+  danmaku: "chat",
+  like: "heart",
+  watch: "monitor",
+  light: "medal"
+};
 const RoomRow = ({
   room,
   selected,
@@ -32,45 +38,57 @@ const RoomRow = ({
   managing,
   checked,
   onToggleCheck
-}) => /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: `room ${managing ? "managing" : ""} ${checked ? "batch-checked" : ""}`,
-  role: "option",
-  "aria-selected": managing ? checked : selected,
-  "data-room": room.room,
-  onClick: () => managing ? onToggleCheck(room.room) : onSelect(room.room),
-  onDoubleClick: () => !managing && window.call("open_room", room.room).catch(() => {}),
-  onContextMenu: event => !managing && onContextMenu(event, room.room)
-}, managing && /*#__PURE__*/React.createElement("span", {
-  className: `room-check ${checked ? "checked" : ""}`,
-  "aria-hidden": "true"
-}, checked && /*#__PURE__*/React.createElement(Icon, {
-  name: "check",
-  size: 11
-})), /*#__PURE__*/React.createElement(Avatar, {
-  room: room,
-  image: image
-}), /*#__PURE__*/React.createElement("span", {
-  className: "room-main"
-}, /*#__PURE__*/React.createElement("span", {
-  className: "room-name"
-}, room.live && /*#__PURE__*/React.createElement("i", {
-  className: "live-dot",
-  title: "\u76F4\u64AD\u4E2D"
-}), /*#__PURE__*/React.createElement("span", null, room.name)), room.live && room.title && /*#__PURE__*/React.createElement("span", {
-  className: "room-title",
-  title: room.title
-}, room.title), /*#__PURE__*/React.createElement("span", {
-  className: "room-meta"
-}, room.healthy && /*#__PURE__*/React.createElement("span", null, "\u5DF2\u8FDE\u63A5 ", durationLabel(room.minutes)), room.healthy && room.gain !== null && /*#__PURE__*/React.createElement("span", {
-  className: "sep"
-}, "\xB7"), room.gain !== null && /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5 +", numberLabel(room.gain)))), room.state !== "未开播" && /*#__PURE__*/React.createElement("span", {
-  className: "room-side"
-}, /*#__PURE__*/React.createElement("span", {
-  className: `pill ${room.tone}`
-}, room.state)));
+}) => {
+  const metaParts = [];
+  if (room.healthy) metaParts.push(`已连接 ${durationLabel(room.minutes)}`);else if (room.live && room.live_duration) metaParts.push(room.live_duration);
+  if (room.gain !== null && (room.gain > 0 || room.healthy)) {
+    metaParts.push(`今日 +${numberLabel(room.gain)}`);
+  } else if (!room.live && room.medal_name) {
+    metaParts.push(`${room.medal_name} Lv.${room.medal_level}`);
+  }
+  return /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: `room ${managing ? "managing" : ""} ${checked ? "batch-checked" : ""}`,
+    role: "option",
+    "aria-selected": managing ? checked : selected,
+    "data-room": room.room,
+    onClick: () => managing ? onToggleCheck(room.room) : onSelect(room.room),
+    onDoubleClick: () => !managing && window.call("open_room", room.room).catch(() => {}),
+    onContextMenu: event => !managing && onContextMenu(event, room.room)
+  }, managing && /*#__PURE__*/React.createElement("span", {
+    className: `room-check ${checked ? "checked" : ""}`,
+    "aria-hidden": "true"
+  }, checked && /*#__PURE__*/React.createElement(Icon, {
+    name: "check",
+    size: 11
+  })), /*#__PURE__*/React.createElement(Avatar, {
+    room: room,
+    image: image
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "room-main"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "room-name"
+  }, room.live && /*#__PURE__*/React.createElement("i", {
+    className: "live-dot",
+    title: "\u76F4\u64AD\u4E2D"
+  }), /*#__PURE__*/React.createElement("span", null, room.name)), room.live && room.title && /*#__PURE__*/React.createElement("span", {
+    className: "room-title",
+    title: room.title
+  }, room.title), metaParts.length > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "room-meta"
+  }, metaParts.map((part, idx) => /*#__PURE__*/React.createElement(React.Fragment, {
+    key: idx
+  }, idx > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "sep"
+  }, "\xB7"), /*#__PURE__*/React.createElement("span", null, part))))), room.state !== "未开播" && /*#__PURE__*/React.createElement("span", {
+    className: "room-side"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: `pill ${room.tone}`
+  }, room.state)));
+};
 const DetailPanel = ({
   room,
+  image,
   busy,
   onAction,
   onOpen,
@@ -100,6 +118,8 @@ const DetailPanel = ({
   const note = room.watch_note || "";
   const showStateRow = room.live || room.active || room.reconnecting || room.tone === "warn";
   const showReason = reason && (room.live || room.tone === "warn");
+  const medalLit = !room.tasks_stale && room.is_lighted === 1;
+  const medalUnlit = !room.tasks_stale && room.is_lighted === 0;
   return /*#__PURE__*/React.createElement("aside", {
     className: classes,
     "aria-label": "\u76F4\u64AD\u95F4\u8BE6\u60C5",
@@ -110,14 +130,25 @@ const DetailPanel = ({
     key: room.room
   }, /*#__PURE__*/React.createElement("div", {
     className: "detail-heading"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Avatar, {
+    room: room,
+    image: image
+  }), /*#__PURE__*/React.createElement("div", {
     className: "detail-identity"
   }, /*#__PURE__*/React.createElement("div", {
     className: "detail-name"
   }, room.name), /*#__PURE__*/React.createElement("div", {
     className: "detail-title",
     title: room.title
-  }, room.live ? room.title || "直播中" : room.state)), /*#__PURE__*/React.createElement("button", {
+  }, room.live ? room.title || "直播中" : room.state), /*#__PURE__*/React.createElement("div", {
+    className: "detail-submeta"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "tnum"
+  }, "\u623F\u95F4 ", room.room), room.live && room.area_name && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    className: "sep"
+  }, "\xB7"), /*#__PURE__*/React.createElement("span", null, room.area_name)), room.live && room.live_duration && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    className: "sep"
+  }, "\xB7"), /*#__PURE__*/React.createElement("span", null, room.live_duration)))), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: `btn ghost icon-button${moreOpen ? " active" : ""}`,
     title: "\u66F4\u591A\u64CD\u4F5C",
@@ -158,13 +189,15 @@ const DetailPanel = ({
   }, /*#__PURE__*/React.createElement("span", {
     className: "gain-label"
   }, "\u4ECA\u65E5\u4EB2\u5BC6\u5EA6"), room.medal_name && /*#__PURE__*/React.createElement("span", {
-    className: "gain-medal"
-  }, room.medal_name, " Lv.", room.medal_level)), /*#__PURE__*/React.createElement("div", {
+    className: `gain-medal ${medalLit ? "lit" : medalUnlit ? "unlit" : ""}`
+  }, room.medal_name, " Lv.", room.medal_level, medalUnlit ? " · 未点亮" : "")), /*#__PURE__*/React.createElement("div", {
     className: "gain-value"
   }, room.gain === null ? "—" : `+${numberLabel(room.gain)}`), /*#__PURE__*/React.createElement("div", {
     className: "gain-foot"
-  }, /*#__PURE__*/React.createElement("span", null, room.gain === null ? "等待更新" : "今日已获得"), room.day_limit > 0 && /*#__PURE__*/React.createElement("span", null, "\u6BCF\u65E5\u4E0A\u9650 ", numberLabel(room.day_limit))), knownExperience && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    className: "bar thin",
+  }, /*#__PURE__*/React.createElement("span", null, room.gain === null ? "等待更新" : "今日已获得"), room.day_limit > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "tnum"
+  }, "\u6BCF\u65E5\u4E0A\u9650 ", numberLabel(room.day_limit))), knownExperience && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "bar level-bar",
     role: "progressbar",
     "aria-label": "\u7C89\u4E1D\u724C\u5347\u7EA7\u8FDB\u5EA6",
     "aria-valuenow": room.intimacy,
@@ -176,7 +209,7 @@ const DetailPanel = ({
     }
   })), /*#__PURE__*/React.createElement("div", {
     className: "gain-foot"
-  }, /*#__PURE__*/React.createElement("span", null, "\u7B49\u7EA7\u7ECF\u9A8C"), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u7B49\u7EA7\u7ECF\u9A8C\uFF08", Math.round(progress), "%\uFF09"), /*#__PURE__*/React.createElement("span", {
     className: "tnum"
   }, numberLabel(room.intimacy), " / ", numberLabel(room.next_intimacy))))), (room.connection_warning || room.watch_warning || room.task_error) && (() => {
     const canDismissTask = Boolean(onDismissTaskError && !room.connection_warning && !room.watch_warning && room.task_error && !room.protectedAccount);
@@ -223,15 +256,20 @@ const DetailPanel = ({
   }, /*#__PURE__*/React.createElement("span", {
     className: "block-title"
   }, "\u4ECA\u65E5\u4EFB\u52A1"), /*#__PURE__*/React.createElement("span", {
-    className: "block-note"
-  }, room.tasks_stale ? "等待更新" : `${taskCount} 项已完成`)), /*#__PURE__*/React.createElement("div", {
+    className: "block-note tnum"
+  }, room.tasks_stale ? "等待更新" : `${taskCount} / ${room.tasks.length} 已完成`)), /*#__PURE__*/React.createElement("div", {
     className: "task-table"
   }, room.tasks.map(task => /*#__PURE__*/React.createElement("div", {
     className: "task",
     key: task.key
   }, /*#__PURE__*/React.createElement("span", {
+    className: "task-left"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: TASK_ICONS[task.key] || "circle",
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", {
     className: "task-name"
-  }, task.name), /*#__PURE__*/React.createElement("span", {
+  }, task.name)), /*#__PURE__*/React.createElement("span", {
     className: `task-val ${task.done ? "done" : !task.text ? "pending" : ""}`
   }, task.done && /*#__PURE__*/React.createElement(Icon, {
     name: "check",
@@ -322,6 +360,19 @@ const Overview = ({
 }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
+  const [roomQuery, setRoomQuery] = React.useState("");
+  const [roomFilter, setRoomFilter] = React.useState("all");
+  const liveCount = rooms.filter(r => r.live).length;
+  const warnCount = rooms.filter(r => r.tone === "warn").length;
+  const activeFilter = roomFilter === "live" && liveCount === 0 || roomFilter === "warn" && warnCount === 0 ? "all" : roomFilter;
+  const keyword = roomQuery.trim().toLowerCase();
+  const showToolbar = !managing && rooms.length >= 4;
+  const filteredRooms = showToolbar ? rooms.filter(r => {
+    if (activeFilter === "live" && !r.live) return false;
+    if (activeFilter === "warn" && r.tone !== "warn") return false;
+    if (!keyword) return true;
+    return [r.name, r.title, r.medal_name, r.area_name, r.room, r.uid].some(field => String(field || "").toLowerCase().includes(keyword));
+  }) : rooms;
   const allChecked = rooms.length > 0 && rooms.every(r => selectedBatch.has(r.room));
   const toggleAll = () => {
     if (allChecked) setSelectedBatch(new Set());else setSelectedBatch(new Set(rooms.map(r => r.room)));
@@ -341,15 +392,15 @@ const Overview = ({
     setSelectedBatch(new Set());
   };
   const onRoomKey = event => {
-    if (managing || !rooms.length) return;
+    if (managing || !filteredRooms.length) return;
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     const focused = event.target.closest?.(".room");
     const current = focused ? Number(focused.dataset.room) : selectedId;
-    const index = rooms.findIndex(room => room.room === current);
-    const next = event.key === "Home" ? 0 : event.key === "End" ? rooms.length - 1 : index < 0 ? 0 : (index + (event.key === "ArrowDown" ? 1 : -1) + rooms.length) % rooms.length;
-    onSelect(rooms[next].room);
-    event.currentTarget.querySelector(`[data-room="${rooms[next].room}"]`)?.focus();
+    const index = filteredRooms.findIndex(room => room.room === current);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? filteredRooms.length - 1 : index < 0 ? 0 : (index + (event.key === "ArrowDown" ? 1 : -1) + filteredRooms.length) % filteredRooms.length;
+    onSelect(filteredRooms[next].room);
+    event.currentTarget.querySelector(`[data-room="${filteredRooms[next].room}"]`)?.focus();
   };
   const selected = rooms.find(room => room.room === selectedId);
   const healthy = rooms.filter(room => room.healthy).length;
@@ -378,7 +429,7 @@ const Overview = ({
   }, /*#__PURE__*/React.createElement("span", {
     className: "list-title"
   }, "\u5173\u6CE8\u7684\u76F4\u64AD\u95F4"), /*#__PURE__*/React.createElement("span", {
-    className: "list-count"
+    className: "list-count tnum"
   }, rooms.length), /*#__PURE__*/React.createElement("span", {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("button", {
@@ -389,7 +440,16 @@ const Overview = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "plus",
     size: 12
-  }), "\u6DFB\u52A0\u4E3B\u64AD"), /*#__PURE__*/React.createElement("button", {
+  }), "\u6DFB\u52A0\u4E3B\u64AD"), onSyncMedals && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn ghost sm",
+    onClick: onSyncMedals,
+    disabled: closing || !signedIn,
+    title: !signedIn ? "请先登录账号" : "从账号已有粉丝牌批量导入"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "medal",
+    size: 12
+  }), "\u540C\u6B65\u7C89\u4E1D\u724C"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn ghost sm",
     onClick: () => setManaging(true),
@@ -424,12 +484,91 @@ const Overview = ({
       setManaging(false);
       setSelectedBatch(new Set());
     }
-  }, "\u5B8C\u6210")), /*#__PURE__*/React.createElement("div", {
+  }, "\u5B8C\u6210")), showToolbar && /*#__PURE__*/React.createElement("div", {
+    className: "list-toolbar"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "search-box"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "search",
+    size: 13
+  }), /*#__PURE__*/React.createElement("input", {
+    className: "search-input",
+    value: roomQuery,
+    onChange: e => setRoomQuery(e.target.value),
+    onKeyDown: e => {
+      if (e.key === "Escape" && roomQuery) {
+        e.stopPropagation();
+        setRoomQuery("");
+      }
+    },
+    "aria-label": "\u7B5B\u9009\u76F4\u64AD\u95F4",
+    placeholder: "\u641C\u7D22\u4E3B\u64AD\u3001\u6807\u9898\u6216\u623F\u95F4\u53F7\u2026"
+  }), roomQuery && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "search-clear",
+    "aria-label": "\u6E05\u9664\u641C\u7D22",
+    onClick: () => setRoomQuery("")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "close",
+    size: 11
+  }))), (liveCount > 0 || warnCount > 0) && /*#__PURE__*/React.createElement("div", {
+    className: "list-filters",
+    role: "group",
+    "aria-label": "\u72B6\u6001\u7B5B\u9009"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "growth-filter-btn",
+    "aria-pressed": activeFilter === "all",
+    onClick: () => setRoomFilter("all")
+  }, "\u5168\u90E8"), liveCount > 0 && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "growth-filter-btn",
+    "aria-pressed": activeFilter === "live",
+    onClick: () => setRoomFilter("live")
+  }, "\u76F4\u64AD\u4E2D ", liveCount), warnCount > 0 && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "growth-filter-btn",
+    "aria-pressed": activeFilter === "warn",
+    onClick: () => setRoomFilter("warn")
+  }, "\u9700\u5173\u6CE8 ", warnCount))), /*#__PURE__*/React.createElement("div", {
     className: "rooms",
     role: "listbox",
     "aria-label": "\u76F4\u64AD\u95F4\u5217\u8868",
     onKeyDown: onRoomKey
-  }, rooms.length ? rooms.map(room => /*#__PURE__*/React.createElement(RoomRow, {
+  }, !rooms.length ? /*#__PURE__*/React.createElement("div", {
+    className: "empty list-empty"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "monitor",
+    size: 24
+  }), /*#__PURE__*/React.createElement("strong", null, "\u8FD8\u6CA1\u6709\u5173\u6CE8\u4E3B\u64AD"), /*#__PURE__*/React.createElement("span", null, "\u6DFB\u52A0\u4E3B\u64AD\u6216\u540C\u6B65\u7C89\u4E1D\u724C\u540E\u5373\u53EF\u81EA\u52A8\u6302\u673A"), /*#__PURE__*/React.createElement("div", {
+    className: "empty-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    onClick: onAddMember
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "plus",
+    size: 12
+  }), "\u6DFB\u52A0\u4E3B\u64AD"), onSyncMedals && signedIn && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onSyncMedals
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "medal",
+    size: 12
+  }), "\u540C\u6B65\u7C89\u4E1D\u724C"))) : !filteredRooms.length ? /*#__PURE__*/React.createElement("div", {
+    className: "empty list-empty"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "search",
+    size: 22
+  }), /*#__PURE__*/React.createElement("strong", null, "\u6CA1\u6709\u5339\u914D\u7684\u76F4\u64AD\u95F4"), /*#__PURE__*/React.createElement("span", null, "\u8BD5\u8BD5\u5176\u4ED6\u5173\u952E\u8BCD\u6216\u5207\u6362\u7B5B\u9009\u6761\u4EF6"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: () => {
+      setRoomQuery("");
+      setRoomFilter("all");
+    }
+  }, "\u6E05\u9664\u7B5B\u9009")) : filteredRooms.map(room => /*#__PURE__*/React.createElement(RoomRow, {
     key: room.room,
     room: room,
     selected: room.room === selectedId,
@@ -439,17 +578,9 @@ const Overview = ({
     managing: managing,
     checked: selectedBatch.has(room.room),
     onToggleCheck: toggleCheck
-  })) : /*#__PURE__*/React.createElement("div", {
-    className: "empty list-empty"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "monitor",
-    size: 24
-  }), /*#__PURE__*/React.createElement("strong", null, "\u8FD8\u6CA1\u6709\u5173\u6CE8\u4E3B\u64AD"), /*#__PURE__*/React.createElement("span", null, "\u6DFB\u52A0\u4E3B\u64AD\u6216\u540C\u6B65\u7C89\u4E1D\u724C\u540E\u5373\u53EF\u81EA\u52A8\u6302\u673A"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm primary",
-    onClick: onAddMember
-  }, "\u6DFB\u52A0\u4E3B\u64AD")))), /*#__PURE__*/React.createElement(DetailPanel, {
+  })))), /*#__PURE__*/React.createElement(DetailPanel, {
     room: selected,
+    image: images[selected?.uid],
     busy: busyRoom === selected?.room,
     onAction: onAction,
     onOpen: onOpen,

@@ -241,6 +241,8 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
     const statusTag = !hasDays && todayMissing
       ? "尚无同步记录"
       : (hasDays && totalGain === 0 && (todayMissing || todayCell.value === 0) ? "近7日无增量" : "");
+    const medalTag = room.medal_name ? `${room.medal_name}${room.level ? ` Lv.${room.level}` : ""}` : "";
+    const subTag = [medalTag, statusTag].filter(Boolean).join(" · ");
     return (
       <button type="button" key={room.room} className="growth-row" aria-pressed={isSelected}
         title={`${name}${room.tracked ? "" : " · 已移除"} · 查看近 7 日`}
@@ -251,7 +253,7 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
           </span>
           <span className="growth-room-meta">
             <span className="growth-room-name">{name}</span>
-            {statusTag && <span className="growth-room-tag">{statusTag}</span>}
+            {subTag && <span className="growth-room-tag">{subTag}</span>}
           </span>
         </span>
         <span className="growth-mini" aria-hidden="true">
@@ -297,6 +299,58 @@ function GrowthPage({ viewId, images = {}, onNeedAvatar, onOpenAccount, onOpenMo
             action={onOpenMonitor ? "去直播总览" : ""} onAction={onOpenMonitor} />
           : <>
             <section className="growth-panel card">
+              <div className="growth-kpis">
+                {selected ? (() => {
+                  const selToday = cellAt(selected, todayIndex);
+                  const selHasDays = Boolean(selected.recorded_days);
+                  const selTotal = selected.recorded_total || 0;
+                  return <>
+                    <div className="growth-kpi">
+                      <span className="growth-kpi-label">今日亲密度</span>
+                      <strong className="growth-kpi-value tnum">
+                        {!selToday.recorded ? "—" : `${selToday.value > 0 ? "+" : ""}${numberText(selToday.value)}`}
+                      </strong>
+                      <span className="growth-kpi-sub">{selToday.recorded ? todaySub : "今日尚未同步"}</span>
+                    </div>
+                    <div className="growth-kpi">
+                      <span className="growth-kpi-label">近 7 日合计</span>
+                      <strong className="growth-kpi-value tnum">
+                        {selHasDays ? `${selTotal > 0 ? "+" : ""}${numberText(selTotal)}` : "—"}
+                      </strong>
+                      <span className="growth-kpi-sub">
+                        {selected.medal_name ? `${selected.medal_name}${selected.level ? ` Lv.${selected.level}` : ""}` : `房间 ${selected.room}`}
+                      </span>
+                    </div>
+                    <div className="growth-kpi">
+                      <span className="growth-kpi-label">有效记录</span>
+                      <strong className="growth-kpi-value tnum">{selected.recorded_days || 0}<small> / {days.length} 天</small></strong>
+                      <span className="growth-kpi-sub">未记录日期不补 0</span>
+                    </div>
+                  </>;
+                })() : <>
+                  <div className="growth-kpi">
+                    <span className="growth-kpi-label">今日获得</span>
+                    <strong className="growth-kpi-value accent tnum">
+                      {todayHasRecords ? `${todayTotal > 0 ? "+" : ""}${numberText(todayTotal)}` : "—"}
+                    </strong>
+                    <span className="growth-kpi-sub">{todaySub}</span>
+                  </div>
+                  <div className="growth-kpi">
+                    <span className="growth-kpi-label">近 7 日累计</span>
+                    <strong className="growth-kpi-value tnum">
+                      {recordedDays ? `${grandTotal > 0 ? "+" : ""}${numberText(grandTotal)}` : "—"}
+                    </strong>
+                    <span className="growth-kpi-sub">{recordedDays ? `共记录 ${recordedDays} 天` : "暂无有效记录"}</span>
+                  </div>
+                  <div className="growth-kpi">
+                    <span className="growth-kpi-label">日均成长</span>
+                    <strong className="growth-kpi-value tnum">
+                      {recordedDays ? `${average > 0 ? "+" : ""}${numberText(average)}` : "—"}
+                    </strong>
+                    <span className="growth-kpi-sub tnum">{activeRooms.length} / {followedRooms.length} 位近 7 日有增长</span>
+                  </div>
+                </>}
+              </div>
               <div className="growth-panel-head">
                 <div className="growth-panel-title" title={selected ? "该直播间每日观测峰值；未记录不补 0" : "柱高为当日有记录直播间的合计；未记录不补 0"}>
                   {chartTitle}

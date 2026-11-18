@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"380ac8c5a8e9d664e9fd44bb5c662091df04627f99e7cf92c2b057b58fb8349c","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"a7813d387f2d473445990031183fd260ce5cbec0fa67f1d20b26c14b621afd67"} */
+/* BiliOshi JSX {"code_sha256":"1a98bc4190a6062e0c0afc87fc21debe7ea26cc6bd745213236438fb9bb35548","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"15ca7ea4b64d5e0918e96b92bda5975d936207e8f79f0d15482421aa130b9043"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -7,6 +7,7 @@ function _extends() { return _extends = Object.assign ? Object.assign.bind() : f
 const {
   useState,
   useEffect,
+  useLayoutEffect,
   useRef
 } = React;
 const {
@@ -32,9 +33,10 @@ const Switch = ({
 const SettingRow = ({
   name,
   desc,
+  className = "",
   children
 }) => /*#__PURE__*/React.createElement("div", {
-  className: "setting"
+  className: `setting${className ? ` ${className}` : ""}`
 }, /*#__PURE__*/React.createElement("div", {
   className: "setting-text"
 }, /*#__PURE__*/React.createElement("div", {
@@ -53,10 +55,18 @@ const Choice = ({
   disabled
 }) => {
   const [open, setOpen] = useState(false);
+  const [flipUp, setFlipUp] = useState(false);
   const root = useRef(null);
   const trigger = useRef(null);
   const menu = useRef(null);
   const selected = Math.max(0, options.findIndex(option => option.value === value));
+  useLayoutEffect(() => {
+    if (!open || !trigger.current || !menu.current) return;
+    const triggerRect = trigger.current.getBoundingClientRect();
+    const menuHeight = menu.current.offsetHeight || 72;
+    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    setFlipUp(spaceBelow < menuHeight + 14 && triggerRect.top > menuHeight + 14);
+  }, [open]);
   useEffect(() => {
     if (!open) return undefined;
     const dismiss = event => {
@@ -110,7 +120,7 @@ const Choice = ({
     name: "chevron",
     size: 12
   })), open && /*#__PURE__*/React.createElement("div", {
-    className: "choice-menu",
+    className: `choice-menu${flipUp ? " flip-up" : ""}`,
     role: "listbox",
     "aria-label": label,
     ref: menu
@@ -361,6 +371,7 @@ const SettingsPage = ({
     systemDark: systemDark,
     dayThemeName: dayThemeName
   })), theme === "system" && /*#__PURE__*/React.createElement(SettingRow, {
+    className: "setting-sub",
     name: "\u767D\u5929\u9ED8\u8BA4\u4E3B\u9898",
     desc: "\u7CFB\u7EDF\u5904\u4E8E\u6D45\u8272\u5916\u89C2\u65F6\u4F18\u5148\u4F7F\u7528\u7684\u914D\u8272"
   }, /*#__PURE__*/React.createElement(ThemeOptions, {

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"db731f25b7747bdce4f37a2c205685e174830bde9991e6d5cfc6d2812bfbcd57","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"a1997812c6e28dc341562a1c2ea9d0137038be69c0683c162797dba9729ea75d"} */
+/* BiliOshi JSX {"code_sha256":"7bc6ca60fc288734e7f01915e1e01f952459258bbc750efcb061c4d9105c7a3f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"d0085f39f79211cc21f49fbb795dce844c3568a60abb5b70bd08269e158a0a18"} */
 (function () {
 "use strict";
 /* Hand-drawn 16px stroke icons — one weight, round caps, currentColor.
@@ -213,7 +213,23 @@ const Icon = ({
       d: "M12 4.2a7.8 7.8 0 0 1 0 15.6Z",
       fill: "currentColor",
       stroke: "none"
-    }))
+    })),
+    search: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("circle", {
+      cx: "10.8",
+      cy: "10.8",
+      r: "6.3"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "m15.6 15.6 4.4 4.4"
+    })),
+    close: /*#__PURE__*/React.createElement("path", {
+      d: "M6.8 6.8l10.4 10.4M17.2 6.8 6.8 17.2"
+    }),
+    chat: /*#__PURE__*/React.createElement("path", {
+      d: "M5.4 5.8h13.2c1 0 1.9.8 1.9 1.8v7.4c0 1-.9 1.8-1.9 1.8H10.2l-4 2.9v-2.9H5.4c-1 0-1.9-.8-1.9-1.8V7.6c0-1 .9-1.8 1.9-1.8Z"
+    }),
+    heart: /*#__PURE__*/React.createElement("path", {
+      d: "M12 19.5s-6.8-4.2-8.4-8.3c-.9-2.8 1-5.5 3.9-5.5 1.8 0 3.3.9 4.5 2.4 1.2-1.5 2.7-2.4 4.5-2.4 2.9 0 4.8 2.7 3.9 5.5-1.6 4.1-8.4 8.3-8.4 8.3Z"
+    })
   };
   return /*#__PURE__*/React.createElement("svg", common, paths[name] || paths.info);
 };

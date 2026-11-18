@@ -27,27 +27,46 @@ const applyDocumentDayTheme = (value) => {
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, avatar, onQuit, brandHidden, collapsed, inert }) => (
-  <aside className="side" inert={inert ? "" : undefined}>
-    {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
-      <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
-    </div>}
-    <nav className="nav" aria-label="主导航">
-      {[ ["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
-        <button type="button" key={key} className="nav-item" aria-current={page === key ? "page" : undefined}
-          aria-label={text} title={text} onClick={() => onPage(key)}><Icon name={icon} /><span>{text}</span></button>)}
-    </nav>
-    <div className="nav-spacer" />
-    <nav className="nav nav-bottom" aria-label="应用操作">
-      <button type="button" className="nav-item" onClick={onQuit} aria-label="退出应用" title="退出应用"><Icon name="power" /><span>退出应用</span></button>
-    </nav>
-    <button type="button" className="sidebar-account" onClick={() => onPage("account")} title="账号管理"
-      aria-label="账号管理">
-      <span className="sidebar-avatar">{avatar ? <img src={avatar} alt="" /> : Array.from(account.name || "?")[0]}</span>
-      <span className="sidebar-account-text"><strong>{account.name || (account.signed_in ? "等待验证" : "尚未登录")}</strong></span>
-    </button>
-  </aside>
-);
+const Sidebar = ({ page, onPage, account, activeAccount, paused, avatar, onQuit, brandHidden, collapsed, inert }) => {
+  const state = activeAccount && window.accountStateLabel
+    ? window.accountStateLabel(activeAccount)
+    : account.safety?.blocked
+      ? { label: "保护暂停", tone: "warn" }
+      : !account.signed_in
+        ? { label: "点击扫码登录", tone: "muted" }
+        : paused
+          ? { label: "已暂停", tone: "muted" }
+          : { label: "挂机中", tone: "live" };
+  return (
+    <aside className="side" inert={inert ? "" : undefined}>
+      {!brandHidden && <div className="brand"><div className="logo"><Pulse size={18} /></div>
+        <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
+      </div>}
+      <nav className="nav" aria-label="主导航">
+        {[ ["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
+          <button type="button" key={key} className="nav-item" aria-current={page === key ? "page" : undefined}
+            aria-label={text} title={text} onClick={() => onPage(key)}><Icon name={icon} /><span>{text}</span></button>)}
+      </nav>
+      <div className="nav-spacer" />
+      <nav className="nav nav-bottom" aria-label="应用操作">
+        <button type="button" className="nav-item" onClick={onQuit} aria-label="退出应用" title="退出应用"><Icon name="power" /><span>退出应用</span></button>
+      </nav>
+      <div className="sidebar-foot">
+        <button type="button" className="sidebar-account" onClick={() => onPage("account")} title="账号管理"
+          aria-label="账号管理">
+          <span className="sidebar-avatar">{avatar ? <img src={avatar} alt="" /> : Array.from(account.name || "?")[0]}</span>
+          <span className="sidebar-account-text">
+            <strong>{account.name || (account.signed_in ? "等待验证" : "尚未登录")}</strong>
+            <small className={`sidebar-state ${state.tone}`}>
+              <i className={`sidebar-dot ${state.tone}`} aria-hidden="true" />
+              <span>{state.label}</span>
+            </small>
+          </span>
+        </button>
+      </div>
+    </aside>
+  );
+};
 
 const pageTitles = { monitor: "直播总览", growth: "成长记录", automation: "设置", account: "账号" };
 
@@ -774,14 +793,16 @@ function App() {
     removeAccount: { title: "移除这个账号？", desc: "将从列表中移除此账号并清除凭证，关注列表与记录仍会保留。", confirmLabel: "移除账号", danger: true },
   };
 
-  const modalOpen = Boolean(qr || (dialog && dialog !== "diagnostic"));
+  const nativeModal = dialog === "diagnostic" || dialog?.type === "safety";
+  const modalOpen = Boolean(qr || (dialog && !nativeModal));
+  const activeAccountObj = accounts.find((item) => item.id === activeId) || null;
   const modalAvatar = dialog?.account?.id
     ? (dialog.account.id === activeId ? (accountAvatar || accountAvatars[dialog.account.id]) : accountAvatars[dialog.account.id])
     : "";
   const safetyAccount = dialog?.type === "safety"
     ? ((dialog.account?.id && accounts.find((item) => item.id === dialog.account.id))
        || dialog.account
-       || accounts.find((item) => item.id === activeId)
+       || activeAccountObj
        || null)
     : null;
   const isSafetyActive = Boolean(!safetyAccount || (activeId && safetyAccount.id === activeId));
@@ -791,7 +812,8 @@ function App() {
 
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
-      <Sidebar page={page} onPage={setPage} account={account} avatar={accountAvatar || accountAvatars[activeId]}
+      <Sidebar page={page} onPage={setPage} account={account} activeAccount={activeAccountObj} paused={snap.paused}
+        avatar={accountAvatar || accountAvatars[activeId]}
         onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} inert={modalOpen} />
       <main className="main" aria-busy={!connected} inert={modalOpen ? "" : undefined}>
         <header className="chrome pywebview-drag-region">
@@ -851,7 +873,8 @@ function App() {
       {dialog === "add" && <window.AddMemberModal query={query} onQuery={onQuery} result={searchResult} loading={searching}
         adding={dialogBusy} onSearch={search} onAdd={add} onClose={closeDialog} onSyncMedals={openMedals} />}
       {dialog === "medals" && <window.MedalsModal data={medals.data} loading={medals.loading} error={medals.error}
-        selected={medalSelection} onToggle={(uid) => setMedalSelection((current) => { const next = new Set(current);
+        selected={medalSelection} onSetSelection={setMedalSelection}
+        onToggle={(uid) => setMedalSelection((current) => { const next = new Set(current);
           if (next.has(uid)) next.delete(uid); else next.add(uid); return next; })}
         onImport={importMedals} importing={dialogBusy} onClose={closeDialog} onRetry={openMedals} />}
       {dialog === "diagnostic" && <window.DiagnosticModal

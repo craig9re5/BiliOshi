@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"40338c9ca9e389c2f81d9d2182ad9f7cda0199ca60d8697e98cd0d66804189f1","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"c7215dadbfae8a163c117baf5e69b80ae73a3b8419e4bed3d98688539a8dd1a2"} */
+/* BiliOshi JSX {"code_sha256":"0d55fb629756d67237daef38b498a8d0b821462cf2a7ee65c74784e539f0cccd","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"3bc1fa6410d0282bac6975059735e255de38f9917c88784685ca09e5f0e3bb4d"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -184,56 +184,113 @@ const MedalsModal = ({
   data,
   selected,
   onToggle,
+  onSetSelection,
   onImport,
   onClose,
   loading,
   importing,
   error,
   onRetry
-}) => /*#__PURE__*/React.createElement(Modal, {
-  title: "\u540C\u6B65\u7C89\u4E1D\u724C",
-  desc: "\u9009\u62E9\u8981\u5173\u6CE8\u7684\u4E3B\u64AD\uFF08\u5DF2\u5173\u6CE8\u7684\u81EA\u52A8\u8DF3\u8FC7\uFF09",
-  wide: true,
-  onClose: onClose,
-  actions: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+}) => {
+  const [filter, setFilter] = useState("");
+  const keyword = filter.trim().toLowerCase();
+  const importable = data.filter(item => !item.watched);
+  const visible = keyword ? data.filter(medal => [medal.name, medal.medal_name, medal.uid, medal.room].some(field => String(field || "").toLowerCase().includes(keyword))) : data;
+  const visibleImportable = visible.filter(item => !item.watched);
+  const allVisibleSelected = visibleImportable.length > 0 && visibleImportable.every(item => selected.has(item.uid));
+  const toggleAllVisible = () => {
+    if (typeof onSetSelection === "function") {
+      onSetSelection(current => {
+        const next = new Set(current);
+        for (const item of visibleImportable) {
+          if (allVisibleSelected) next.delete(item.uid);else next.add(item.uid);
+        }
+        return next;
+      });
+      return;
+    }
+    for (const item of visibleImportable) {
+      if (allVisibleSelected === selected.has(item.uid)) onToggle(item.uid);
+    }
+  };
+  return /*#__PURE__*/React.createElement(Modal, {
+    title: "\u540C\u6B65\u7C89\u4E1D\u724C",
+    desc: "\u9009\u62E9\u8981\u5173\u6CE8\u7684\u4E3B\u64AD\uFF08\u5DF2\u5173\u6CE8\u7684\u81EA\u52A8\u8DF3\u8FC7\uFF09",
+    wide: true,
+    onClose: onClose,
+    actions: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn",
+      onClick: onClose
+    }, "\u53D6\u6D88"), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn primary",
+      onClick: onImport,
+      disabled: loading || importing || selected.size === 0 || Boolean(error)
+    }, importing ? "正在导入…" : selected.size ? `导入 ${selected.size} 位主播` : "导入主播"))
+  }, !loading && !error && data.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "medal-toolbar"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "medal-summary"
+  }, /*#__PURE__*/React.createElement("span", null, "\u5171 ", data.length, " \u679A\u7C89\u4E1D\u724C \xB7 \u53EF\u5BFC\u5165 ", importable.length, " \u4F4D"), visibleImportable.length > 0 && /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn",
-    onClick: onClose
-  }, "\u53D6\u6D88"), /*#__PURE__*/React.createElement("button", {
+    className: "link-btn",
+    disabled: importing,
+    onClick: toggleAllVisible
+  }, allVisibleSelected ? "取消全选" : keyword ? "全选筛选结果" : "全选未关注")), data.length >= 6 && /*#__PURE__*/React.createElement("div", {
+    className: "search-box"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "search",
+    size: 13
+  }), /*#__PURE__*/React.createElement("input", {
+    className: "search-input",
+    value: filter,
+    onChange: e => setFilter(e.target.value),
+    "aria-label": "\u7B5B\u9009\u7C89\u4E1D\u724C\u6216\u4E3B\u64AD",
+    placeholder: "\u641C\u7D22\u4E3B\u64AD\u540D\u79F0\u6216\u7C89\u4E1D\u724C\u2026",
+    disabled: importing
+  }), filter && /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn primary",
-    onClick: onImport,
-    disabled: loading || importing || selected.size === 0 || Boolean(error)
-  }, importing ? "正在导入…" : selected.size ? `导入 ${selected.size} 位主播` : "导入主播"))
-}, /*#__PURE__*/React.createElement("div", {
-  className: "medal-list"
-}, loading ? /*#__PURE__*/React.createElement("div", {
-  className: "field-note"
-}, "\u6B63\u5728\u8BFB\u53D6\u7C89\u4E1D\u724C\u2026") : error ? /*#__PURE__*/React.createElement("div", {
-  className: "field-note"
-}, /*#__PURE__*/React.createElement("p", null, error), /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: "btn sm",
-  onClick: onRetry
-}, "\u91CD\u8BD5")) : !data.length ? /*#__PURE__*/React.createElement("div", {
-  className: "field-note"
-}, "\u6682\u65E0\u53EF\u540C\u6B65\u7684\u7C89\u4E1D\u724C") : data.map(medal => /*#__PURE__*/React.createElement("label", {
-  key: medal.uid,
-  className: `medal-row ${medal.watched ? "watched" : ""}`
-}, /*#__PURE__*/React.createElement("input", {
-  type: "checkbox",
-  checked: selected.has(medal.uid),
-  disabled: medal.watched || importing,
-  onChange: () => onToggle(medal.uid)
-}), /*#__PURE__*/React.createElement("span", {
-  className: "account-avatar small"
-}, Array.from(medal.name || medal.medal_name || "?")[0]), /*#__PURE__*/React.createElement("span", {
-  className: "medal-main"
-}, /*#__PURE__*/React.createElement("span", {
-  className: "account-name"
-}, medal.name || medal.medal_name), /*#__PURE__*/React.createElement("span", {
-  className: "account-meta"
-}, medal.medal_name, " Lv.", medal.level, medal.watched ? " · 已关注" : ""))))));
+    className: "search-clear",
+    "aria-label": "\u6E05\u9664\u641C\u7D22",
+    onClick: () => setFilter("")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "close",
+    size: 11
+  })))), /*#__PURE__*/React.createElement("div", {
+    className: "medal-list"
+  }, loading ? /*#__PURE__*/React.createElement("div", {
+    className: "field-note"
+  }, "\u6B63\u5728\u8BFB\u53D6\u7C89\u4E1D\u724C\u2026") : error ? /*#__PURE__*/React.createElement("div", {
+    className: "field-note"
+  }, /*#__PURE__*/React.createElement("p", null, error), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onRetry
+  }, "\u91CD\u8BD5")) : !data.length ? /*#__PURE__*/React.createElement("div", {
+    className: "field-note"
+  }, "\u6682\u65E0\u53EF\u540C\u6B65\u7684\u7C89\u4E1D\u724C") : !visible.length ? /*#__PURE__*/React.createElement("div", {
+    className: "field-note"
+  }, "\u6CA1\u6709\u5339\u914D\u7684\u7C89\u4E1D\u724C") : visible.map(medal => /*#__PURE__*/React.createElement("label", {
+    key: medal.uid,
+    className: `medal-row ${medal.watched ? "watched" : ""}`
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: selected.has(medal.uid),
+    disabled: medal.watched || importing,
+    onChange: () => onToggle(medal.uid)
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "account-avatar small"
+  }, Array.from(medal.name || medal.medal_name || "?")[0]), /*#__PURE__*/React.createElement("span", {
+    className: "medal-main"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "account-name"
+  }, medal.name || medal.medal_name), /*#__PURE__*/React.createElement("span", {
+    className: "account-meta"
+  }, medal.medal_name, medal.watched ? " · 已关注" : "")), /*#__PURE__*/React.createElement("span", {
+    className: "medal-level"
+  }, "Lv.", medal.level)))));
+};
 const ConfirmModal = ({
   title,
   desc,
@@ -442,21 +499,7 @@ const RoomMenu = ({
     size: 14
   }), /*#__PURE__*/React.createElement("span", null, "\u79FB\u9664\u4E3B\u64AD")));
 };
-const DiagnosticModal = ({
-  preview,
-  loading,
-  anonymize,
-  includeState,
-  onChangeAnonymize,
-  onChangeIncludeState,
-  exporting,
-  exported,
-  statusText,
-  onExport,
-  onCopySummary,
-  onOpenExports,
-  onClose
-}) => {
+function useModalDialog(onClose) {
   const dialogRef = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -479,10 +522,10 @@ const DiagnosticModal = ({
       };
       let pressedOutside = false;
       const onDown = e => {
-        pressedOutside = outside(e);
+        pressedOutside = e.target === dialog && outside(e);
       };
       const onUp = e => {
-        if (pressedOutside && outside(e)) dialog.close();
+        if (pressedOutside && e.target === dialog && outside(e)) dialog.close();
       };
       dialog.addEventListener("pointerdown", onDown);
       dialog.addEventListener("pointerup", onUp);
@@ -497,6 +540,24 @@ const DiagnosticModal = ({
       if (dialog.open) dialog.close();
     };
   }, []);
+  return dialogRef;
+}
+const DiagnosticModal = ({
+  preview,
+  loading,
+  anonymize,
+  includeState,
+  onChangeAnonymize,
+  onChangeIncludeState,
+  exporting,
+  exported,
+  statusText,
+  onExport,
+  onCopySummary,
+  onOpenExports,
+  onClose
+}) => {
+  const dialogRef = useModalDialog(onClose);
   const errors = exported?.recent_errors || preview?.recent_errors || [];
   const env = preview?.environment || {};
   const errCount = preview?.recent_error_count ?? errors.length;

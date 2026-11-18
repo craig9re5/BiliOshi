@@ -1,6 +1,6 @@
 /* Settings use the same vocabulary as the overview; changes apply through Python. */
 
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useLayoutEffect, useRef } = React;
 const { Icon, relativeTime, absoluteTime, numberLabel } = window;
 
 const Switch = ({ checked, onChange, label, disabled }) => (
@@ -8,8 +8,8 @@ const Switch = ({ checked, onChange, label, disabled }) => (
     aria-label={label} disabled={disabled} onClick={() => onChange(!checked)} />
 );
 
-const SettingRow = ({ name, desc, children }) => (
-  <div className="setting"><div className="setting-text"><div className="setting-name">{name}</div>
+const SettingRow = ({ name, desc, className = "", children }) => (
+  <div className={`setting${className ? ` ${className}` : ""}`}><div className="setting-text"><div className="setting-name">{name}</div>
     {desc && <div className="setting-desc">{desc}</div>}</div>{children}</div>
 );
 
@@ -17,10 +17,19 @@ const SettingRow = ({ name, desc, children }) => (
    system popup, which did not follow the card surfaces or spacing. */
 const Choice = ({ value, options, onChange, label, disabled }) => {
   const [open, setOpen] = useState(false);
+  const [flipUp, setFlipUp] = useState(false);
   const root = useRef(null);
   const trigger = useRef(null);
   const menu = useRef(null);
   const selected = Math.max(0, options.findIndex((option) => option.value === value));
+
+  useLayoutEffect(() => {
+    if (!open || !trigger.current || !menu.current) return;
+    const triggerRect = trigger.current.getBoundingClientRect();
+    const menuHeight = menu.current.offsetHeight || 72;
+    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    setFlipUp(spaceBelow < menuHeight + 14 && triggerRect.top > menuHeight + 14);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -68,7 +77,7 @@ const Choice = ({ value, options, onChange, label, disabled }) => {
         <span className="choice-label">{options[selected]?.label}</span>
         <Icon name="chevron" size={12} />
       </button>
-      {open && <div className="choice-menu" role="listbox" aria-label={label} ref={menu}>
+      {open && <div className={`choice-menu${flipUp ? " flip-up" : ""}`} role="listbox" aria-label={label} ref={menu}>
         {options.map((option, index) => (
           <button type="button" key={option.value} className="choice-option" role="option"
             data-value={option.value} aria-selected={option.value === value}
@@ -215,7 +224,7 @@ const SettingsPage = ({
           <ThemeOptions value={theme} onChange={onTheme} systemDark={systemDark} dayThemeName={dayThemeName} />
         </SettingRow>
         {theme === "system" && (
-          <SettingRow name="白天默认主题" desc="系统处于浅色外观时优先使用的配色">
+          <SettingRow className="setting-sub" name="白天默认主题" desc="系统处于浅色外观时优先使用的配色">
             <ThemeOptions choices={DAY_THEME_CHOICES} value={dayTheme} onChange={onDayTheme}
               ariaLabel="白天默认主题" isDayPicker />
           </SettingRow>

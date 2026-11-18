@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"61f4670be12ce5456dcac6d02b401ee2d55f7930b9588846018681f131ac722f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"45058256fdeb560f6bb31a6c0d74c50a44b6e3bc61ab52b40baaf980bb24d8da"} */
+/* BiliOshi JSX {"code_sha256":"fc329959506a3d644d91a652123ab84cbbafda41ec4dce3b0fbec2d9b2cade4b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"ca0cd9702914149e5bc6744247983afe22e335b8a0e47508ff69a3ef522b94cd"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -65,64 +65,88 @@ const Sidebar = ({
   page,
   onPage,
   account,
+  activeAccount,
+  paused,
   avatar,
   onQuit,
   brandHidden,
   collapsed,
   inert
-}) => /*#__PURE__*/React.createElement("aside", {
-  className: "side",
-  inert: inert ? "" : undefined
-}, !brandHidden && /*#__PURE__*/React.createElement("div", {
-  className: "brand"
-}, /*#__PURE__*/React.createElement("div", {
-  className: "logo"
-}, /*#__PURE__*/React.createElement(Pulse, {
-  size: 18
-})), /*#__PURE__*/React.createElement("div", {
-  className: "brand-text"
-}, /*#__PURE__*/React.createElement("span", {
-  className: "brand-name"
-}, "\u30D3\u30EA\u63A8\u3057"))), /*#__PURE__*/React.createElement("nav", {
-  className: "nav",
-  "aria-label": "\u4E3B\u5BFC\u822A"
-}, [["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"], ["account", "user", "账号"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  key: key,
-  className: "nav-item",
-  "aria-current": page === key ? "page" : undefined,
-  "aria-label": text,
-  title: text,
-  onClick: () => onPage(key)
-}, /*#__PURE__*/React.createElement(Icon, {
-  name: icon
-}), /*#__PURE__*/React.createElement("span", null, text)))), /*#__PURE__*/React.createElement("div", {
-  className: "nav-spacer"
-}), /*#__PURE__*/React.createElement("nav", {
-  className: "nav nav-bottom",
-  "aria-label": "\u5E94\u7528\u64CD\u4F5C"
-}, /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: "nav-item",
-  onClick: onQuit,
-  "aria-label": "\u9000\u51FA\u5E94\u7528",
-  title: "\u9000\u51FA\u5E94\u7528"
-}, /*#__PURE__*/React.createElement(Icon, {
-  name: "power"
-}), /*#__PURE__*/React.createElement("span", null, "\u9000\u51FA\u5E94\u7528"))), /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: "sidebar-account",
-  onClick: () => onPage("account"),
-  title: "\u8D26\u53F7\u7BA1\u7406",
-  "aria-label": "\u8D26\u53F7\u7BA1\u7406"
-}, /*#__PURE__*/React.createElement("span", {
-  className: "sidebar-avatar"
-}, avatar ? /*#__PURE__*/React.createElement("img", {
-  src: avatar,
-  alt: ""
-}) : Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("span", {
-  className: "sidebar-account-text"
-}, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")))));
+}) => {
+  const state = activeAccount && window.accountStateLabel ? window.accountStateLabel(activeAccount) : account.safety?.blocked ? {
+    label: "保护暂停",
+    tone: "warn"
+  } : !account.signed_in ? {
+    label: "点击扫码登录",
+    tone: "muted"
+  } : paused ? {
+    label: "已暂停",
+    tone: "muted"
+  } : {
+    label: "挂机中",
+    tone: "live"
+  };
+  return /*#__PURE__*/React.createElement("aside", {
+    className: "side",
+    inert: inert ? "" : undefined
+  }, !brandHidden && /*#__PURE__*/React.createElement("div", {
+    className: "brand"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "logo"
+  }, /*#__PURE__*/React.createElement(Pulse, {
+    size: 18
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "brand-text"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "brand-name"
+  }, "\u30D3\u30EA\u63A8\u3057"))), /*#__PURE__*/React.createElement("nav", {
+    className: "nav",
+    "aria-label": "\u4E3B\u5BFC\u822A"
+  }, [["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"], ["account", "user", "账号"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    key: key,
+    className: "nav-item",
+    "aria-current": page === key ? "page" : undefined,
+    "aria-label": text,
+    title: text,
+    onClick: () => onPage(key)
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: icon
+  }), /*#__PURE__*/React.createElement("span", null, text)))), /*#__PURE__*/React.createElement("div", {
+    className: "nav-spacer"
+  }), /*#__PURE__*/React.createElement("nav", {
+    className: "nav nav-bottom",
+    "aria-label": "\u5E94\u7528\u64CD\u4F5C"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "nav-item",
+    onClick: onQuit,
+    "aria-label": "\u9000\u51FA\u5E94\u7528",
+    title: "\u9000\u51FA\u5E94\u7528"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "power"
+  }), /*#__PURE__*/React.createElement("span", null, "\u9000\u51FA\u5E94\u7528"))), /*#__PURE__*/React.createElement("div", {
+    className: "sidebar-foot"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "sidebar-account",
+    onClick: () => onPage("account"),
+    title: "\u8D26\u53F7\u7BA1\u7406",
+    "aria-label": "\u8D26\u53F7\u7BA1\u7406"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "sidebar-avatar"
+  }, avatar ? /*#__PURE__*/React.createElement("img", {
+    src: avatar,
+    alt: ""
+  }) : Array.from(account.name || "?")[0]), /*#__PURE__*/React.createElement("span", {
+    className: "sidebar-account-text"
+  }, /*#__PURE__*/React.createElement("strong", null, account.name || (account.signed_in ? "等待验证" : "尚未登录")), /*#__PURE__*/React.createElement("small", {
+    className: `sidebar-state ${state.tone}`
+  }, /*#__PURE__*/React.createElement("i", {
+    className: `sidebar-dot ${state.tone}`,
+    "aria-hidden": "true"
+  }), /*#__PURE__*/React.createElement("span", null, state.label))))));
+};
 const pageTitles = {
   monitor: "直播总览",
   growth: "成长记录",
@@ -1109,9 +1133,11 @@ function App() {
       danger: true
     }
   };
-  const modalOpen = Boolean(qr || dialog && dialog !== "diagnostic");
+  const nativeModal = dialog === "diagnostic" || dialog?.type === "safety";
+  const modalOpen = Boolean(qr || dialog && !nativeModal);
+  const activeAccountObj = accounts.find(item => item.id === activeId) || null;
   const modalAvatar = dialog?.account?.id ? dialog.account.id === activeId ? accountAvatar || accountAvatars[dialog.account.id] : accountAvatars[dialog.account.id] : "";
-  const safetyAccount = dialog?.type === "safety" ? dialog.account?.id && accounts.find(item => item.id === dialog.account.id) || dialog.account || accounts.find(item => item.id === activeId) || null : null;
+  const safetyAccount = dialog?.type === "safety" ? dialog.account?.id && accounts.find(item => item.id === dialog.account.id) || dialog.account || activeAccountObj || null : null;
   const isSafetyActive = Boolean(!safetyAccount || activeId && safetyAccount.id === activeId);
   const safetyHold = isSafetyActive ? snap.safety : safetyAccount?.safety?.blocked ? safetyAccount.safety : {
     blocked: true,
@@ -1124,6 +1150,8 @@ function App() {
     page: page,
     onPage: setPage,
     account: account,
+    activeAccount: activeAccountObj,
+    paused: snap.paused,
     avatar: accountAvatar || accountAvatars[activeId],
     onQuit: () => setDialog({
       type: "quit"
@@ -1277,6 +1305,7 @@ function App() {
     loading: medals.loading,
     error: medals.error,
     selected: medalSelection,
+    onSetSelection: setMedalSelection,
     onToggle: uid => setMedalSelection(current => {
       const next = new Set(current);
       if (next.has(uid)) next.delete(uid);else next.add(uid);

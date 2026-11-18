@@ -619,7 +619,8 @@ class SafetyAutoRecoveryTests(unittest.TestCase):
             engine = Engine(root, job=Mock())
             with patch.object(engine.application, "validate_credentials_profile", return_value=(True, "测试账号", {"uid": 123})), \
                  patch.object(http, "_once", return_value={"code": 0, "data": {}}), \
-                 patch.object(engine, "_watch_workers") as watch:
+                 patch.object(engine, "_watch_workers") as watch, \
+                 patch.object(engine, "spawn", return_value=Mock(poll=Mock(return_value=None))):
                 engine.tick()
             watch.assert_called_once()
             self.assertFalse(engine.safety["blocked"])
@@ -795,7 +796,8 @@ class SafetyAutoRecoveryTests(unittest.TestCase):
                     root / "state/1.json",
                     {"room": 1, "pid": 77, "phase": "挂机中", "started": time.time() - 60, "last_heartbeat": time.time() - 5},
                 )
-                engine.tick()
+                with patch.object(engine, "spawn", return_value=Mock(poll=Mock(return_value=None))):
+                    engine.tick()
                 proc.terminate.assert_not_called()
                 snap = engine.snapshot()
                 row = snap["rows"][0]

@@ -224,7 +224,7 @@ class Engine:
         env = {**os.environ, "BILIOSHI_APP_DATA": str(self.root), "PYTHONIOENCODING": "utf-8"}
         proc = subprocess.Popen(
             command(*args),
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             env=env,
             cwd=str(Path(sys.executable).parent),
         )

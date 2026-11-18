@@ -9,7 +9,7 @@ def main(argv=None, *, _gateway):
     parser = argparse.ArgumentParser(
         description="B 站动态点赞",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="\n示例:\n  # 给本月动态全部点赞\n  python3 dynamics.py --month 3\n\n  # 给最近7天动态点赞\n  python3 dynamics.py --days 7\n\n  # 只给嘉然的动态点赞\n  python3 dynamics.py --month 3 --members 嘉然\n",
+        epilog="\n示例:\n  # 给本月动态全部点赞\n  python scripts/dynamics.py --month 3\n\n  # 给最近 7 天动态点赞\n  python scripts/dynamics.py --days 7\n\n  # 只给指定成员的动态点赞\n  python scripts/dynamics.py --month 3 --members 主播A\n",
     )
     parser.add_argument("--month", help="指定月份（如 3、03、2026-03）")
     parser.add_argument("--days", type=int, help="最近 N 天的动态")

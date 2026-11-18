@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prompt for Bilibili credentials locally and store them for asoul-support."""
+"""Prompt for Bilibili credentials locally and store them for BiliOshi."""
 
 import getpass
 import argparse

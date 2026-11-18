@@ -1,8 +1,6 @@
 # 多账号挂机与账号管理方案
 
 > 状态：第一期已审批并实现（单活动账号、免扫码切换、逐账号总览与管理）；第二期“同时挂机”仍待单独审批，暂未实现。
->
-> UI 设计稿：[designs/multi-account/Multi-Account.html](../designs/multi-account/Multi-Account.html)
 
 ## 1. 结论
 
@@ -308,8 +306,6 @@
 - 结论：技术可行，但不能承诺安全；并发只作为默认关闭的实验能力，不作为公开卖点。
 
 ## 6. UI 设计
-
-设计稿：[designs/multi-account/Multi-Account.html](../designs/multi-account/Multi-Account.html)
 
 包含：
 

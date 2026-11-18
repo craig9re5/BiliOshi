@@ -33,8 +33,8 @@
       "rooms": {
         "22637261": {
           "uid": 672328094,
-          "name": "嘉然今天吃什么",
-          "medal_name": "小草莓",
+          "name": "示例主播",
+          "medal_name": "同行者",
           "level": 9,
           "max": 420,
           "last_value": 420,

@@ -155,7 +155,7 @@ def build_parser(_gateway):
     parser = argparse.ArgumentParser(
         description="B 站直播心跳挂机（检测开播 → XL心跳涨亲密度）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="\n示例:\n  # 检测所有成员，在播的自动挂机 25 分钟\n  python3 heartbeat.py\n\n  # 只检测嘉然和贝拉\n  python3 heartbeat.py --members 嘉然,贝拉\n\n  # 只检测开播状态，不挂机\n  python3 heartbeat.py --check-only\n\n  # 自定义挂机时长\n  python3 heartbeat.py --duration 30\n",
+        epilog="\n示例:\n  # 检测所有成员，在播的自动挂机 25 分钟\n  python scripts/heartbeat.py\n\n  # 只检测指定成员\n  python scripts/heartbeat.py --members 主播A,主播B\n\n  # 只检测开播状态，不挂机\n  python scripts/heartbeat.py --check-only\n\n  # 自定义挂机时长\n  python scripts/heartbeat.py --duration 30\n",
     )
     parser.add_argument("--members", help="指定成员（逗号分隔）")
     parser.add_argument("--mode", choices=("stable", "aggressive"),

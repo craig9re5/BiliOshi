@@ -9,7 +9,7 @@ def main(argv=None, *, _gateway):
     parser = argparse.ArgumentParser(
         description="B 站视频点赞/投币/收藏",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="\n示例:\n  # 给 3 月新视频全部点赞（默认）\n  python3 videos.py --month 3\n\n  # 给最近7天视频点赞+投币+收藏\n  python3 videos.py --days 7 --coin --fav\n\n  # 只给嘉然和贝拉的视频点赞\n  python3 videos.py --month 3 --members 嘉然,贝拉\n\n  # 不点赞，只投币\n  python3 videos.py --month 3 --no-like --coin\n",
+        epilog="\n示例:\n  # 给 3 月新视频全部点赞（默认）\n  python scripts/videos.py --month 3\n\n  # 给最近 7 天视频点赞+投币+收藏\n  python scripts/videos.py --days 7 --coin --fav\n\n  # 只给指定成员的视频点赞\n  python scripts/videos.py --month 3 --members 主播A,主播B\n\n  # 不点赞，只投币\n  python scripts/videos.py --month 3 --no-like --coin\n",
     )
     parser.add_argument("--month", help="指定月份（如 3、03、2026-03）")
     parser.add_argument("--days", type=int, help="最近 N 天的视频")
@@ -38,7 +38,7 @@ def main(argv=None, *, _gateway):
             sessdata = saved["SESSDATA"]
             bili_jct = saved["bili_jct"]
         else:
-            print("❌ 没有找到 Cookie。请先在 bilibili-live-checkin 中保存 Cookie。")
+            print("❌ 没有找到 Cookie。请先运行：python setup_local_cookie.py")
             return 1
     targets = MEMBERS
     if args.members:

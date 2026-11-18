@@ -322,6 +322,6 @@ powershell -ExecutionPolicy Bypass -File .\build_desktop.ps1 -Mode onefile
 
 ## 致谢与许可证
 
-本项目为独立维护基线，早期实现源自 [XiaoYiWeio/asoul-support](https://github.com/XiaoYiWeio/asoul-support)，保留原始作者署名与 MIT 许可归属；详细来源说明见 [NOTICE.md](NOTICE.md)，桌面端打包所含第三方开源组件许可清单见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
+本项目为独立维护基线，早期实现源自 [XiaoYiWeio/asoul-support](https://github.com/XiaoYiWeio/asoul-support)，保留原始作者署名与 MIT 许可归属；桌面端打包所含第三方开源组件许可清单见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
 
 BiliOshi 基于 [MIT License](LICENSE) 开源，与哔哩哔哩（Bilibili）官方及其关联方无任何隶属或背书关系。

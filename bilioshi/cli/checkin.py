@@ -18,7 +18,7 @@ def main(argv=None, *, _gateway):
         default=None,
         help="本轮最多尝试的弹幕条数；仍按任务缺额发送，并受每日预算约束",
     )
-    parser.add_argument("--members", help="指定成员（逗号分隔，如：嘉然,贝拉）默认全部")
+    parser.add_argument("--members", help="指定成员（逗号分隔，默认全部）")
     parser.add_argument("--sessdata", help="SESSDATA cookie")
     parser.add_argument("--bili-jct", help="bili_jct cookie")
     parser.add_argument("--save-cookie", action="store_true", help="保存 cookie")
@@ -55,12 +55,7 @@ def main(argv=None, *, _gateway):
             sessdata = saved["SESSDATA"]
             bili_jct = saved["bili_jct"]
         else:
-            print("❌ 没有找到 Cookie。请先设置：")
-            print(
-                '  python3 checkin.py --save-cookie --sessdata "你的SESSDATA" --bili-jct "你的bili_jct"'
-            )
-            print("")
-            print("或在 bilibili-live-checkin skill 中已保存的 Cookie 会自动复用。")
+            print("❌ 没有找到 Cookie。请先运行：python setup_local_cookie.py")
             return 1
     targets = MEMBERS
     if args.members:

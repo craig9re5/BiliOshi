@@ -455,11 +455,14 @@ class Api:
 
     def _account_info(self, snap):
         error = ""
-        try:
-            present, error = self._credentials_present()
-        except (OSError, ValueError):
-            logging.exception("Cannot inspect saved login")
-            present, error = False, "登录信息无法读取，请重新扫码登录。"
+        if self._store is not None and not self._active_account_id():
+            present = False
+        else:
+            try:
+                present, error = self._credentials_present()
+            except (OSError, ValueError):
+                logging.exception("Cannot inspect saved login")
+                present, error = False, "登录信息无法读取，请重新扫码登录。"
         hold = snap.get("safety", {})
         if hold.get("kind") == "credentials":
             error = "登录信息无法读取，请重新扫码登录。"
@@ -815,16 +818,28 @@ class Api:
         return self._pause(None)
 
     def _pause(self, value):
+        host_global_paused = bool(self._host is not None and self._host.global_paused)
+
         def change():
+            if self._host is not None and self._host.global_paused and value is not True:
+                self._host.set_global_paused(False)
+                self._sync_active()
+                if self._engine is not None and self._engine.paused and value is False:
+                    self._engine.set_paused(False)
+                self._ui.push_now()
+                return {"ok": True, "paused": False, "global_paused": False}
+            if self._engine is None:
+                return {"ok": False, "error": "当前没有正在运行的账号。"}
             paused = not bool(self._engine.paused) if value is None else value
             self._engine.set_paused(paused)
             return {"ok": True, "paused": paused}
 
-        return self._run("pause", change)
+        return self._run("pause", change, allow_without_engine=host_global_paused)
 
     def check_now(self):
         def check():
             self._engine.check_now()
+            self._ui.push_now()
             return {"ok": True}
 
         return self._run("check", check)
@@ -1034,7 +1049,7 @@ class Api:
             self._engine.check_now()
             return {"ok": True, "count": removed}
 
-        return self._run(remove_all, kind="remove")
+        return self._run("remove", remove_all)
 
     def open_room(self, room):
         try:
@@ -1475,9 +1490,18 @@ class Api:
         if safety.status(sessdata, root).get("blocked"):
             self._store.update(account_id, status="blocked")
         if self._host is not None:
-            if account_id == self._active_account_id():
+            if self._host.active_id is None:
+                self._store.set_active_view(account_id)
+                self._host.active_id = account_id
+                self._host.view_id = account_id
                 self._host.reload_account(account_id)
-            self._host.view(account_id)
+                self._sync_active()
+            elif account_id == self._active_account_id():
+                self._host.reload_account(account_id)
+                self._host.view(account_id)
+                self._sync_active()
+            else:
+                self._host.view(account_id)
         else:
             self._ui.apply_settings()
         self._ui.push_now()

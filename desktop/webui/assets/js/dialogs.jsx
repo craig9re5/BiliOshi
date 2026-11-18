@@ -71,9 +71,14 @@ const AddMemberModal = ({ query, onQuery, result, loading, adding, onSearch, onA
       <button type="button" className="btn primary" onClick={onAdd} disabled={!result?.ok || loading || adding}>
         {adding ? "正在添加…" : "添加主播"}</button>
     </>}>
-    <form className="field-row" onSubmit={(event) => { event.preventDefault(); if (!loading && query.trim()) onSearch(); }}>
+    <form className="field-row" onSubmit={(event) => {
+      event.preventDefault();
+      if (loading || adding) return;
+      if (result?.ok) { onAdd(); return; }
+      if (query.trim()) onSearch();
+    }}>
       <input className="input" value={query} onChange={(event) => onQuery(event.target.value)}
-        aria-label="直播间号、UID 或链接" placeholder="直播间号、UID 或链接" autoFocus disabled={adding} />
+        aria-label="直播间号、UID 或链接" placeholder="直播间号、UID 或链接（回车查找，再次回车添加）" autoFocus disabled={adding} />
       <button type="submit" className="btn" disabled={loading || adding || !query.trim()}>{loading ? "查找中…" : "查找"}</button>
     </form>
     {result?.ok && <div className="member-preview"><span className="account-avatar">{Array.from(result.member.name || "?")[0]}</span>

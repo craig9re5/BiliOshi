@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"8c90328b474f13c7438628a4c43f505fcd2affb37b31a1f55492bdc75d7c066e","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"c716e28339229a0026c5aeb3e97f58be4175806bc4640ef4b559b4e3fd3a5eaa"} */
+/* BiliOshi JSX {"code_sha256":"f91989cc7535fcd4519f9c5c198d52e790b77873cd71a5316473eda606f78ac7","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"258ff629e9ae1eb4081235cb0d1a798adedce12938cb6179988378f26642723c"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -10,6 +10,69 @@ const {
   durationLabel,
   numberLabel
 } = window;
+const copyTimers = new WeakMap();
+let lastCopyMessage = "";
+function legacyCopyText(text) {
+  const field = Object.assign(document.createElement("textarea"), {
+    value: text
+  });
+  field.setAttribute("readonly", "");
+  field.style.cssText = "position:fixed;inset-block-start:0;opacity:0";
+  document.body.append(field);
+  field.select();
+  try {
+    return document.execCommand("copy");
+  } finally {
+    field.remove();
+  }
+}
+function reportCopyStatus(button, ok) {
+  const tip = button.nextElementSibling;
+  window.clearTimeout(copyTimers.get(button));
+  button.removeAttribute("data-copied");
+  button.removeAttribute("data-failed");
+  let message = ok ? "已复制" : "复制失败";
+  if (message === lastCopyMessage) message += "\u00A0";
+  lastCopyMessage = message;
+  if (tip) tip.textContent = "";
+  void button.offsetWidth;
+  button.setAttribute(ok ? "data-copied" : "data-failed", "");
+  window.requestAnimationFrame(() => {
+    if (tip) tip.textContent = message;
+  });
+  copyTimers.set(button, window.setTimeout(() => {
+    button.removeAttribute("data-copied");
+    button.removeAttribute("data-failed");
+    if (tip) tip.textContent = "";
+  }, 1800));
+}
+async function copyTargetText(button, target) {
+  const raw = target.matches?.("input, textarea") ? target.value : target.innerText || target.textContent || "";
+  const text = String(raw).trim();
+  if (!text) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);else if (!legacyCopyText(text)) throw new Error("Copy failed");
+    reportCopyStatus(button, true);
+  } catch {
+    if (legacyCopyText(text)) reportCopyStatus(button, true);else reportCopyStatus(button, false);
+  }
+}
+if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+  if ("CommandEvent" in window) {
+    document.addEventListener("command", event => {
+      if (event.command === "--copy" && event.source && event.target) {
+        copyTargetText(event.source, event.target);
+      }
+    }, true);
+  } else {
+    document.addEventListener("click", event => {
+      const button = event.target?.closest?.('button[command="--copy"]');
+      if (!button) return;
+      const target = document.getElementById(button.getAttribute("commandfor"));
+      if (target) copyTargetText(button, target);
+    });
+  }
+}
 const Avatar = ({
   room,
   image
@@ -53,7 +116,6 @@ const RoomRow = ({
     "aria-selected": managing ? checked : selected,
     "data-room": room.room,
     onClick: () => managing ? onToggleCheck(room.room) : onSelect(room.room),
-    onDoubleClick: () => !managing && window.call("open_room", room.room).catch(() => {}),
     onContextMenu: event => !managing && onContextMenu(event, room.room)
   }, managing && /*#__PURE__*/React.createElement("span", {
     className: `room-check ${checked ? "checked" : ""}`,
@@ -144,7 +206,33 @@ const DetailPanel = ({
     className: "detail-submeta"
   }, /*#__PURE__*/React.createElement("span", {
     className: "tnum"
-  }, "\u623F\u95F4 ", room.room), room.live && room.area_name && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+  }, "\u623F\u95F4 ", /*#__PURE__*/React.createElement("span", {
+    id: `room-code-${room.room}`
+  }, room.room)), /*#__PURE__*/React.createElement("span", {
+    className: "copy-inline"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "copy-room-btn",
+    command: "--copy",
+    commandfor: `room-code-${room.room}`,
+    "aria-label": "\u590D\u5236\u76F4\u64AD\u95F4\u53F7",
+    title: "\u590D\u5236\u76F4\u64AD\u95F4\u53F7"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "copy-ico copy-ico-default",
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "copy",
+    size: 11
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "copy-ico copy-ico-done",
+    "aria-hidden": "true"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "check",
+    size: 11
+  }))), /*#__PURE__*/React.createElement("span", {
+    className: "copy-tip",
+    role: "status"
+  })), room.live && room.area_name && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     className: "sep"
   }, "\xB7"), /*#__PURE__*/React.createElement("span", null, room.area_name)), room.live && room.live_duration && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
     className: "sep"
@@ -259,22 +347,32 @@ const DetailPanel = ({
     className: "block-note tnum"
   }, room.tasks_stale ? "等待更新" : `${taskCount} / ${room.tasks.length} 已完成`)), /*#__PURE__*/React.createElement("div", {
     className: "task-table"
-  }, room.tasks.map(task => /*#__PURE__*/React.createElement("div", {
-    className: "task",
-    key: task.key
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "task-left"
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: TASK_ICONS[task.key] || "circle",
-    size: 13
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "task-name"
-  }, task.name)), /*#__PURE__*/React.createElement("span", {
-    className: `task-val ${task.done ? "done" : !task.text ? "pending" : ""}`
-  }, task.done && /*#__PURE__*/React.createElement(Icon, {
-    name: "check",
-    size: 11
-  }), task.text || "待更新")))))), /*#__PURE__*/React.createElement("div", {
+  }, room.tasks.map(task => {
+    const canRedoSingle = !room.tasks_stale && !task.done && !pending && !reason && (task.key === "danmaku" || task.key === "like");
+    return /*#__PURE__*/React.createElement("div", {
+      className: "task",
+      key: task.key
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "task-left"
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: TASK_ICONS[task.key] || "circle",
+      size: 13
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "task-name"
+    }, task.name)), /*#__PURE__*/React.createElement("span", {
+      className: "task-right"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: `task-val ${task.done ? "done" : !task.text ? "pending" : ""}`
+    }, task.done && /*#__PURE__*/React.createElement(Icon, {
+      name: "check",
+      size: 11
+    }), task.text || "待更新"), canRedoSingle && /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "task-redo-btn",
+      onClick: () => onAction("redo", room.room, task.key),
+      title: `单独补齐${task.name}任务`
+    }, "\u8865\u505A")));
+  })))), /*#__PURE__*/React.createElement("div", {
     className: "detail-action-area"
   }, operation.message && /*#__PURE__*/React.createElement("p", {
     className: "action-hint",
@@ -305,35 +403,43 @@ const DetailPanel = ({
 };
 const OverviewActions = ({
   paused,
+  globalPaused,
+  signedIn = true,
   onTogglePause,
   onCheck,
   checking,
   controlBusy,
   closing
-}) => /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: "btn",
-  onClick: onCheck,
-  title: "\u68C0\u67E5\u5F00\u64AD\u72B6\u6001\u4E0E\u4EFB\u52A1\u8FDB\u5EA6",
-  disabled: checking || controlBusy || closing
-}, /*#__PURE__*/React.createElement(Icon, {
-  name: "refresh",
-  size: 13,
-  className: checking ? "spin" : ""
-}), checking ? "检查中…" : "立即检查"), /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: `btn ${paused ? "primary" : ""}`,
-  onClick: onTogglePause,
-  disabled: controlBusy || closing
-}, /*#__PURE__*/React.createElement(Icon, {
-  name: paused ? "play" : "pause",
-  size: 13
-}), paused ? "恢复挂机" : "暂停挂机"));
+}) => {
+  const effectivelyPaused = Boolean(paused || globalPaused);
+  const noAccountReady = !signedIn && !effectivelyPaused;
+  return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn",
+    onClick: onCheck,
+    title: noAccountReady ? "请先登录 B 站账号" : "检查开播状态与任务进度",
+    disabled: checking || controlBusy || closing || noAccountReady
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "refresh",
+    size: 13,
+    className: checking ? "spin" : ""
+  }), checking ? "检查中…" : "立即检查"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: `btn ${effectivelyPaused ? "primary" : ""}`,
+    onClick: onTogglePause,
+    title: noAccountReady ? "请先登录 B 站账号" : "",
+    disabled: controlBusy || closing || noAccountReady
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: effectivelyPaused ? "play" : "pause",
+    size: 13
+  }), globalPaused ? "恢复全部" : paused ? "恢复挂机" : "暂停挂机"));
+};
 const Overview = ({
   rooms,
   selectedId,
   onSelect,
   paused,
+  globalPaused,
   onAction,
   onOpen,
   onAddMember,
@@ -362,11 +468,24 @@ const Overview = ({
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
   const [roomQuery, setRoomQuery] = React.useState("");
   const [roomFilter, setRoomFilter] = React.useState("all");
+  const searchInputRef = React.useRef(null);
   const liveCount = rooms.filter(r => r.live).length;
   const warnCount = rooms.filter(r => r.tone === "warn").length;
   const activeFilter = roomFilter === "live" && liveCount === 0 || roomFilter === "warn" && warnCount === 0 ? "all" : roomFilter;
   const keyword = roomQuery.trim().toLowerCase();
   const showToolbar = !managing && rooms.length >= 4;
+  React.useEffect(() => {
+    if (!showToolbar) return undefined;
+    const onKeyDown = event => {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select?.();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showToolbar]);
   const filteredRooms = showToolbar ? rooms.filter(r => {
     if (activeFilter === "live" && !r.live) return false;
     if (activeFilter === "warn" && r.tone !== "warn") return false;
@@ -405,17 +524,19 @@ const Overview = ({
   const selected = rooms.find(room => room.room === selectedId);
   const healthy = rooms.filter(room => room.healthy).length;
   const unknown = rooms.filter(room => room.live_status == null).length;
-  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : paused ? "已暂停挂机" : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
+  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : globalPaused ? "全部挂机已暂停" : paused ? "已暂停挂机" : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.
   const cadence = `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
-  return /*#__PURE__*/React.createElement(React.Fragment, null, (error || recovery?.action === "login") && /*#__PURE__*/React.createElement("div", {
+  const showBanner = Boolean(error || recovery?.action === "login" || recovery?.action === "resume_global" || recovery?.action === "switch_prompt");
+  const bannerMessage = error || recovery?.message || (!signedIn ? "请先登录 B 站账号以开始挂机" : "");
+  return /*#__PURE__*/React.createElement(React.Fragment, null, showBanner && /*#__PURE__*/React.createElement("div", {
     className: "banner",
     role: "status"
   }, /*#__PURE__*/React.createElement(Icon, {
-    name: recovery?.action === "login" ? "user" : "alert",
+    name: recovery?.action === "login" || recovery?.action === "switch_prompt" ? "user" : "alert",
     size: 14
-  }), /*#__PURE__*/React.createElement("span", null, !signedIn ? "请先登录 B 站账号以开始挂机" : error || recovery?.message), recovery?.action && /*#__PURE__*/React.createElement("button", {
+  }), /*#__PURE__*/React.createElement("span", null, bannerMessage), recovery?.action && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm",
     onClick: onRecovery
@@ -492,6 +613,7 @@ const Overview = ({
     name: "search",
     size: 13
   }), /*#__PURE__*/React.createElement("input", {
+    ref: searchInputRef,
     className: "search-input",
     value: roomQuery,
     onChange: e => setRoomQuery(e.target.value),
@@ -502,7 +624,7 @@ const Overview = ({
       }
     },
     "aria-label": "\u7B5B\u9009\u76F4\u64AD\u95F4",
-    placeholder: "\u641C\u7D22\u4E3B\u64AD\u3001\u6807\u9898\u6216\u623F\u95F4\u53F7\u2026"
+    placeholder: "\u641C\u7D22\u4E3B\u64AD\u3001\u6807\u9898\u6216\u623F\u95F4\u53F7\u2026 (Ctrl+F)"
   }), roomQuery && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "search-clear",

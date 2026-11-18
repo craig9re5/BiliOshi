@@ -25,6 +25,8 @@ def action_reason(snap, row, action, pending=False, now=None):
         if hold.get("until"):
             return "账号冷却中，到时自动恢复；可打开直播间核对。"
         return "账号保护暂停，请先点击上方“解除异常暂停”。"
+    if snap.get("global_paused"):
+        return "全部挂机已暂停，请先点击“恢复全部挂机”。"
     if snap.get("paused"):
         return "挂机已暂停，请先点击“恢复挂机”。"
     if snap.get("engine_busy"):
@@ -70,12 +72,22 @@ def recovery_route(snap):
             probe_at = time.strftime("%H:%M:%S", time.localtime(hold["next_probe_at"]))
             msg = f"{msg} 下次自动复检 {probe_at}。"
         return {"action": "safety", "label": "解除异常暂停", "message": msg}
+    if snap.get("global_paused"):
+        return {"action": "resume_global", "label": "恢复全部挂机", "message": "全部挂机已暂停，点击“恢复全部挂机”继续运行。"}
     if snap.get("paused"):
         return {"action": "resume", "label": "恢复挂机", "message": "挂机已暂停，点击“恢复挂机”继续。"}
     if snap.get("engine_busy"):
         return {"action": "logs", "label": "查看日志", "message": "后台操作执行中，界面可继续浏览；状态暂未刷新。"}
     if snap.get("error"):
         return {"action": "check", "label": "重试检查", "message": snap["error"] + "；可重试检查或查看日志。"}
+    if snap.get("schema") == 2 and not snap.get("active_account_id") and any(
+        item.get("signed_in") for item in (snap.get("accounts") or [])
+    ):
+        return {
+            "action": "switch_prompt",
+            "label": "选择挂机账号",
+            "message": "当前未运行任何账号，请在顶部账号栏或账号页选择一个账号开始挂机。",
+        }
     if not snap.get("account_confirmed", bool(snap.get("account"))):
         if snap.get("account"):
             return {"action": "check", "label": "验证登录状态", "message": "登录状态待验证，请立即检查；登录失效可在账号管理扫码。"}

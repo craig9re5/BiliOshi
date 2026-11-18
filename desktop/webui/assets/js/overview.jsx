@@ -2,6 +2,68 @@
 
 const { Icon, relativeTime, absoluteTime, durationLabel, numberLabel } = window;
 
+const copyTimers = new WeakMap();
+let lastCopyMessage = "";
+
+function legacyCopyText(text) {
+  const field = Object.assign(document.createElement("textarea"), { value: text });
+  field.setAttribute("readonly", "");
+  field.style.cssText = "position:fixed;inset-block-start:0;opacity:0";
+  document.body.append(field);
+  field.select();
+  try { return document.execCommand("copy"); } finally { field.remove(); }
+}
+
+function reportCopyStatus(button, ok) {
+  const tip = button.nextElementSibling;
+  window.clearTimeout(copyTimers.get(button));
+  button.removeAttribute("data-copied");
+  button.removeAttribute("data-failed");
+  let message = ok ? "已复制" : "复制失败";
+  if (message === lastCopyMessage) message += "\u00A0";
+  lastCopyMessage = message;
+  if (tip) tip.textContent = "";
+  void button.offsetWidth;
+  button.setAttribute(ok ? "data-copied" : "data-failed", "");
+  window.requestAnimationFrame(() => { if (tip) tip.textContent = message; });
+  copyTimers.set(button, window.setTimeout(() => {
+    button.removeAttribute("data-copied");
+    button.removeAttribute("data-failed");
+    if (tip) tip.textContent = "";
+  }, 1800));
+}
+
+async function copyTargetText(button, target) {
+  const raw = target.matches?.("input, textarea") ? target.value : (target.innerText || target.textContent || "");
+  const text = String(raw).trim();
+  if (!text) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    else if (!legacyCopyText(text)) throw new Error("Copy failed");
+    reportCopyStatus(button, true);
+  } catch {
+    if (legacyCopyText(text)) reportCopyStatus(button, true);
+    else reportCopyStatus(button, false);
+  }
+}
+
+if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+  if ("CommandEvent" in window) {
+    document.addEventListener("command", (event) => {
+      if (event.command === "--copy" && event.source && event.target) {
+        copyTargetText(event.source, event.target);
+      }
+    }, true);
+  } else {
+    document.addEventListener("click", (event) => {
+      const button = event.target?.closest?.('button[command="--copy"]');
+      if (!button) return;
+      const target = document.getElementById(button.getAttribute("commandfor"));
+      if (target) copyTargetText(button, target);
+    });
+  }
+}
+
 const Avatar = ({ room, image }) => (
   <span className="avatar" style={{ background: room.color }} aria-hidden="true">
     {image ? <img src={image} alt="" /> : room.initial}
@@ -28,7 +90,6 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, che
     <button type="button" className={`room ${managing ? "managing" : ""} ${checked ? "batch-checked" : ""}`} role="option"
       aria-selected={managing ? checked : selected}
       data-room={room.room} onClick={() => (managing ? onToggleCheck(room.room) : onSelect(room.room))}
-      onDoubleClick={() => !managing && window.call("open_room", room.room).catch(() => {})}
       onContextMenu={(event) => !managing && onContextMenu(event, room.room)}>
       {managing && <span className={`room-check ${checked ? "checked" : ""}`} aria-hidden="true">
         {checked && <Icon name="check" size={11} />}
@@ -90,7 +151,15 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
             <div className="detail-name">{room.name}</div>
             <div className="detail-title" title={room.title}>{room.live ? room.title || "直播中" : room.state}</div>
             <div className="detail-submeta">
-              <span className="tnum">房间 {room.room}</span>
+              <span className="tnum">房间 <span id={`room-code-${room.room}`}>{room.room}</span></span>
+              <span className="copy-inline">
+                <button type="button" className="copy-room-btn" command="--copy" commandfor={`room-code-${room.room}`}
+                  aria-label="复制直播间号" title="复制直播间号">
+                  <span className="copy-ico copy-ico-default" aria-hidden="true"><Icon name="copy" size={11} /></span>
+                  <span className="copy-ico copy-ico-done" aria-hidden="true"><Icon name="check" size={11} /></span>
+                </button>
+                <span className="copy-tip" role="status" />
+              </span>
               {room.live && room.area_name && <><span className="sep">·</span><span>{room.area_name}</span></>}
               {room.live && room.live_duration && <><span className="sep">·</span><span>{room.live_duration}</span></>}
             </div>
@@ -184,15 +253,30 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
             <span className="block-note tnum">{room.tasks_stale ? "等待更新" : `${taskCount} / ${room.tasks.length} 已完成`}</span>
           </div>
           <div className="task-table">
-            {room.tasks.map((task) => <div className="task" key={task.key}>
-              <span className="task-left">
-                <Icon name={TASK_ICONS[task.key] || "circle"} size={13} />
-                <span className="task-name">{task.name}</span>
-              </span>
-              <span className={`task-val ${task.done ? "done" : !task.text ? "pending" : ""}`}>
-                {task.done && <Icon name="check" size={11} />}{task.text || "待更新"}
-              </span>
-            </div>)}
+            {room.tasks.map((task) => {
+              const canRedoSingle = !room.tasks_stale && !task.done && !pending && !reason
+                && (task.key === "danmaku" || task.key === "like");
+              return (
+                <div className="task" key={task.key}>
+                  <span className="task-left">
+                    <Icon name={TASK_ICONS[task.key] || "circle"} size={13} />
+                    <span className="task-name">{task.name}</span>
+                  </span>
+                  <span className="task-right">
+                    <span className={`task-val ${task.done ? "done" : !task.text ? "pending" : ""}`}>
+                      {task.done && <Icon name="check" size={11} />}{task.text || "待更新"}
+                    </span>
+                    {canRedoSingle && (
+                      <button type="button" className="task-redo-btn"
+                        onClick={() => onAction("redo", room.room, task.key)}
+                        title={`单独补齐${task.name}任务`}>
+                        补做
+                      </button>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </section>
       </div>
@@ -214,18 +298,25 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
   );
 };
 
-const OverviewActions = ({ paused, onTogglePause, onCheck, checking, controlBusy, closing }) => (
-  <>
-    <button type="button" className="btn" onClick={onCheck}
-      title="检查开播状态与任务进度" disabled={checking || controlBusy || closing}>
-      <Icon name="refresh" size={13} className={checking ? "spin" : ""} />{checking ? "检查中…" : "立即检查"}</button>
-    <button type="button" className={`btn ${paused ? "primary" : ""}`} onClick={onTogglePause}
-      disabled={controlBusy || closing}>
-      <Icon name={paused ? "play" : "pause"} size={13} />{paused ? "恢复挂机" : "暂停挂机"}</button>
-  </>
-);
+const OverviewActions = ({ paused, globalPaused, signedIn = true, onTogglePause, onCheck, checking, controlBusy, closing }) => {
+  const effectivelyPaused = Boolean(paused || globalPaused);
+  const noAccountReady = !signedIn && !effectivelyPaused;
+  return (
+    <>
+      <button type="button" className="btn" onClick={onCheck}
+        title={noAccountReady ? "请先登录 B 站账号" : "检查开播状态与任务进度"}
+        disabled={checking || controlBusy || closing || noAccountReady}>
+        <Icon name="refresh" size={13} className={checking ? "spin" : ""} />{checking ? "检查中…" : "立即检查"}</button>
+      <button type="button" className={`btn ${effectivelyPaused ? "primary" : ""}`} onClick={onTogglePause}
+        title={noAccountReady ? "请先登录 B 站账号" : ""}
+        disabled={controlBusy || closing || noAccountReady}>
+        <Icon name={effectivelyPaused ? "play" : "pause"} size={13} />
+        {globalPaused ? "恢复全部" : paused ? "恢复挂机" : "暂停挂机"}</button>
+    </>
+  );
+};
 
-const Overview = ({ rooms, selectedId, onSelect, paused,
+const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, menuRoom, menuMode,
   busyRoom, controlBusy, error, recovery, onRecovery, interval, lastCheck, checking, images,
   signedIn, closing, bridgeConnected, onBatchRemove, onClearRoomBlock, onDismissTaskError }) => {
@@ -233,6 +324,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
   const [roomQuery, setRoomQuery] = React.useState("");
   const [roomFilter, setRoomFilter] = React.useState("all");
+  const searchInputRef = React.useRef(null);
 
   const liveCount = rooms.filter((r) => r.live).length;
   const warnCount = rooms.filter((r) => r.tone === "warn").length;
@@ -241,6 +333,19 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
     : roomFilter;
   const keyword = roomQuery.trim().toLowerCase();
   const showToolbar = !managing && rooms.length >= 4;
+
+  React.useEffect(() => {
+    if (!showToolbar) return undefined;
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select?.();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showToolbar]);
   const filteredRooms = showToolbar
     ? rooms.filter((r) => {
         if (activeFilter === "live" && !r.live) return false;
@@ -290,16 +395,19 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
   const healthy = rooms.filter((room) => room.healthy).length;
   const unknown = rooms.filter((room) => room.live_status == null).length;
   const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…"
+    : globalPaused ? "全部挂机已暂停"
     : paused ? "已暂停挂机"
     : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中`
     : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.
   const cadence = `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
+  const showBanner = Boolean(error || recovery?.action === "login" || recovery?.action === "resume_global" || recovery?.action === "switch_prompt");
+  const bannerMessage = error || recovery?.message || (!signedIn ? "请先登录 B 站账号以开始挂机" : "");
   return (<>
-    {(error || recovery?.action === "login") && <div className="banner" role="status">
-      <Icon name={recovery?.action === "login" ? "user" : "alert"} size={14} />
-      <span>{!signedIn ? "请先登录 B 站账号以开始挂机" : error || recovery?.message}</span>
+    {showBanner && <div className="banner" role="status">
+      <Icon name={recovery?.action === "login" || recovery?.action === "switch_prompt" ? "user" : "alert"} size={14} />
+      <span>{bannerMessage}</span>
       {recovery?.action && <button type="button" className="btn sm" onClick={onRecovery}>{recovery.label || "查看详情"}</button>}
     </div>}
     <div className="workspace">
@@ -338,10 +446,10 @@ const Overview = ({ rooms, selectedId, onSelect, paused,
           <div className="list-toolbar">
             <div className="search-box">
               <Icon name="search" size={13} />
-              <input className="search-input" value={roomQuery}
+              <input ref={searchInputRef} className="search-input" value={roomQuery}
                 onChange={(e) => setRoomQuery(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Escape" && roomQuery) { e.stopPropagation(); setRoomQuery(""); } }}
-                aria-label="筛选直播间" placeholder="搜索主播、标题或房间号…" />
+                aria-label="筛选直播间" placeholder="搜索主播、标题或房间号… (Ctrl+F)" />
               {roomQuery && (
                 <button type="button" className="search-clear" aria-label="清除搜索" onClick={() => setRoomQuery("")}>
                   <Icon name="close" size={11} />

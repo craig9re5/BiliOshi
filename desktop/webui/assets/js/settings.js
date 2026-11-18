@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"1a98bc4190a6062e0c0afc87fc21debe7ea26cc6bd745213236438fb9bb35548","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"15ca7ea4b64d5e0918e96b92bda5975d936207e8f79f0d15482421aa130b9043"} */
+/* BiliOshi JSX {"code_sha256":"17c640cc88a1363727658c27119ad5b5d099579e88d0f7367e5a4ac77527c9aa","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"722f52b25a53f72dd7de7c803ce90f57fb91189431df44530edd053e9a456569"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -252,6 +252,7 @@ const SettingsPage = ({
   const disabled = key => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   const dayThemeName = (DAY_THEME_CHOICES.find(item => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
+  const accountScopeLabel = scope?.name ? `当前账号 · ${scope.name}` : "当前账号生效";
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8BBE\u7F6E"
@@ -260,8 +261,10 @@ const SettingsPage = ({
   }, /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
-    className: "group-head"
-  }, "\u6BCF\u65E5\u4EFB\u52A1"), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "group-head group-head-meta"
+  }, /*#__PURE__*/React.createElement("span", null, "\u6BCF\u65E5\u4EFB\u52A1"), /*#__PURE__*/React.createElement("span", {
+    className: "scope-tag"
+  }, accountScopeLabel)), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u70B9\u4EAE\u7C89\u4E1D\u724C",
     desc: "\u724C\u5B50\u7184\u706D\u65F6\u53D1\u9001\u5F39\u5E55\u91CD\u65B0\u70B9\u4EAE"
   }, /*#__PURE__*/React.createElement(Switch, {
@@ -291,7 +294,7 @@ const SettingsPage = ({
     className: "group-head"
   }, "\u8FD0\u884C\u4E0E\u542F\u52A8"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5F00\u64AD\u901A\u77E5",
-    desc: "\u5173\u6CE8\u7684\u4E3B\u64AD\u5F00\u64AD\u65F6\u5F39\u51FA\u7CFB\u7EDF\u63D0\u9192"
+    desc: "\u5F53\u524D\u8D26\u53F7\u5173\u6CE8\u7684\u4E3B\u64AD\u5F00\u64AD\u65F6\u5F39\u51FA\u7CFB\u7EDF\u63D0\u9192"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5F00\u64AD\u901A\u77E5",
     checked: settings.notify_on_live,
@@ -299,7 +302,7 @@ const SettingsPage = ({
     onChange: value => onSetting("notify_on_live", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5F00\u673A\u542F\u52A8",
-    desc: "\u767B\u5F55\u7CFB\u7EDF\u540E\u5728\u6258\u76D8\u9759\u9ED8\u8FD0\u884C"
+    desc: "\u672C\u673A\u5168\u5C40\u751F\u6548\uFF0C\u767B\u5F55\u7CFB\u7EDF\u540E\u5728\u6258\u76D8\u9759\u9ED8\u8FD0\u884C"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5F00\u673A\u542F\u52A8",
     checked: settings.autostart,
@@ -307,7 +310,7 @@ const SettingsPage = ({
     onChange: value => onSetting("autostart", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u6A21\u5F0F",
-    desc: "\u7A33\u5065\u6A21\u5F0F\u63A8\u8350\u65E5\u5E38\u6302\u673A\uFF1B\u6FC0\u8FDB\u6A21\u5F0F\u68C0\u6D4B\u66F4\u9891\u7E41"
+    desc: "\u7A33\u5065\u6A21\u5F0F\u63A8\u8350\u65E5\u5E38\u6302\u673A\uFF1B\u6FC0\u8FDB\u6A21\u5F0F\u68C0\u6D4B\u66F4\u9891\u7E41\uFF08\u6309\u8D26\u53F7\u72EC\u7ACB\u4FDD\u5B58\uFF09"
   }, /*#__PURE__*/React.createElement(Choice, {
     label: "\u8FD0\u884C\u6A21\u5F0F",
     value: runMode,
@@ -361,8 +364,10 @@ const SettingsPage = ({
   }, "v", version))), /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
-    className: "group-head"
-  }, "\u5916\u89C2"), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "group-head group-head-meta"
+  }, /*#__PURE__*/React.createElement("span", null, "\u5916\u89C2"), /*#__PURE__*/React.createElement("span", {
+    className: "scope-tag"
+  }, "\u672C\u673A\u5168\u5C40")), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u754C\u9762\u4E3B\u9898",
     desc: theme === "system" ? `跟随系统，当前为${systemDark ? "深色 · 墨青暗" : `浅色 · ${dayThemeName}`}` : "自定义应用配色风格"
   }, /*#__PURE__*/React.createElement(ThemeOptions, {

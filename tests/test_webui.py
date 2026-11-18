@@ -131,6 +131,11 @@ class WebUiTests(unittest.TestCase):
         self.assertTrue(next(row for row in result["medals"] if row["uid"] == 9)["watched"])
         self.assertEqual(self.api.import_medals([9, 10])["count"], 1)
         self.assertEqual({row["room"] for row in read_json(self.root / "members.json")}, {7, 8})
+        removed = self.api.remove_members([7, 8])
+        self.assertEqual(removed, {"ok": True, "count": 2})
+        self.assertEqual(read_json(self.root / "members.json"), [])
+        self.assertTrue(self.api.check_now()["ok"])
+        self.assertTrue(self.api.snapshot()["checking"])
 
     def test_cancelled_qr_cannot_save_after_validation_returns(self):
         from bilioshi.qr_login import PollResult

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"fc329959506a3d644d91a652123ab84cbbafda41ec4dce3b0fbec2d9b2cade4b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"ca0cd9702914149e5bc6744247983afe22e335b8a0e47508ff69a3ef522b94cd"} */
+/* BiliOshi JSX {"code_sha256":"372f99de944450de9271115270826d9c8ece3d1897407afeffe2a07782a1f6ca","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"fd3c554b8fc7661a6777d30e5e2ba6c6b510e0e4c7a1b304643c57faab4e82e0"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -15,7 +15,8 @@ const {
   Pulse,
   call,
   bridgeReady,
-  toRoom
+  toRoom,
+  roomSortTier
 } = window;
 const DEFAULT_SETTINGS = {
   auto_revive: true,
@@ -396,6 +397,8 @@ function App() {
   const roomPending = useRef(new Set());
   const settingsQueue = useRef(Promise.resolve());
   const settingOverrides = useRef({});
+  const settingsBatch = useRef({});
+  const settingsTimer = useRef(0);
   const searchGeneration = useRef(0);
   const dialogGeneration = useRef(0);
   const qrRequest = useRef(0);
@@ -479,7 +482,10 @@ function App() {
           });
         } else if (event.type === "open_login") handlers.current.openQr?.();else if (event.type === "show_page" || event.type === "navigate") {
           if (["monitor", "growth", "automation", "account"].includes(payload.page)) setPage(payload.page);
-        } else if (event.type === "add_member") handlers.current.openAdd?.();else if (event.type === "sync_medals") handlers.current.openMedals?.();else if (event.type === "open_diagnostic") handlers.current.openDiagnostics?.();else if (event.type === "toast") toast(payload.message, payload.tone);else if (event.type === "settings_changed") handlers.current.refresh?.();
+        } else if (event.type === "add_member") handlers.current.openAdd?.();else if (event.type === "sync_medals") handlers.current.openMedals?.();else if (event.type === "open_diagnostic") handlers.current.openDiagnostics?.();else if (event.type === "toast") toast(payload.message, payload.tone);else if (event.type === "action_result") {
+          const text = payload.error || payload.message;
+          if (text) toast(text, payload.ok === false ? "warn" : "info");
+        } else if (event.type === "settings_changed") handlers.current.refresh?.();
       }
     };
     window.__reportClientError = msg => call("report_client_error", [[msg]]).catch(() => {});
@@ -504,6 +510,7 @@ function App() {
       alive.current = false;
       if (window.LS?.onSnapshot === receiveSnapshot) delete window.LS;
       delete window.__reportClientError;
+      window.clearTimeout(settingsTimer.current);
       toastTimers.current.forEach(timer => window.clearTimeout(timer));
     };
   }, [receiveSnapshot, toast]);
@@ -512,13 +519,14 @@ function App() {
   const viewId = activeId;
   const isAllView = false;
   const viewed = snap;
+  const rawRooms = (viewed.rows || []).map(row => toRoom(row, viewed));
+  const rooms = typeof roomSortTier === "function" ? rawRooms.map((room, idx) => [room, idx]).sort((a, b) => roomSortTier(a[0]) - roomSortTier(b[0]) || a[1] - b[1]).map(([room]) => room) : rawRooms;
   useEffect(() => {
-    const rows = viewed.rows || [];
-    if (!selectionInitialized.current && rows.length) {
+    if (!selectionInitialized.current && rooms.length) {
       selectionInitialized.current = true;
-      setSelectedId(rows[0].room);
-    } else if (selectedId !== null && !rows.some(row => row.room === selectedId)) setSelectedId(null);
-  }, [viewed.rows, selectedId]);
+      setSelectedId(rooms[0].room);
+    } else if (selectedId !== null && !rooms.some(row => row.room === selectedId)) setSelectedId(null);
+  }, [rooms, selectedId]);
   const fetchAvatar = useCallback(uid => {
     if (!uid || images[uid] || avatarPending.current.has(uid)) return;
     if (Date.now() < (avatarRetry.current[uid] || 0)) return;
@@ -545,7 +553,6 @@ function App() {
       fetchAvatar(row.uid);
     }
   }, [viewed.rows, connected, fetchAvatar]);
-  const rooms = (viewed.rows || []).map(row => toRoom(row, viewed));
   const selected = rooms.find(room => room.room === selectedId);
   const account = viewed.accountInfo || EMPTY_SNAPSHOT.accountInfo;
   const closing = Boolean(snap.closing);
@@ -654,16 +661,17 @@ function App() {
       if (alive.current) setControlBusy(false);
     }
   };
-  const roomAction = async (kind, roomId) => {
+  const roomAction = async (kind, roomId, taskType = "all") => {
     if (roomPending.current.has(roomId) || closing) return;
     roomPending.current.add(roomId);
     setBusyRoom(roomId);
     try {
+      const args = kind === "redo" && taskType && taskType !== "all" ? [roomId, taskType] : [roomId];
       await invoke({
         redo: "redo",
         reconnect: "reconnect",
         wear: "wear_medal"
-      }[kind], [roomId]);
+      }[kind], args);
       await refresh();
     } finally {
       roomPending.current.delete(roomId);
@@ -672,6 +680,7 @@ function App() {
   };
   const setSetting = (key, value) => {
     settingOverrides.current[key] = value;
+    settingsBatch.current[key] = value;
     setPendingSettings(current => new Set(current).add(key));
     setSnap(current => ({
       ...current,
@@ -680,21 +689,31 @@ function App() {
         [key]: value
       }
     }));
-    settingsQueue.current = settingsQueue.current.catch(() => {}).then(async () => {
-      try {
-        await invoke("save_settings", [{
-          [key]: value
-        }, activeId]);
-        delete settingOverrides.current[key];
-        await refresh();
-      } finally {
-        if (alive.current) setPendingSettings(current => {
-          const next = new Set(current);
-          next.delete(key);
-          return next;
-        });
-      }
-    });
+    window.clearTimeout(settingsTimer.current);
+    const targetAccount = activeId;
+    settingsTimer.current = window.setTimeout(() => {
+      const payload = {
+        ...settingsBatch.current
+      };
+      const keys = Object.keys(payload);
+      settingsBatch.current = {};
+      if (!keys.length) return;
+      settingsQueue.current = settingsQueue.current.catch(() => {}).then(async () => {
+        try {
+          await invoke("save_settings", [payload, targetAccount]);
+          for (const k of keys) delete settingOverrides.current[k];
+          await refresh();
+        } finally {
+          if (alive.current) {
+            setPendingSettings(current => {
+              const next = new Set(current);
+              for (const k of keys) next.delete(k);
+              return next;
+            });
+          }
+        }
+      });
+    }, 150);
   };
   const closeQr = () => {
     qrOpen.current = false;
@@ -1029,7 +1048,9 @@ function App() {
   };
   const recover = async () => {
     const route = snap.recovery || {};
-    if (route.action === "login") openQr(activeId);else if (route.action === "resume") control("toggle_pause");else if (route.action === "switch") {
+    if (route.action === "login") openQr(activeId);else if (route.action === "resume_global") control("set_global_paused", [false], "已恢复全部挂机");else if (route.action === "resume") control("toggle_pause");else if (route.action === "switch_prompt") {
+      setPage("account");
+    } else if (route.action === "switch") {
       setPage("monitor");
     } else if (route.action === "safety") {
       if (snap.safety?.kind === "auth" || snap.safety?.kind === "credentials") openQr(activeId);else openSafety();
@@ -1189,12 +1210,14 @@ function App() {
     className: "chrome-actions"
   }, page === "monitor" && /*#__PURE__*/React.createElement(window.OverviewActions, {
     paused: snap.paused,
+    globalPaused: Boolean(snap.global_paused),
+    signedIn: account.signed_in,
     onTogglePause: () => control("toggle_pause"),
     onCheck: () => control("check_now"),
     checking: snap.checking,
     controlBusy: controlBusy,
     closing: closing
-  })), /*#__PURE__*/React.createElement(WindowButtons, null)), page === "monitor" && accounts.length > 0 && /*#__PURE__*/React.createElement(window.AccountTabs, {
+  })), /*#__PURE__*/React.createElement(WindowButtons, null)), (page === "monitor" && accounts.length > 0 || (page === "growth" || page === "automation") && accounts.length > 1) && /*#__PURE__*/React.createElement(window.AccountTabs, {
     accounts: accounts,
     activeId: activeId,
     avatars: accountAvatars,
@@ -1209,6 +1232,7 @@ function App() {
     selectedId: selectedId,
     onSelect: select,
     paused: snap.paused,
+    globalPaused: Boolean(snap.global_paused),
     onAction: roomAction,
     onOpen: id => invoke("open_room", [id]),
     onAddMember: openAdd,

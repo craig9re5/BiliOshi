@@ -19,7 +19,11 @@ def project_snapshot(engine, states, now):
     return {
         "paused": engine.paused,
         "safety": safety_state,
-        "checking": engine.probe is not None,
+        "checking": engine.probe is not None or (
+            bool(getattr(engine, "force_probe", False))
+            and not getattr(engine, "suspended", False)
+            and not safety_state.get("blocked")
+        ),
         "error": engine.error,
         "account": engine.account,
         "rows": rows,
@@ -91,7 +95,8 @@ def project_row(engine, member, state, now):
         else ""
     )
     active = room in engine.workers and engine.workers[room].poll() is None
-    heartbeat_stale = active and now - number(
+    wake_grace = 0 < now - getattr(engine, "resumed_from_sleep_at", 0) < 90
+    heartbeat_stale = active and not wake_grace and now - number(
         state.get("last_heartbeat"), number(state.get("started"), now)
     ) > heartbeat_timeout(state)
     phase = (
@@ -151,6 +156,8 @@ def project_row(engine, member, state, now):
     if safety.get("blocked") or engine.paused or heartbeat_stale:
         watch_warning = ""
         watch_note = ""
+    elif active and state.get("watch_only") and not watch_note:
+        watch_note = "手动重连后当前连接处于仅看播模式，如需补做互动任务可点击下方“补齐今日任务”。"
     today_value = medal.get("today_intimacy")
     checked = engine.account_checked_at
     medal_day = (datetime.fromtimestamp(checked, timezone(timedelta(hours=8))).date().isoformat()

@@ -41,6 +41,18 @@ class InteractionTests(unittest.TestCase):
         self.assertIn("自动恢复", action_reason(snap, self.row, "redo"))
 
     def test_pause_and_unverified_login_have_a_next_step(self):
+        global_snap = {**self.snap, "global_paused": True}
+        self.assertEqual(recovery_route(global_snap)["action"], "resume_global")
+        self.assertIn("恢复全部挂机", action_reason(global_snap, self.row, "redo"))
+        idle_multi = {
+            **self.snap,
+            "schema": 2,
+            "active_account_id": None,
+            "account": "",
+            "account_confirmed": False,
+            "accounts": [{"id": "uid-2", "signed_in": True, "status": "ok"}],
+        }
+        self.assertEqual(recovery_route(idle_multi)["action"], "switch_prompt")
         snap = {**self.snap, "paused": True}
         self.assertEqual(recovery_route(snap)["action"], "resume")
         self.assertIn("恢复挂机", action_reason(snap, self.row, "redo"))

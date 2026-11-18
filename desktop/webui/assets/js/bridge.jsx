@@ -77,17 +77,35 @@ function toRoom(row, snap) {
   const lightKnown = Boolean(row.medal_name && !row.tasks_stale);
   tasks.push({ key: "light", name: "粉丝牌", done: lightKnown && row.is_lighted === 1,
     text: lightKnown ? row.is_lighted === 1 ? "已点亮" : "未点亮" : "待更新" });
+  const hasRoomBlock = Array.isArray(row.room_blocks) && row.room_blocks.length > 0;
   let state = "未开播", tone = "muted";
   if (inactive) state = "上次直播中";
+  else if (snap.global_paused) state = "全部暂停";
   else if (paused) state = "已暂停";
   else if (protectedAccount) { state = "保护暂停"; tone = "warn"; }
+  else if (row.state_error) { state = "状态异常"; tone = "warn"; }
   else if (row.reconnecting) state = "正在重连";
   else if (row.heartbeat_stale || row.connection_warning) { state = "连接异常"; tone = "warn"; }
   else if (row.status_error) { state = "查询失败"; tone = "warn"; }
   else if (row.watch_warning) { state = "收益待确认"; tone = "warn"; }
-  else if (healthy) { state = "挂机中"; tone = "live"; }
+  else if (row.active && row.phase === "执行任务中") { state = "执行任务中"; tone = "live"; }
+  else if (row.active && row.phase === "正在重试") { state = "连接重试中"; tone = "warn"; }
+  else if (healthy) {
+    if (row.task_error) { state = "任务待处理"; tone = "warn"; }
+    else if (hasRoomBlock) { state = "互动受限"; tone = "warn"; }
+    else { state = "挂机中"; tone = "live"; }
+  }
   else if (row.active) state = "正在连接";
-  else if (live) state = "等待连接";
+  else if (row.phase === "等待重试") { state = "等待重试"; tone = "warn"; }
+  else if (live) {
+    if (row.task_error) { state = "任务待处理"; tone = "warn"; }
+    else state = "等待连接";
+  }
+  else if (row.task_error || hasRoomBlock) {
+    state = row.task_error ? "任务异常" : "互动受限";
+    tone = "warn";
+  }
+  else if (row.status_stale && row.status_updated) state = "状态已过期";
   else if (row.live_status == null) state = "等待检查";
   const fallback = "状态尚未确认，更新后可操作";
   return {
@@ -102,4 +120,11 @@ function toRoom(row, snap) {
   };
 }
 
-Object.assign(window, { call, bridgeReady, relativeTime, absoluteTime, durationLabel, numberLabel, toRoom, colorFor });
+function roomSortTier(room) {
+  if (room.tone === "warn") return 0;
+  if (room.healthy || room.active || room.reconnecting) return 1;
+  if (room.live) return 2;
+  return 3;
+}
+
+Object.assign(window, { call, bridgeReady, relativeTime, absoluteTime, durationLabel, numberLabel, toRoom, roomSortTier, colorFor });

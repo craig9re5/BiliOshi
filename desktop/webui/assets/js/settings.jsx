@@ -159,10 +159,14 @@ const SettingsPage = ({
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   const dayThemeName = (DAY_THEME_CHOICES.find((item) => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
+  const accountScopeLabel = scope?.name ? `当前账号 · ${scope.name}` : "当前账号生效";
   return (<>
     <div className="settings" data-screen-label="设置"><div className="settings-inner">
       <section className="group card">
-        <header className="group-head">每日任务</header>
+        <header className="group-head group-head-meta">
+          <span>每日任务</span>
+          <span className="scope-tag">{accountScopeLabel}</span>
+        </header>
         <SettingRow name="点亮粉丝牌" desc="牌子熄灭时发送弹幕重新点亮">
           <Switch label="点亮粉丝牌" checked={settings.auto_revive} disabled={disabled("auto_revive")}
             onChange={(value) => onSetting("auto_revive", value)} />
@@ -178,15 +182,15 @@ const SettingsPage = ({
       </section>
       <section className="group card">
         <header className="group-head">运行与启动</header>
-        <SettingRow name="开播通知" desc="关注的主播开播时弹出系统提醒">
+        <SettingRow name="开播通知" desc="当前账号关注的主播开播时弹出系统提醒">
           <Switch label="开播通知" checked={settings.notify_on_live} disabled={disabled("notify_on_live")}
             onChange={(value) => onSetting("notify_on_live", value)} />
         </SettingRow>
-        <SettingRow name="开机启动" desc="登录系统后在托盘静默运行">
+        <SettingRow name="开机启动" desc="本机全局生效，登录系统后在托盘静默运行">
           <Switch label="开机启动" checked={settings.autostart} disabled={disabled("autostart")}
             onChange={(value) => onSetting("autostart", value)} />
         </SettingRow>
-        <SettingRow name="运行模式" desc="稳健模式推荐日常挂机；激进模式检测更频繁">
+        <SettingRow name="运行模式" desc="稳健模式推荐日常挂机；激进模式检测更频繁（按账号独立保存）">
           <Choice label="运行模式" value={runMode} disabled={disabled("run_mode")}
             options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
             onChange={(value) => onSetting("run_mode", value)} />
@@ -218,7 +222,10 @@ const SettingsPage = ({
         )}
       </section>
       <section className="group card">
-        <header className="group-head">外观</header>
+        <header className="group-head group-head-meta">
+          <span>外观</span>
+          <span className="scope-tag">本机全局</span>
+        </header>
         <SettingRow name="界面主题"
           desc={theme === "system" ? `跟随系统，当前为${systemDark ? "深色 · 墨青暗" : `浅色 · ${dayThemeName}`}` : "自定义应用配色风格"}>
           <ThemeOptions value={theme} onChange={onTheme} systemDark={systemDark} dayThemeName={dayThemeName} />

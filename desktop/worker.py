@@ -34,7 +34,7 @@ def probe(root, output):
 
 class RoomStateRecorder:
 
-    def __init__(self, path, member):
+    def __init__(self, path, member, *, watch_only=False):
         self.path = path
         self.state = {
             "room": member["room"],
@@ -43,6 +43,7 @@ class RoomStateRecorder:
             "beats": 0,
             "pid": os.getpid(),
             "started": time.time(),
+            **({"watch_only": True} if watch_only else {}),
         }
         self.save()
 
@@ -114,7 +115,7 @@ def watch(root, room, skip_actions=False, *, watch_only=False):
     if not mutex.acquired:
         mutex.close()
         return 0
-    recorder = RoomStateRecorder(root / "state" / f"{room}.json", member)
+    recorder = RoomStateRecorder(root / "state" / f"{room}.json", member, watch_only=watch_only)
     code = 1
     try:
         code = AppContext(root, observer=recorder).run_watch(member, config)

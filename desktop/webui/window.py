@@ -512,6 +512,8 @@ class WebHost:
                 logging.exception("Desktop command was not submitted")
 
     def _paused(self):
+        if self._host is not None and self._host.global_paused:
+            return True
         engine = self._engine
         if engine is None:
             return False

@@ -56,6 +56,7 @@ class Engine:
         self.manual_reconnects = {}
         self.started_at = time.time()
         self.last_tick = 0
+        self.resumed_from_sleep_at = 0
         self.last_status_publish = 0
         self.last_health_publish = 0
         self.publish_error = ""
@@ -535,6 +536,10 @@ class Engine:
 
     def cycle(self):
         """A publish failure must not disable scheduling or erase its diagnostics."""
+        pre_tick = time.time()
+        if self.last_tick > 0 and pre_tick - self.last_tick > 180:
+            self.resumed_from_sleep_at = pre_tick
+            self.next_check = 0
         try:
             self.tick()
             self.last_tick = time.time()

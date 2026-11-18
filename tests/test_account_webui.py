@@ -173,6 +173,24 @@ class AccountWebUiTests(unittest.TestCase):
         self.assertEqual(len(self.store.accounts()), 3)
         self.assertTrue(self.store.has_credentials("uid-3"))
 
+        # When no account is currently active, QR login activates and starts the engine.
+        self.api.remove_account("uid-1")
+        self.assertIsNone(self.host.active_id)
+        activated = self.api._complete_login(
+            4, "首个激活账号", {"uid": 4, "face": ""},
+            {"SESSDATA": "sess-4", "bili_jct": "csrf-4"}, None, None)
+        self.assertEqual(activated, "uid-4")
+        self.assertEqual(self.host.active_id, "uid-4")
+        self.assertIsNotNone(self.host.engine_for("uid-4"))
+        self.assertTrue(self.host.engine_for("uid-4")._started)
+
+        # Global pause can be resumed directly through toggle_pause.
+        self.api.set_global_paused(True)
+        self.assertTrue(self.host.global_paused)
+        resumed = self.api.toggle_pause()
+        self.assertTrue(resumed["ok"])
+        self.assertFalse(self.host.global_paused)
+
     def test_qr_start_add_account_accepts_empty_target(self):
         session = Mock()
         session.generate.return_value = "https://example.invalid/qr"

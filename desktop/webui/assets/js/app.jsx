@@ -1,7 +1,7 @@
 /* One state owner. Python snapshots remain authoritative after every action. */
 
 const { useState, useEffect, useRef, useCallback } = React;
-const { Icon, Pulse, call, bridgeReady, toRoom } = window;
+const { Icon, Pulse, call, bridgeReady, toRoom, roomSortTier } = window;
 const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false,
   notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false };
 const THEME_KEYS = ["system", "white", "paper", "mist", "dark"];
@@ -210,6 +210,8 @@ function App() {
   const roomPending = useRef(new Set());
   const settingsQueue = useRef(Promise.resolve());
   const settingOverrides = useRef({});
+  const settingsBatch = useRef({});
+  const settingsTimer = useRef(0);
   const searchGeneration = useRef(0);
   const dialogGeneration = useRef(0);
   const qrRequest = useRef(0);
@@ -276,6 +278,10 @@ function App() {
         else if (event.type === "sync_medals") handlers.current.openMedals?.();
         else if (event.type === "open_diagnostic") handlers.current.openDiagnostics?.();
         else if (event.type === "toast") toast(payload.message, payload.tone);
+        else if (event.type === "action_result") {
+          const text = payload.error || payload.message;
+          if (text) toast(text, payload.ok === false ? "warn" : "info");
+        }
         else if (event.type === "settings_changed") handlers.current.refresh?.();
       }
     };
@@ -296,6 +302,7 @@ function App() {
       alive.current = false;
       if (window.LS?.onSnapshot === receiveSnapshot) delete window.LS;
       delete window.__reportClientError;
+      window.clearTimeout(settingsTimer.current);
       toastTimers.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, [receiveSnapshot, toast]);
@@ -306,13 +313,20 @@ function App() {
   const isAllView = false;
   const viewed = snap;
 
+  const rawRooms = (viewed.rows || []).map((row) => toRoom(row, viewed));
+  const rooms = typeof roomSortTier === "function"
+    ? rawRooms
+        .map((room, idx) => [room, idx])
+        .sort((a, b) => roomSortTier(a[0]) - roomSortTier(b[0]) || a[1] - b[1])
+        .map(([room]) => room)
+    : rawRooms;
+
   useEffect(() => {
-    const rows = viewed.rows || [];
-    if (!selectionInitialized.current && rows.length) {
+    if (!selectionInitialized.current && rooms.length) {
       selectionInitialized.current = true;
-      setSelectedId(rows[0].room);
-    } else if (selectedId !== null && !rows.some((row) => row.room === selectedId)) setSelectedId(null);
-  }, [viewed.rows, selectedId]);
+      setSelectedId(rooms[0].room);
+    } else if (selectedId !== null && !rooms.some((row) => row.room === selectedId)) setSelectedId(null);
+  }, [rooms, selectedId]);
 
   const fetchAvatar = useCallback((uid) => {
     if (!uid || images[uid] || avatarPending.current.has(uid)) return;
@@ -339,7 +353,6 @@ function App() {
     }
   }, [viewed.rows, connected, fetchAvatar]);
 
-  const rooms = (viewed.rows || []).map((row) => toRoom(row, viewed));
   const selected = rooms.find((room) => room.room === selectedId);
   const account = viewed.accountInfo || EMPTY_SNAPSHOT.accountInfo;
   const closing = Boolean(snap.closing);
@@ -429,12 +442,13 @@ function App() {
     finally { if (alive.current) setControlBusy(false); }
   };
 
-  const roomAction = async (kind, roomId) => {
+  const roomAction = async (kind, roomId, taskType = "all") => {
     if (roomPending.current.has(roomId) || closing) return;
     roomPending.current.add(roomId);
     setBusyRoom(roomId);
     try {
-      await invoke({ redo: "redo", reconnect: "reconnect", wear: "wear_medal" }[kind], [roomId]);
+      const args = kind === "redo" && taskType && taskType !== "all" ? [roomId, taskType] : [roomId];
+      await invoke({ redo: "redo", reconnect: "reconnect", wear: "wear_medal" }[kind], args);
       await refresh();
     } finally {
       roomPending.current.delete(roomId);
@@ -444,17 +458,32 @@ function App() {
 
   const setSetting = (key, value) => {
     settingOverrides.current[key] = value;
+    settingsBatch.current[key] = value;
     setPendingSettings((current) => new Set(current).add(key));
     setSnap((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
-    settingsQueue.current = settingsQueue.current.catch(() => {}).then(async () => {
-      try {
-        await invoke("save_settings", [{ [key]: value }, activeId]);
-        delete settingOverrides.current[key];
-        await refresh();
-      } finally {
-        if (alive.current) setPendingSettings((current) => { const next = new Set(current); next.delete(key); return next; });
-      }
-    });
+    window.clearTimeout(settingsTimer.current);
+    const targetAccount = activeId;
+    settingsTimer.current = window.setTimeout(() => {
+      const payload = { ...settingsBatch.current };
+      const keys = Object.keys(payload);
+      settingsBatch.current = {};
+      if (!keys.length) return;
+      settingsQueue.current = settingsQueue.current.catch(() => {}).then(async () => {
+        try {
+          await invoke("save_settings", [payload, targetAccount]);
+          for (const k of keys) delete settingOverrides.current[k];
+          await refresh();
+        } finally {
+          if (alive.current) {
+            setPendingSettings((current) => {
+              const next = new Set(current);
+              for (const k of keys) next.delete(k);
+              return next;
+            });
+          }
+        }
+      });
+    }, 150);
   };
 
   const closeQr = () => {
@@ -737,7 +766,9 @@ function App() {
   const recover = async () => {
     const route = snap.recovery || {};
     if (route.action === "login") openQr(activeId);
+    else if (route.action === "resume_global") control("set_global_paused", [false], "已恢复全部挂机");
     else if (route.action === "resume") control("toggle_pause");
+    else if (route.action === "switch_prompt") { setPage("account"); }
     else if (route.action === "switch") { setPage("monitor"); }
     else if (route.action === "safety") {
       if (snap.safety?.kind === "auth" || snap.safety?.kind === "credentials") openQr(activeId);
@@ -825,19 +856,23 @@ function App() {
           <span className="spacer" />
           <div className="chrome-actions">
             {page === "monitor" && <window.OverviewActions paused={snap.paused}
+              globalPaused={Boolean(snap.global_paused)} signedIn={account.signed_in}
               onTogglePause={() => control("toggle_pause")}
               onCheck={() => control("check_now")} checking={snap.checking}
               controlBusy={controlBusy} closing={closing} />}
           </div>
           <WindowButtons />
         </header>
-        {page === "monitor" && accounts.length > 0 && <window.AccountTabs accounts={accounts} activeId={activeId}
-          avatars={accountAvatars} onSelect={switchAccount} onAdd={() => openQr("")} />}
+        {((page === "monitor" && accounts.length > 0)
+          || ((page === "growth" || page === "automation") && accounts.length > 1)) && (
+          <window.AccountTabs accounts={accounts} activeId={activeId}
+            avatars={accountAvatars} onSelect={switchAccount} onAdd={() => openQr("")} />
+        )}
         <div className="page" id="monitor-body">
         {/* Keyed by account: batch selections must never survive an account
             switch, or they would apply to the other account's follow list. */}
         {page === "monitor" && <window.Overview key={activeId} rooms={rooms} selectedId={selectedId} onSelect={select}
-          paused={snap.paused}
+          paused={snap.paused} globalPaused={Boolean(snap.global_paused)}
           onAction={roomAction} onOpen={(id) => invoke("open_room", [id])} onAddMember={openAdd} onSyncMedals={openMedals}
           onRemove={remove} onContextMenu={onContextMenu} menuRoom={menu?.room} menuMode={menu?.mode}
           busyRoom={busyRoom} controlBusy={controlBusy}

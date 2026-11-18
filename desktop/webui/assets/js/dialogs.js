@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"0d55fb629756d67237daef38b498a8d0b821462cf2a7ee65c74784e539f0cccd","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"3bc1fa6410d0282bac6975059735e255de38f9917c88784685ca09e5f0e3bb4d"} */
+/* BiliOshi JSX {"code_sha256":"9557e3342b2dcc9dac3725d6eb290c8987c30be678772ac4dcaf6141c8dd67f5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"3d94ff6b97fb040de376efc5949578b50ea0ad5b93b7b5d3d7106c0d084341b4"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -141,14 +141,19 @@ const AddMemberModal = ({
   className: "field-row",
   onSubmit: event => {
     event.preventDefault();
-    if (!loading && query.trim()) onSearch();
+    if (loading || adding) return;
+    if (result?.ok) {
+      onAdd();
+      return;
+    }
+    if (query.trim()) onSearch();
   }
 }, /*#__PURE__*/React.createElement("input", {
   className: "input",
   value: query,
   onChange: event => onQuery(event.target.value),
   "aria-label": "\u76F4\u64AD\u95F4\u53F7\u3001UID \u6216\u94FE\u63A5",
-  placeholder: "\u76F4\u64AD\u95F4\u53F7\u3001UID \u6216\u94FE\u63A5",
+  placeholder: "\u76F4\u64AD\u95F4\u53F7\u3001UID \u6216\u94FE\u63A5\uFF08\u56DE\u8F66\u67E5\u627E\uFF0C\u518D\u6B21\u56DE\u8F66\u6DFB\u52A0\uFF09",
   autoFocus: true,
   disabled: adding
 }), /*#__PURE__*/React.createElement("button", {

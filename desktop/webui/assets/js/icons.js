@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"7bc6ca60fc288734e7f01915e1e01f952459258bbc750efcb061c4d9105c7a3f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"d0085f39f79211cc21f49fbb795dce844c3568a60abb5b70bd08269e158a0a18"} */
+/* BiliOshi JSX {"code_sha256":"443bbe3836b4948bf42658d5492c6cf9e8baaf4bcf038fac229d754ed835bc2b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"71ba5003ef98a5279b503fa652f74e81ebe9445b16ad855df67ce3d43aff1ab5"} */
 (function () {
 "use strict";
 /* Hand-drawn 16px stroke icons — one weight, round caps, currentColor.
@@ -234,33 +234,63 @@ const Icon = ({
   return /*#__PURE__*/React.createElement("svg", common, paths[name] || paths.info);
 };
 const Pulse = ({
-  size = 16,
+  size = 18,
   className = ""
 }) => {
-  const maskId = React.useId();
+  const rawId = React.useId();
+  const maskId = `oshi-${String(rawId).replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return /*#__PURE__*/React.createElement("svg", {
     width: size,
     height: size,
-    viewBox: "0 0 24 24",
+    viewBox: "0 0 120 120",
     fill: "none",
     className: className,
     "aria-hidden": "true"
   }, /*#__PURE__*/React.createElement("defs", null, /*#__PURE__*/React.createElement("mask", {
-    id: maskId
+    id: maskId,
+    maskUnits: "userSpaceOnUse",
+    maskContentUnits: "userSpaceOnUse",
+    x: "0",
+    y: "0",
+    width: "120",
+    height: "120"
   }, /*#__PURE__*/React.createElement("rect", {
-    width: "24",
-    height: "24",
-    fill: "white"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M4.5 12H8.5L10.2 8.6L12 15.6L13.8 9.8L15.4 12H19.5",
-    stroke: "black",
-    strokeWidth: "1.9",
-    strokeLinecap: "round",
+    x: "0",
+    y: "0",
+    width: "120",
+    height: "120",
+    fill: "#ffffff"
+  }), /*#__PURE__*/React.createElement("g", {
+    fill: "none",
+    stroke: "#000000",
+    strokeWidth: "7.8",
+    strokeLinecap: "butt",
     strokeLinejoin: "round"
-  }))), /*#__PURE__*/React.createElement("path", {
-    d: "M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z",
+  }, /*#__PURE__*/React.createElement("line", {
+    x1: "18.5",
+    y1: "37",
+    x2: "47.5",
+    y2: "37"
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M 33.3 24 V 82.5 A 7.5 7.5 0 0 1 18.3 82.5 V 77 A 7.5 7.5 0 0 1 22.87 70.09 L 40.54 62.61 A 14 14 0 1 1 45.51 89.49"
+  })), /*#__PURE__*/React.createElement("circle", {
+    cx: "58.2",
+    cy: "35",
+    r: "4.8",
+    fill: "#000000"
+  }))), /*#__PURE__*/React.createElement("rect", {
+    x: "9",
+    y: "16",
+    width: "63",
+    height: "88",
+    rx: "16",
     fill: "currentColor",
     mask: `url(#${maskId})`
+  }), /*#__PURE__*/React.createElement("path", {
+    d: "M 87.5 20 V 88.5 A 10 10 0 0 0 106.9 91.92 L 108.78 86.75",
+    stroke: "currentColor",
+    strokeWidth: "11",
+    strokeLinecap: "butt"
   }));
 };
 Object.assign(window, {

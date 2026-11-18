@@ -1,10 +1,11 @@
+import math
 import re
 import tkinter as tk
 from bilioshi.safety import format_task_errors
 
 try:
     import pystray
-    from PIL import Image, ImageColor, ImageDraw, ImageFilter
+    from PIL import Image, ImageColor, ImageDraw
 except ImportError:
     pystray = None
     Image = ImageDraw = None
@@ -33,14 +34,40 @@ BTN_FG = "#1f1f1d"
 FONT_FAMILY = "Microsoft YaHei UI"
 
 
-def icon_image(color="#f4fffb", size=64):
-    """推し mark: a heart carrying a heartbeat trace.
+def _sample_arc(cx, cy, radius, start_deg, end_deg, steps=48):
+    return [
+        (
+            cx + radius * math.cos(math.radians(start_deg + (end_deg - start_deg) * idx / steps)),
+            cy + radius * math.sin(math.radians(start_deg + (end_deg - start_deg) * idx / steps)),
+        )
+        for idx in range(steps + 1)
+    ]
 
-    The heartbeat is the app's whole mechanism (it keeps intimacy growing
-    while you are away); the heart frame is the "oshi" you support.
-    An outlined frame keeps the stroke weight even, and the trace stays
-    readable at 16 px because it spans the full inner width.
-    Drawn at 8x and downscaled for smooth edges.
+
+def _draw_butt_stroke(draw, points, width, fill, tx, ty, sc):
+    scaled = [(tx + x * sc, ty + y * sc) for x, y in points]
+    half = (width * sc) / 2.0
+    for idx in range(len(scaled) - 1):
+        x0, y0 = scaled[idx]
+        x1, y1 = scaled[idx + 1]
+        dx, dy = x1 - x0, y1 - y0
+        length = math.hypot(dx, dy)
+        if length < 1e-6:
+            continue
+        nx, ny = -dy / length * half, dx / length * half
+        draw.polygon(
+            [(x0 + nx, y0 + ny), (x1 + nx, y1 + ny), (x1 - nx, y1 - ny), (x0 - nx, y0 - ny)],
+            fill=fill,
+        )
+        if idx > 0:
+            draw.ellipse((x0 - half, y0 - half, x0 + half, y0 + half), fill=fill)
+
+
+def icon_image(color="#f4fffb", size=64):
+    """陰陽推し札 mark ([お]し): lit fan-plaque with negative-space お + positive し hook.
+
+    Drawn on an 8x supersampled 64x64 canvas so both 64 px window icons and
+    16 px tray icons keep crisp counter-spaces without subpixel mudding.
     """
     scale = 8
     side = 64 * scale
@@ -54,29 +81,61 @@ def icon_image(color="#f4fffb", size=64):
         fill = tuple(round(top[i] + (bottom[i] - top[i]) * mix) for i in range(3)) + (255,)
         gradient.line([(0, y), (side, y)], fill=fill)
     mask = Image.new("L", (side, side), 0)
+    pad = (2.5 if size <= 20 else 4.0) * scale
+    rad = (13.0 if size <= 20 else 15.0) * scale
     ImageDraw.Draw(mask).rounded_rectangle(
-        (4 * scale, 4 * scale, 60 * scale, 60 * scale), radius=16 * scale, fill=255)
+        (pad, pad, side - pad, side - pad), radius=rad, fill=255
+    )
     image.paste(tile, (0, 0), mask)
 
     base = ImageColor.getrgb(color) if isinstance(color, str) else tuple(color[:3])
+    fg = base + (255,)
 
-    # Solid heart with the heartbeat cut out: the negative-space trace keeps
-    # the silhouette clean and survives downscaling to 16 px.
-    heart = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-    hdraw = ImageDraw.Draw(heart)
-    hdraw.ellipse((12 * scale, 13 * scale, 34 * scale, 35 * scale), fill=base + (255,))
-    hdraw.ellipse((30 * scale, 13 * scale, 52 * scale, 35 * scale), fill=base + (255,))
-    hdraw.polygon(
-        [(12.5 * scale, 28 * scale), (51.5 * scale, 28 * scale), (32 * scale, 53 * scale)],
-        fill=base + (255,))
-    heart = heart.filter(ImageFilter.GaussianBlur(0.3 * scale))
-    image.alpha_composite(heart)
+    span = (53.5 if size <= 20 else 50.0) * scale
+    sc = span / 120.0
+    tx = 32.0 * scale - 61.25 * sc
+    ty = 32.0 * scale - 60.0 * sc
 
-    # Trace in the tile colour, spanning the heart's full inner width.
-    trace = [(17, 30), (25, 30), (29, 22), (33, 38), (37, 25), (40, 30), (47, 30)]
-    ImageDraw.Draw(image).line(
-        [(x * scale, y * scale) for x, y in trace],
-        fill=(0x12, 0x33, 0x35, 255), width=round(3.2 * scale), joint="curve")
+    glyph = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    gdraw = ImageDraw.Draw(glyph)
+
+    # Left lit plaque [お]
+    gdraw.rounded_rectangle(
+        (tx + 9.0 * sc, ty + 16.0 * sc, tx + 72.0 * sc, ty + 104.0 * sc),
+        radius=16.0 * sc,
+        fill=fg,
+    )
+
+    c1, r1 = (25.8, 77.0), 7.5
+    c2, r2 = (46.0, 75.5), 14.0
+    ang = math.atan2(c2[1] - c1[1], c2[0] - c1[0]) - math.acos(
+        (r1 - r2) / math.hypot(c2[0] - c1[0], c2[1] - c1[1])
+    )
+    nx, ny = math.cos(ang), math.sin(ang)
+    p2 = (c2[0] + r2 * nx, c2[1] + r2 * ny)
+    n_deg = math.degrees(ang)
+    stem_x = c1[0] + r1
+    cut_w = 8.3 if size <= 20 else 8.0
+
+    _draw_butt_stroke(gdraw, [(18.5, 37.0), (47.5, 37.0)], cut_w, (0, 0, 0, 0), tx, ty, sc)
+    pts_o = [(stem_x, 24.0), (stem_x, 82.5)]
+    pts_o += _sample_arc(c1[0], 82.5, r1, 0.0, 180.0, 36)[1:]
+    pts_o += [(c1[0] - r1, c1[1])]
+    pts_o += _sample_arc(c1[0], c1[1], r1, 180.0, n_deg + 360.0, 28)[1:]
+    pts_o += [p2]
+    pts_o += _sample_arc(c2[0], c2[1], r2, n_deg, 92.0, 56)[1:]
+    _draw_butt_stroke(gdraw, pts_o, cut_w, (0, 0, 0, 0), tx, ty, sc)
+    dx_c, dy_c, dr = tx + 58.2 * sc, ty + 35.0 * sc, 4.9 * sc
+    gdraw.ellipse((dx_c - dr, dy_c - dr, dx_c + dr, dy_c + dr), fill=(0, 0, 0, 0))
+
+    # Right positive support hook し
+    pts_shi = [(87.5, 20.0), (87.5, 88.5)]
+    pts_shi += _sample_arc(97.5, 88.5, 10.0, 180.0, 20.0, 44)[1:]
+    ex, ey = pts_shi[-1]
+    pts_shi.append((ex + 5.5 * math.sin(math.radians(20.0)), ey - 5.5 * math.cos(math.radians(20.0))))
+    _draw_butt_stroke(gdraw, pts_shi, 11.2, fg, tx, ty, sc)
+
+    image.alpha_composite(glyph)
     return image.resize((size, size), Image.Resampling.LANCZOS)
 
 

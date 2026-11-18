@@ -165,33 +165,48 @@ const Icon = ({ name, size = 15, stroke = 1.6, className = "" }) => {
   return <svg {...common}>{paths[name] || paths.info}</svg>;
 };
 
-const Pulse = ({ size = 16, className = "" }) => {
-  const maskId = React.useId();
+const Pulse = ({ size = 18, className = "" }) => {
+  const rawId = React.useId();
+  const maskId = `oshi-${String(rawId).replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 24 24"
+      viewBox="0 0 120 120"
       fill="none"
       className={className}
       aria-hidden="true"
     >
       <defs>
-        <mask id={maskId}>
-          <rect width="24" height="24" fill="white" />
-          <path
-            d="M4.5 12H8.5L10.2 8.6L12 15.6L13.8 9.8L15.4 12H19.5"
-            stroke="black"
-            strokeWidth="1.9"
-            strokeLinecap="round"
+        <mask
+          id={maskId}
+          maskUnits="userSpaceOnUse"
+          maskContentUnits="userSpaceOnUse"
+          x="0"
+          y="0"
+          width="120"
+          height="120"
+        >
+          <rect x="0" y="0" width="120" height="120" fill="#ffffff" />
+          <g
+            fill="none"
+            stroke="#000000"
+            strokeWidth="7.8"
+            strokeLinecap="butt"
             strokeLinejoin="round"
-          />
+          >
+            <line x1="18.5" y1="37" x2="47.5" y2="37" />
+            <path d="M 33.3 24 V 82.5 A 7.5 7.5 0 0 1 18.3 82.5 V 77 A 7.5 7.5 0 0 1 22.87 70.09 L 40.54 62.61 A 14 14 0 1 1 45.51 89.49" />
+          </g>
+          <circle cx="58.2" cy="35" r="4.8" fill="#000000" />
         </mask>
       </defs>
+      <rect x="9" y="16" width="63" height="88" rx="16" fill="currentColor" mask={`url(#${maskId})`} />
       <path
-        d="M12 21s-7.4-4.6-9.1-9.1C1.9 8.6 4 5.6 7.2 5.6c1.9 0 3.5 1 4.8 2.7 1.3-1.7 2.9-2.7 4.8-2.7 3.2 0 5.3 3 4.3 6.3C19.4 16.4 12 21 12 21z"
-        fill="currentColor"
-        mask={`url(#${maskId})`}
+        d="M 87.5 20 V 88.5 A 10 10 0 0 0 106.9 91.92 L 108.78 86.75"
+        stroke="currentColor"
+        strokeWidth="11"
+        strokeLinecap="butt"
       />
     </svg>
   );

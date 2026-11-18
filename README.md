@@ -107,7 +107,7 @@ bilioshi-heartbeat --help
 - **本机数据目录**：默认位于 `%LOCALAPPDATA%\BiliOshi`（Windows，兼容已有 `%LOCALAPPDATA%\LiveSupport` 安装目录）或 `~/.config/bilioshi`（Linux / macOS，遵循 `XDG_CONFIG_HOME`），可通过环境变量 `BILIOSHI_APP_DATA` 覆盖，不写入源码目录。
 - **安装根与账号根分离**：桌面端在主数据目录下维护 `state/accounts.json` 注册表、守护进程状态与主日志，各账号的凭证、关注列表、策略与状态独立存放在 `accounts/uid-<mid>/`；命令行工具默认读写主数据目录下的配置与 `credentials.json`。
 - **加密凭据存储**：Windows 使用当前用户范围的 DPAPI（`UI_FORBIDDEN`）加密保存凭证；macOS / Linux 保存登录态需安装 `python -m pip install "bilioshi[secure-store]"` 并启用系统 Keychain 或 Secret Service。无可用安全存储时直接拒绝落盘，不回退到明文。
-- **零前端凭证与自动脱敏**：WebView2 渲染层只接收 Python 桥接发布的公开快照与本机二维码图像，不接触 Cookie、扫码密钥，也不直接访问 B 站接口；日志输出与诊断包导出均自动脱敏。
+- **零前端凭证与自动脱敏**：WebView2 渲染层只接收 Python 桥接发布的公开快照与本机二维码图像，不接触 Cookie、扫码密钥，也不直接访问 B 站接口；日志输出与诊断包导出均自动脱敏。公开反馈问题时请使用「导出诊断包」（或 `--export-diagnostic`），切勿附上 `credentials.json`、浏览器 Cookie、HAR 或未脱敏的原始日志。
 
 ## 开发与构建
 
@@ -138,7 +138,7 @@ powershell -ExecutionPolicy Bypass -File .\build_desktop.ps1 -Mode onefile
 ## 文档索引
 
 - **桌面端与功能说明**：[桌面端详细指南](DESKTOP.md) · [扫码登录](docs/QR_LOGIN.md) · [多账号管理](docs/MULTI_ACCOUNT.md) · [粉丝牌成长记录](docs/GROWTH.md) · [运行模式与桌面守护](docs/OPERATING_MODES.md) · [直播点赞实现与验收](docs/LIVE_LIKES.md) · [日志与诊断排查](docs/LOGS.md)
-- **架构、安全与工程规范**：[架构与调用关系](ARCHITECTURE.md) · [Web 桌面开发](docs/WEB_UI.md) · [账号异常保护与凭证存储](docs/ACCOUNT_SAFETY.md) · [安全与漏洞报告](SECURITY.md) · [贡献指南](CONTRIBUTING.md) · [品牌与视觉规范](docs/BRAND.md)
+- **架构、安全与工程规范**：[架构与调用关系](ARCHITECTURE.md) · [Web 桌面开发](docs/WEB_UI.md) · [账号异常保护与凭证存储](docs/ACCOUNT_SAFETY.md) · [品牌与视觉规范](docs/BRAND.md)
 - **历史与演进记录**：[重构审计与计划](docs/REFACTOR_PLAN.md) · [重构结果与验证](docs/REFACTOR_RESULTS.md) · [变更日志](CHANGELOG.md)
 
 ## 许可证

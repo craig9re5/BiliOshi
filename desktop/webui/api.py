@@ -28,9 +28,10 @@ from bilioshi.growth import CHINA_TZ, load_history
 from bilioshi.members import load_account_members, load_members
 from bilioshi.operating_mode import PROFILES, profile_for
 from bilioshi.redaction import redact, redact_paths
-from bilioshi.runtime import file_stat_signature, read_json, update_json
+from bilioshi.runtime import APP_VERSION, file_stat_signature, read_json, update_json
 from bilioshi.safety import describe_hold, format_task_errors
 from bilioshi.secret_store import is_envelope
+from bilioshi.updater import load_updater_settings, save_updater_settings, updater_settings_path
 from desktop.interaction import action_reason, recovery_route
 from desktop.storage import load_config
 
@@ -42,7 +43,7 @@ _SECRET_FIELDS = {
     "access_token", "refresh_token", "secret_key",
 }
 _SETTING_FLAGS = (
-    "auto_revive", "auto_danmaku_intimacy", "auto_like", "notify_on_live", "autostart", "paused",
+    "auto_revive", "auto_danmaku_intimacy", "auto_like", "notify_on_live", "autostart", "auto_update", "paused",
 )
 _PENDING_MESSAGES = {
     "redo": "正在补齐任务", "wear": "正在佩戴粉丝牌", "reconnect": "正在请求重连",
@@ -56,6 +57,8 @@ _PENDING_MESSAGES = {
     "dismiss_watch_warning": "正在清除收益提醒",
     "add": "正在添加主播", "import": "正在导入粉丝牌主播",
     "export_diagnostic": "正在导出脱敏诊断包",
+    "check_update": "正在检查版本更新",
+    "apply_update": "正在重启并安装更新",
 }
 # These operations always touch the active Engine. A view of another account
 # must stay read-only rather than silently mutating the running account.
@@ -111,12 +114,13 @@ def _qr_data_uri(url):
 class Api:
     """Exposed as window.pywebview.api; public members are endpoints only."""
 
-    def __init__(self, engine, ui):
+    def __init__(self, engine, ui, *, updater=None):
         self._host = engine if hasattr(engine, "active_engine") and hasattr(engine, "store") else None
         self._host_root = Path(engine.root)
         self._store = self._host.store if self._host is not None else None
         self._engine = self._host.active_engine() if self._host is not None else engine
         self._ui = ui
+        self._updater = updater
         self._root = Path(self._engine.root) if self._engine is not None else self._host_root
         self._mutations = threading.RLock()
         self._control_mutations = threading.RLock()
@@ -192,6 +196,7 @@ class Api:
 
     def _empty_snapshot(self):
         return {
+            "version": APP_VERSION,
             "account": "",
             "account_confirmed": False,
             "account_checked_at": 0,
@@ -202,6 +207,27 @@ class Api:
             "error": "",
             "active": False,
             "inactive": True,
+        }
+
+    def _update_snapshot(self):
+        if self._updater is not None:
+            try:
+                return self._updater.snapshot()
+            except Exception:
+                logging.exception("Updater snapshot failed")
+        cfg = load_updater_settings(self._host_root)
+        return {
+            "status": "idle",
+            "auto_update": cfg["auto_update"],
+            "current_version": APP_VERSION,
+            "latest_version": "",
+            "ready_version": "",
+            "notes": "",
+            "last_checked_at": 0.0,
+            "error": "",
+            "can_self_update": False,
+            "self_update_reason": "",
+            "waiting_reason": "",
         }
 
     # Snapshot construction never waits for the Engine's monitor/control lock.
@@ -262,6 +288,8 @@ class Api:
                               for action in ("open", "redo", "reconnect", "wear", "remove")}
         snap["recovery"] = recovery_route(snap)
         snap["notifications"] = {"available": False}
+        snap["version"] = snap.get("version") or APP_VERSION
+        snap["update"] = self._update_snapshot()
         return _public(snap)
 
     def _read_settings(self, root):
@@ -269,6 +297,7 @@ class Api:
         value = {key: config.get(key, False) for key in _SETTING_FLAGS}
         value["run_mode"] = config.get("run_mode", "stable")
         value["check_minutes"] = profile_for(value["run_mode"]).check_minutes
+        value["auto_update"] = load_updater_settings(self._host_root)["auto_update"]
         try:
             from desktop.windows import is_autostart_enabled
 
@@ -288,7 +317,11 @@ class Api:
         ):
             return self._read_settings(root)
         with self._cache_lock:
-            signature = (_signature(root / "settings.json"), _signature(root / "members.json"))
+            signature = (
+                _signature(root / "settings.json"),
+                _signature(root / "members.json"),
+                _signature(updater_settings_path(self._host_root)),
+            )
             if signature != self._settings_signature:
                 value = self._read_settings(root)
                 self._settings_cache = value
@@ -364,6 +397,8 @@ class Api:
             }
         snap["recovery"] = recovery_route(snap)
         snap["notifications"] = {"available": False}
+        snap["version"] = snap.get("version") or APP_VERSION
+        snap["update"] = self._update_snapshot()
         if self._host.view_id and self._host.view_id not in (self._host.active_id, ALL_ACCOUNTS):
             snap["view"] = self._view_snapshot(self._host.view_id)
         return _public(snap)
@@ -686,7 +721,7 @@ class Api:
                 "pause", "check", "settings", "safety", "safety_check",
                 "account_safety", "account_safety_check", "clear_room_block",
                 "dismiss_task_error", "dismiss_watch_warning",
-                "reconnect", "remove", "logout",
+                "reconnect", "remove", "logout", "check_update", "apply_update",
             }
             lock = self._control_mutations if control else self._mutations
             with lock if mutating else nullcontext():
@@ -757,6 +792,7 @@ class Api:
             return {"ok": False, "error": "账号不存在或已被移除。"}
         payload = dict(changes)
         app_autostart = payload.pop("autostart", None)
+        app_auto_update = payload.pop("auto_update", None)
         if self._store is None and app_autostart is not None:
             # Legacy single-root settings historically stored this flag too.
             payload["autostart"] = app_autostart
@@ -788,7 +824,15 @@ class Api:
                 return {**config, **payload}
 
             try:
-                update_json(target_root / "settings.json", change, {})
+                if payload or (target_root / "settings.json").exists():
+                    update_json(target_root / "settings.json", change, {})
+                if app_auto_update is not None:
+                    if self._updater is not None:
+                        self._updater.set_auto_update(app_auto_update)
+                    else:
+                        save_updater_settings(self._host_root, auto_update=app_auto_update)
+                    with self._cache_lock:
+                        self._settings_signature = object()
             except (OSError, ValueError, RuntimeError):
                 logging.exception("Saving web settings failed")
                 return {"ok": False, "error": "设置未能保存，请检查本机文件权限和配置。"}
@@ -1669,6 +1713,23 @@ class Api:
         return self.window("quit")
 
     def version(self):
-        from bilioshi.runtime import APP_VERSION
-
         return {"version": APP_VERSION}
+
+    def check_update(self):
+        def check():
+            updater = self._updater
+            if updater is None:
+                from desktop.updater import DesktopUpdater
+
+                updater = DesktopUpdater(self._host_root, auto_start_background=False)
+            return updater.check_now()
+
+        return self._run("check_update", check, allow_without_engine=True)
+
+    def apply_update(self):
+        def apply():
+            if self._updater is None:
+                return {"ok": False, "error": "当前环境不支持自动更新安装。"}
+            return self._updater.apply_now(manual=True)
+
+        return self._run("apply_update", apply, allow_without_engine=True)

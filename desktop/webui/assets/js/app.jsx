@@ -3,7 +3,7 @@
 const { useState, useEffect, useRef, useCallback } = React;
 const { Icon, Pulse, call, bridgeReady, toRoom, roomSortTier } = window;
 const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false,
-  notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false };
+  notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false, auto_update: true };
 const THEME_KEYS = ["system", "white", "paper", "mist", "dark"];
 const DAY_THEME_KEYS = ["white", "paper", "mist"];
 const normalizeThemeKey = (value, allowed, fallback) => {
@@ -25,7 +25,8 @@ const applyDocumentDayTheme = (value) => {
   return dayTheme;
 };
 const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
-  settings: DEFAULT_SETTINGS, accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
+  settings: DEFAULT_SETTINGS, update: { status: "idle", auto_update: true, can_self_update: false },
+  accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
 const Sidebar = ({ page, onPage, account, activeAccount, paused, avatar, onQuit, brandHidden, collapsed, inert }) => {
   const state = activeAccount && window.accountStateLabel
@@ -171,6 +172,7 @@ function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [connected, setConnected] = useState(false);
   const [controlBusy, setControlBusy] = useState(false);
+  const [updateBusy, setUpdateBusy] = useState(false);
   const [busyRoom, setBusyRoom] = useState(null);
   const [pendingSettings, setPendingSettings] = useState(new Set());
   const [dialog, setDialog] = useState(null);
@@ -440,6 +442,20 @@ function App() {
     setControlBusy(true);
     try { await invoke(method, args, success); await refresh(); }
     finally { if (alive.current) setControlBusy(false); }
+  };
+
+  const checkUpdate = async () => {
+    if (updateBusy || closing) return;
+    setUpdateBusy(true);
+    try { await invoke("check_update"); await refresh(); }
+    finally { if (alive.current) setUpdateBusy(false); }
+  };
+
+  const applyUpdate = async () => {
+    if (updateBusy || closing) return;
+    setUpdateBusy(true);
+    try { await invoke("apply_update"); await refresh(); }
+    finally { if (alive.current) setUpdateBusy(false); }
   };
 
   const roomAction = async (kind, roomId, taskType = "all") => {
@@ -855,6 +871,13 @@ function App() {
           <h1 className="chrome-title" tabIndex={-1} ref={titleRef}>{pageTitles[page]}</h1>
           <span className="spacer" />
           <div className="chrome-actions">
+            {snap.update?.status === "ready" && snap.update?.can_self_update && (
+              <button type="button" className="btn sm primary update-ready-btn" disabled={updateBusy || closing}
+                title={snap.update.waiting_reason || `重启以更新至 v${snap.update.ready_version}`}
+                onClick={applyUpdate}>
+                <Icon name="download" size={12} />重启更新 v{snap.update.ready_version}
+              </button>
+            )}
             {page === "monitor" && <window.OverviewActions paused={snap.paused}
               globalPaused={Boolean(snap.global_paused)} signedIn={account.signed_in}
               onTogglePause={() => control("toggle_pause")}
@@ -891,7 +914,11 @@ function App() {
           onLogs={() => invoke("open_logs", [activeId])}
           onHostLogs={() => invoke("open_logs", [""])}
           onDiagnostics={openDiagnostics}
-          version={snap.version} />}
+          version={snap.version}
+          update={snap.update}
+          onCheckUpdate={checkUpdate}
+          onApplyUpdate={applyUpdate}
+          updateBusy={updateBusy || closing} />}
         {page === "account" && <window.AccountPage accounts={accounts} activeId={activeId} viewId={activeId}
           account={account} avatar={accountAvatar} avatars={accountAvatars} onScan={openQr}
           onView={() => setPage("monitor")} onSwitch={switchAccount}

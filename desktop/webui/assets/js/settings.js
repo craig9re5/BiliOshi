@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"17c640cc88a1363727658c27119ad5b5d099579e88d0f7367e5a4ac77527c9aa","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"722f52b25a53f72dd7de7c803ce90f57fb91189431df44530edd053e9a456569"} */
+/* BiliOshi JSX {"code_sha256":"b3a968fca8d297849f0766b3ac6c8d2dd0000c693e27447125c6c0bf7cc3f49a","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"5ac811c422d22019885d5bf460eca1fab5f0c43d75022c78fd6f537be22b4ab9"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -246,13 +246,20 @@ const SettingsPage = ({
   onLogs,
   onHostLogs,
   onDiagnostics,
-  version
+  version,
+  update,
+  onCheckUpdate,
+  onApplyUpdate,
+  updateBusy
 }) => {
   const systemDark = useSystemDark();
   const disabled = key => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   const dayThemeName = (DAY_THEME_CHOICES.find(item => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
   const accountScopeLabel = scope?.name ? `当前账号 · ${scope.name}` : "当前账号生效";
+  const updateState = update?.status || "idle";
+  const updateChecking = Boolean(updateBusy || ["checking", "downloading", "verifying", "applying"].includes(updateState));
+  const updateDesc = updateState === "checking" ? "正在检查 GitHub 最新发行版…" : updateState === "downloading" ? `正在后台下载 v${update?.latest_version || ""}…` : updateState === "verifying" ? `正在离线预检 v${update?.latest_version || ""}…` : updateState === "applying" ? "正在重启并完成安装…" : updateState === "ready" ? update?.waiting_reason ? `新版本 v${update.ready_version} 已就绪 · ${update.waiting_reason}` : `新版本 v${update?.ready_version || ""} 已下载校验就绪` : updateState === "update_available" ? update?.self_update_reason ? `发现新版本 v${update.latest_version}（${update.self_update_reason}）` : `发现新版本 v${update?.latest_version || ""}` : updateState === "up_to_date" ? update?.last_checked_at ? `当前已是最新版本 · 上次检查 ${relativeTime(update.last_checked_at)}` : "当前已是最新版本" : updateState === "error" && update?.error ? update.error : "提交问题反馈时建议附带版本号与脱敏诊断包";
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8BBE\u7F6E"
@@ -309,6 +316,14 @@ const SettingsPage = ({
     disabled: disabled("autostart"),
     onChange: value => onSetting("autostart", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u81EA\u52A8\u66F4\u65B0",
+    desc: "\u540E\u53F0\u81EA\u52A8\u4E0B\u8F7D\u6821\u9A8C\u65B0\u7248\uFF0C\u5E76\u5728\u65E0\u76F4\u64AD\u6302\u673A\u65F6\u9759\u9ED8\u5B89\u88C5\uFF08\u672C\u673A\u5168\u5C40\u751F\u6548\uFF09"
+  }, /*#__PURE__*/React.createElement(Switch, {
+    label: "\u81EA\u52A8\u66F4\u65B0",
+    checked: settings.auto_update !== false,
+    disabled: disabled("auto_update"),
+    onChange: value => onSetting("auto_update", value)
+  })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u6A21\u5F0F",
     desc: "\u7A33\u5065\u6A21\u5F0F\u63A8\u8350\u65E5\u5E38\u6302\u673A\uFF1B\u6FC0\u8FDB\u6A21\u5F0F\u68C0\u6D4B\u66F4\u9891\u7E41\uFF08\u6309\u8D26\u53F7\u72EC\u7ACB\u4FDD\u5B58\uFF09"
   }, /*#__PURE__*/React.createElement(Choice, {
@@ -358,10 +373,28 @@ const SettingsPage = ({
     size: 13
   }), "\u5BFC\u51FA\u8BCA\u65AD\u5305")), version && /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u7248\u672C\u4FE1\u606F",
-    desc: "\u63D0\u4EA4\u95EE\u9898\u53CD\u9988\u65F6\u5EFA\u8BAE\u9644\u5E26\u7248\u672C\u53F7\u4E0E\u8131\u654F\u8BCA\u65AD\u5305"
+    desc: updateDesc
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "btn-row"
   }, /*#__PURE__*/React.createElement("span", {
     className: "version-pill"
-  }, "v", version))), /*#__PURE__*/React.createElement("section", {
+  }, "v", version), updateState === "ready" && update?.can_self_update && onApplyUpdate ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    disabled: Boolean(updateBusy || updateState === "applying"),
+    onClick: onApplyUpdate
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "download",
+    size: 13
+  }), "\u7ACB\u5373\u91CD\u542F\u66F4\u65B0") : onCheckUpdate && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    disabled: updateChecking,
+    onClick: onCheckUpdate
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "refresh",
+    size: 13
+  }), "\u68C0\u67E5\u66F4\u65B0")))), /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head group-head-meta"

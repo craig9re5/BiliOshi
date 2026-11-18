@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"4d11092a146dc7dcbadbd050627afc51bb06e553f3703e2346fc92bc49c083b4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"9ac4fcf14d8aea7263944f4ef3b7a18acb20d8cf1f555f410127d340c592e484"} */
+/* BiliOshi JSX {"code_sha256":"0303d644690d10e04cf2dfda3f92fb7102117eff29c01fad7d572473647a48ac","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"14176349d2e3287ab3cdc9fe8865c9c6da6dc9a8c400ccfaf4e744c9e3139afc"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -25,7 +25,8 @@ const DEFAULT_SETTINGS = {
   notify_on_live: true,
   run_mode: "stable",
   check_minutes: 5,
-  autostart: false
+  autostart: false,
+  auto_update: true
 };
 const THEME_KEYS = ["system", "white", "paper", "mist", "dark"];
 const DAY_THEME_KEYS = ["white", "paper", "mist"];
@@ -55,6 +56,11 @@ const EMPTY_SNAPSHOT = {
   account: "",
   safety: {},
   settings: DEFAULT_SETTINGS,
+  update: {
+    status: "idle",
+    auto_update: true,
+    can_self_update: false
+  },
   accountInfo: {
     signed_in: false,
     name: "",
@@ -346,6 +352,7 @@ function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [connected, setConnected] = useState(false);
   const [controlBusy, setControlBusy] = useState(false);
+  const [updateBusy, setUpdateBusy] = useState(false);
   const [busyRoom, setBusyRoom] = useState(null);
   const [pendingSettings, setPendingSettings] = useState(new Set());
   const [dialog, setDialog] = useState(null);
@@ -659,6 +666,26 @@ function App() {
       await refresh();
     } finally {
       if (alive.current) setControlBusy(false);
+    }
+  };
+  const checkUpdate = async () => {
+    if (updateBusy || closing) return;
+    setUpdateBusy(true);
+    try {
+      await invoke("check_update");
+      await refresh();
+    } finally {
+      if (alive.current) setUpdateBusy(false);
+    }
+  };
+  const applyUpdate = async () => {
+    if (updateBusy || closing) return;
+    setUpdateBusy(true);
+    try {
+      await invoke("apply_update");
+      await refresh();
+    } finally {
+      if (alive.current) setUpdateBusy(false);
     }
   };
   const roomAction = async (kind, roomId, taskType = "all") => {
@@ -1208,7 +1235,16 @@ function App() {
     className: "spacer"
   }), /*#__PURE__*/React.createElement("div", {
     className: "chrome-actions"
-  }, page === "monitor" && /*#__PURE__*/React.createElement(window.OverviewActions, {
+  }, snap.update?.status === "ready" && snap.update?.can_self_update && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary update-ready-btn",
+    disabled: updateBusy || closing,
+    title: snap.update.waiting_reason || `重启以更新至 v${snap.update.ready_version}`,
+    onClick: applyUpdate
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "download",
+    size: 12
+  }), "\u91CD\u542F\u66F4\u65B0 v", snap.update.ready_version), page === "monitor" && /*#__PURE__*/React.createElement(window.OverviewActions, {
     paused: snap.paused,
     globalPaused: Boolean(snap.global_paused),
     signedIn: account.signed_in,
@@ -1276,7 +1312,11 @@ function App() {
     onLogs: () => invoke("open_logs", [activeId]),
     onHostLogs: () => invoke("open_logs", [""]),
     onDiagnostics: openDiagnostics,
-    version: snap.version
+    version: snap.version,
+    update: snap.update,
+    onCheckUpdate: checkUpdate,
+    onApplyUpdate: applyUpdate,
+    updateBusy: updateBusy || closing
   }), page === "account" && /*#__PURE__*/React.createElement(window.AccountPage, {
     accounts: accounts,
     activeId: activeId,

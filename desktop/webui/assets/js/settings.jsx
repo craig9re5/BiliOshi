@@ -153,13 +153,38 @@ const ThemeOptions = ({
 
 const SettingsPage = ({
   settings, onSetting, pendingSettings, theme = "system", onTheme, dayTheme = "white", onDayTheme,
-  scope, onLogs, onHostLogs, onDiagnostics, version
+  scope, onLogs, onHostLogs, onDiagnostics, version, update, onCheckUpdate, onApplyUpdate, updateBusy
 }) => {
   const systemDark = useSystemDark();
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
   const dayThemeName = (DAY_THEME_CHOICES.find((item) => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
   const accountScopeLabel = scope?.name ? `当前账号 · ${scope.name}` : "当前账号生效";
+  const updateState = update?.status || "idle";
+  const updateChecking = Boolean(updateBusy || ["checking", "downloading", "verifying", "applying"].includes(updateState));
+  const updateDesc = updateState === "checking"
+    ? "正在检查 GitHub 最新发行版…"
+    : updateState === "downloading"
+      ? `正在后台下载 v${update?.latest_version || ""}…`
+      : updateState === "verifying"
+        ? `正在离线预检 v${update?.latest_version || ""}…`
+        : updateState === "applying"
+          ? "正在重启并完成安装…"
+          : updateState === "ready"
+            ? (update?.waiting_reason
+              ? `新版本 v${update.ready_version} 已就绪 · ${update.waiting_reason}`
+              : `新版本 v${update?.ready_version || ""} 已下载校验就绪`)
+            : updateState === "update_available"
+              ? (update?.self_update_reason
+                ? `发现新版本 v${update.latest_version}（${update.self_update_reason}）`
+                : `发现新版本 v${update?.latest_version || ""}`)
+              : updateState === "up_to_date"
+                ? (update?.last_checked_at
+                  ? `当前已是最新版本 · 上次检查 ${relativeTime(update.last_checked_at)}`
+                  : "当前已是最新版本")
+                : updateState === "error" && update?.error
+                  ? update.error
+                  : "提交问题反馈时建议附带版本号与脱敏诊断包";
   return (<>
     <div className="settings" data-screen-label="设置"><div className="settings-inner">
       <section className="group card">
@@ -190,6 +215,10 @@ const SettingsPage = ({
           <Switch label="开机启动" checked={settings.autostart} disabled={disabled("autostart")}
             onChange={(value) => onSetting("autostart", value)} />
         </SettingRow>
+        <SettingRow name="自动更新" desc="后台自动下载校验新版，并在无直播挂机时静默安装（本机全局生效）">
+          <Switch label="自动更新" checked={settings.auto_update !== false} disabled={disabled("auto_update")}
+            onChange={(value) => onSetting("auto_update", value)} />
+        </SettingRow>
         <SettingRow name="运行模式" desc="稳健模式推荐日常挂机；激进模式检测更频繁（按账号独立保存）">
           <Choice label="运行模式" value={runMode} disabled={disabled("run_mode")}
             options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
@@ -216,8 +245,20 @@ const SettingsPage = ({
           </button>
         </SettingRow>
         {version && (
-          <SettingRow name="版本信息" desc="提交问题反馈时建议附带版本号与脱敏诊断包">
-            <span className="version-pill">v{version}</span>
+          <SettingRow name="版本信息" desc={updateDesc}>
+            <div className="btn-row">
+              <span className="version-pill">v{version}</span>
+              {updateState === "ready" && update?.can_self_update && onApplyUpdate ? (
+                <button type="button" className="btn sm primary" disabled={Boolean(updateBusy || updateState === "applying")}
+                  onClick={onApplyUpdate}>
+                  <Icon name="download" size={13} />立即重启更新
+                </button>
+              ) : onCheckUpdate && (
+                <button type="button" className="btn sm" disabled={updateChecking} onClick={onCheckUpdate}>
+                  <Icon name="refresh" size={13} />检查更新
+                </button>
+              )}
+            </div>
           </SettingRow>
         )}
       </section>

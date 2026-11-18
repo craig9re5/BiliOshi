@@ -201,6 +201,9 @@ class _DiagnosticSession:
         self.wait("document.querySelector('.account-tab.active')?.id === " + json.dumps("account-tab-" + self.first_id))
         self.wait("document.querySelectorAll('.room').length === 2")
         self.wait("document.querySelector('.detail-name')?.textContent === '测试主播'")
+        self.accounts_host.active_engine().force_probe = False
+        self.host.push_now()
+        self.wait("!document.querySelector('.statusbar')?.textContent.includes('正在检查')")
         self.check("switch back without QR", True)
 
     def _verify_window_chrome(self) -> None:
@@ -251,6 +254,8 @@ class _DiagnosticSession:
         self.wait("document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]')?.getAttribute('aria-checked') === 'true'")
         self.wait("!document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]').disabled")
         self.check("setting persisted", json.loads(settings_path.read_text(encoding="utf-8"))["auto_like"] is True)
+        self.check("auto update switch defaults to on", eval_js(
+            "document.querySelector('[role=\"switch\"][aria-label=\"自动更新\"]')?.getAttribute('aria-checked') === 'true'"))
         self.check("native select removed", eval_js("!document.querySelector('select')"))
         self.click(".choice-button")
         self.wait("Boolean(document.querySelector('.choice-menu'))")

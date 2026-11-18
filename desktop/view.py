@@ -123,10 +123,19 @@ def _dispatch_string_command(ui, cmd):
             panel.deactivate()
 
         def exit_cleanly():
+            if hasattr(ui, "updater") and ui.updater is not None:
+                ui.updater.close()
             ui.engine.close()
             ui.engine.dispatcher.wait_for_io()
 
         ui._submit_control("exit", exit_cleanly, "正在退出，等待已提交操作结束…")
+        return
+    if cmd == "apply_update" and hasattr(ui, "updater") and ui.updater is not None:
+        ui._submit_control(
+            "apply_update",
+            lambda: ui.updater.apply_now(manual=True),
+            "正在准备重启并安装更新…",
+        )
         return
     if cmd == "show":
         ui.show()
@@ -206,6 +215,18 @@ class TrayUI:
         self.image = tk.PhotoImage(data=self._png_data())
         self.root.iconphoto(True, self.image)
         from desktop.interaction import build_tray_menu
+        from desktop.updater import DesktopUpdater, evaluate_idle_blocker
+
+        self.updater = DesktopUpdater(
+            self.commands_root,
+            idle_blocker=lambda: evaluate_idle_blocker(
+                self.engine,
+                io_active=bool(self.room_actions or self.control_actions),
+                foreground_active=bool(self.root.state() == "normal"),
+            ),
+            request_exit=lambda: self.commands.put("supervisor_exit"),
+            tk_mode=True,
+        )
 
         self.tray = pystray.Icon(
             "BiliOshi",
@@ -215,10 +236,12 @@ class TrayUI:
                 self.commands,
                 paused=lambda: self.engine.paused,
                 safety_blocked=lambda: bool(self.safety_notices.get("active")),
+                update_ready=self.updater.is_ready,
                 can_act=lambda: not getattr(self, "closing", False),
             ),
         )
         threading.Thread(target=self.tray.run, name="tray", daemon=True).start()
+        self.updater.start()
         self.engine.notify_callback = lambda name, title: self.commands.put(("notify", name, title))
         if not show:
             self.root.withdraw()

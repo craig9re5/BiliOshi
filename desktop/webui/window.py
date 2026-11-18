@@ -47,6 +47,7 @@ class WebHost:
 
     def __init__(self, engine, *, show=True):
         from .api import Api
+        from desktop.updater import DesktopUpdater
 
         # The host owns the install root; an Engine may still be passed directly
         # for the legacy single-root entry point.
@@ -58,7 +59,8 @@ class WebHost:
         self._window = None
         self._tray = None
         self._show = show
-        self._api = Api(engine, self)
+        self._window_hidden = not show
+        self._last_foreground_at = 0.0
         self._stop = threading.Event()
         self._closing = threading.Event()
         self._closed = threading.Event()
@@ -68,6 +70,13 @@ class WebHost:
         self._lifecycle_lock = threading.RLock()
         self._queue = queue.Queue()
         self._commands = queue.Queue()
+        self._updater = DesktopUpdater(
+            self._host_root,
+            idle_blocker=self._update_idle_blocker,
+            request_exit=lambda: self.quit(explicit=False),
+            on_change=self.push_now,
+        )
+        self._api = Api(engine, self, updater=self._updater)
         self._control = ThreadPoolExecutor(max_workers=1, thread_name_prefix="web-control")
         self._pending_controls = set()
         self._pump_thread = None
@@ -97,6 +106,7 @@ class WebHost:
                 text_select=False, hidden=not (show or login), zoomable=True,
                 frameless=True, easy_drag=True, shadow=True,
             )
+            self._window_hidden = not (show or login)
             self._window.events.closing += self._on_closing
             self._window.events.closed += self._on_closed
             self._window.events.loaded += self._on_loaded
@@ -106,6 +116,7 @@ class WebHost:
                 self._engine.start()
             elif self._host is not None:
                 self._host.start()
+            self._updater.start()
             self._pump_thread = threading.Thread(target=self._pump, name="web-push", daemon=True)
             self._pump_thread.start()
             if login:
@@ -185,6 +196,8 @@ class WebHost:
     def hide(self):
         try:
             self._window.hide()
+            self._window_hidden = True
+            self._updater.wake()
             self._notify_tray_hint()
             return True
         except Exception:
@@ -212,6 +225,7 @@ class WebHost:
         try:
             self._window.show()
             self._window.restore()
+            self._window_hidden = False
             return True
         except Exception:
             logging.exception("Showing window failed")
@@ -220,10 +234,47 @@ class WebHost:
     def minimize(self):
         try:
             self._window.minimize()
+            self._updater.wake()
             return True
         except Exception:
             logging.exception("Minimizing window failed")
             return False
+
+    def _is_foreground_active(self):
+        if self._window_hidden or self._window is None or sys.platform != "win32":
+            return False
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+            hwnd = self._window.native.Handle.ToInt32()
+            if user32.IsIconic(hwnd):
+                return False
+            if user32.GetForegroundWindow() == hwnd:
+                self._last_foreground_at = time.monotonic()
+                return True
+            return (time.monotonic() - self._last_foreground_at) < 15.0
+        except Exception:
+            return False
+
+    def _update_idle_blocker(self):
+        from desktop.updater import evaluate_idle_blocker
+
+        qr_active = self._api._qr_session is not None
+        with self._api._state:
+            io_active = any(
+                op.get("pending") for op in self._api._room_operations.values()
+            ) or any(
+                key not in ("check_update", "apply_update") and op.get("pending")
+                for key, op in self._api._controls.items()
+            )
+        target = self._host if self._host is not None else self._engine
+        return evaluate_idle_blocker(
+            target,
+            qr_active=qr_active,
+            io_active=io_active,
+            foreground_active=self._is_foreground_active(),
+        )
 
     def _zoomed(self):
         """Read the real maximize state; pywebview's attribute is never updated."""
@@ -337,6 +388,7 @@ class WebHost:
 
     def _shutdown(self):
         try:
+            self._updater.close()
             # Stop Engine/Job before waiting for potentially long manual IO.
             # The bridge already cancelled QR generations and rejects new work.
             try:
@@ -403,6 +455,11 @@ class WebHost:
             self._notify_watch_warnings(snapshot)
             self._notify_safety_events(snapshot)
             self._notify_room_blocks(snapshot)
+            if self._updater.is_ready() and not any(
+                row.get("live_status") == 1 or row.get("active")
+                for row in snapshot.get("rows", [])
+            ):
+                self._updater.wake()
             return True
         self._last_push_digest = None
         self._ready.clear()
@@ -472,7 +529,7 @@ class WebHost:
                     from desktop.supervisor import command_for_request
 
                     command = command_for_request(request)
-                    if command in {"show", "login", "pause", "resume", "check", "exit", "supervisor_exit", "export_diagnostic"}:
+                    if command in {"show", "login", "pause", "resume", "check", "exit", "supervisor_exit", "export_diagnostic", "apply_update", "check_update"}:
                         self._commands.put(command)
             except (OSError, ValueError, TypeError):
                 logging.warning("Ignoring unreadable desktop command")
@@ -504,7 +561,7 @@ class WebHost:
                     "safety": ("show_page", {"page": "account"}),
                 }[command]
                 self.emit(event, payload)
-            elif command in {"pause", "resume", "toggle", "check", "logs", "export_diagnostic"}:
+            elif command in {"pause", "resume", "toggle", "check", "logs", "export_diagnostic", "apply_update", "check_update"}:
                 def export_and_open():
                     res = self._api.export_diagnostic({"anonymize": True, "include_state": True})
                     if res.get("ok"):
@@ -519,6 +576,8 @@ class WebHost:
                     "toggle": self._api.toggle_pause, "check": self._api.check_now,
                     "logs": lambda: self._api.open_logs(),
                     "export_diagnostic": export_and_open,
+                    "apply_update": self._api.apply_update,
+                    "check_update": self._api.check_update,
                 }[command]
                 self._submit_control(command, operation)
 
@@ -569,6 +628,7 @@ class WebHost:
                 self._commands,
                 paused=self._paused,
                 safety_blocked=self._safety_blocked,
+                update_ready=self._updater.is_ready,
                 can_act=lambda: not self._closing.is_set(),
             )
             self._tray = pystray.Icon("BiliOshi", icon_image(), "ビリ推し", menu)

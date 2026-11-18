@@ -19,6 +19,9 @@ def main():
     parser.add_argument("--supervisor", action="store_true", help="独立守护桌面进程")
     parser.add_argument("--start", action="store_true", help="守护进程记录启动意图")
     parser.add_argument("--supervised", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--apply-update", help=argparse.SUPPRESS)
+    parser.add_argument("--update-token", default="", help=argparse.SUPPRESS)
+    parser.add_argument("--reopen", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--probe")
     parser.add_argument("--skip-actions", action="store_true")
     parser.add_argument("--watch-only", action="store_true")
@@ -44,7 +47,7 @@ def main():
         root = data_dir()
         initialize(root, MEMBERS)
     except Exception as exc:
-        if not (args.command or args.worker or args.probe or args.supervisor):
+        if not (args.command or args.worker or args.probe or args.supervisor or args.apply_update):
             import ctypes
 
             ctypes.windll.user32.MessageBoxW(
@@ -88,7 +91,13 @@ def main():
         active.close()
         return 0
     # No-console executables have no usable standard streams, even with redirection.
-    role = "supervisor" if args.supervisor else "probe" if args.probe else "worker" if args.worker else "desktop"
+    role = (
+        "updater" if args.apply_update
+        else "supervisor" if args.supervisor
+        else "probe" if args.probe
+        else "worker" if args.worker
+        else "desktop"
+    )
     logging_setup.setup(root, role, args.worker, level=args.log_level)
     logging.info(
         "Startup version=%s os=%s python=%s frozen=%s tk_flag=%s mode=%s root=%s cwd=%s credentials_present=%s",
@@ -102,6 +111,20 @@ def main():
         os.getcwd(),
         (root / "credentials.json").exists(),
     )
+    if args.apply_update:
+        try:
+            from desktop.updater import run_apply_update
+
+            return run_apply_update(
+                root,
+                Path(args.apply_update),
+                args.update_token or "",
+                reopen=args.reopen,
+                tk=args.tk,
+            )
+        except Exception:
+            logging.exception("Apply update failed")
+            return 1
     if args.supervisor:
         try:
             from desktop.supervisor import run

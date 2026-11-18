@@ -110,7 +110,7 @@ def recovery_route(snap):
     return {}
 
 
-def build_tray_menu(commands_queue, *, paused, safety_blocked=None, can_act=None):
+def build_tray_menu(commands_queue, *, paused, safety_blocked=None, update_ready=None, can_act=None):
     """Build the compact tray context menu shared by WebView2 and legacy Tk hosts."""
     import pystray
 
@@ -118,6 +118,8 @@ def build_tray_menu(commands_queue, *, paused, safety_blocked=None, can_act=None
         return pystray.MenuItem(label, lambda: commands_queue.put(command), **kwargs)
 
     items = [item("打开主界面", "show", default=True)]
+    if update_ready is not None:
+        items.append(item("重启以完成更新", "apply_update", visible=lambda _: bool(update_ready())))
     if safety_blocked is not None:
         items.append(item("处理账号异常", "safety", visible=lambda _: bool(safety_blocked())))
     action_opts = {} if can_act is None else {"enabled": lambda _: bool(can_act())}

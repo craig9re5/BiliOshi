@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"70e75df85b60dc7fc0c90d61d81b68f58b85c4e91a2037e640f3f2d0d4cdbe79","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"fd8629bbdb64ba6fb7bdca71eb8908c2bb372f160a6c7e03e4cd9dd34bea7d8e"} */
+/* BiliOshi JSX {"code_sha256":"92c60d933cf4b98e9daded68d4ea935ec8f27422c2d9f336233b3b70401e75b8","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"876ee10d40f8b1beb341e52d87258f0baa4ba2a6923f6f583217bb61eb46c24c"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -426,8 +426,10 @@ const AccountRow = ({
   account,
   isActive,
   image,
-  onView,
+  runningCount = 0,
   onSwitch,
+  onSetRunning,
+  onSwitchExclusive,
   onScan,
   onLogout,
   onRemove,
@@ -437,6 +439,8 @@ const AccountRow = ({
   const state = window.accountStateLabel(account);
   const needsLogin = !account.signed_in || account.status === "needs_login";
   const protection = account.status === "blocked" || Boolean(account.safety?.blocked);
+  const engineActive = Boolean(account.engine_active || account.running);
+  const startLabel = runningCount > 0 ? "同时挂机" : "开启挂机";
   const issueText = protection ? account.safety?.reason || "账号操作已暂停，需在平台处理" : needsLogin ? "登录已失效，请重新扫码" : null;
   return /*#__PURE__*/React.createElement("div", {
     className: `account-item ${isActive ? "current" : ""}`
@@ -449,8 +453,8 @@ const AccountRow = ({
   }, /*#__PURE__*/React.createElement("div", {
     className: "account-item-title"
   }, /*#__PURE__*/React.createElement("strong", null, account.name), isActive && /*#__PURE__*/React.createElement("span", {
-    className: "mini-tag live"
-  }, "\u5F53\u524D\u4F7F\u7528"), !isActive && !needsLogin && !protection && /*#__PURE__*/React.createElement("span", {
+    className: "mini-tag"
+  }, "\u5F53\u524D\u67E5\u770B"), !needsLogin && !protection && /*#__PURE__*/React.createElement("span", {
     className: `mini-tag ${state.tone}`
   }, state.label), needsLogin && /*#__PURE__*/React.createElement("span", {
     className: "mini-tag warn"
@@ -458,36 +462,58 @@ const AccountRow = ({
     className: "mini-tag warn"
   }, "\u9700\u5728\u5E73\u53F0\u5904\u7406")), /*#__PURE__*/React.createElement("div", {
     className: "account-item-meta"
-  }, "UID ", account.uid), issueText && /*#__PURE__*/React.createElement("div", {
+  }, "UID ", account.uid, account.room_count > 0 ? ` · 关注 ${account.room_count} 位` : "", account.live_room_count > 0 ? ` · ${account.live_room_count} 房直播中` : ""), issueText && /*#__PURE__*/React.createElement("div", {
     className: "account-item-sub warn"
   }, issueText)), /*#__PURE__*/React.createElement("div", {
     className: "account-item-actions"
   }, protection && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm",
-    onClick: () => onProtection(account.id)
+    onClick: () => onProtection(account.id),
+    "aria-label": `查看原因 ${account.name}`
   }, "\u67E5\u770B\u539F\u56E0"), needsLogin && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm primary",
-    onClick: () => onScan(account.id)
+    onClick: () => onScan(account.id),
+    "aria-label": `重新扫码 ${account.name}`
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "qr",
     size: 12
-  }), "\u91CD\u65B0\u626B\u7801"), !isActive && !needsLogin && !protection && /*#__PURE__*/React.createElement("button", {
+  }), "\u91CD\u65B0\u626B\u7801"), !needsLogin && !protection && engineActive && !isActive && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm primary",
     onClick: () => onSwitch(account.id),
-    disabled: busy
+    disabled: busy,
+    "aria-label": `查看 ${account.name}`
+  }, "\u67E5\u770B"), !needsLogin && !protection && engineActive && onSetRunning && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: () => onSetRunning(account.id, false),
+    disabled: busy,
+    "aria-label": `停止挂机 ${account.name}`
+  }, "\u505C\u6B62\u6302\u673A"), !needsLogin && !protection && !engineActive && onSetRunning && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    onClick: () => onSetRunning(account.id, true),
+    disabled: busy,
+    "aria-label": `${startLabel} ${account.name}`
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "play",
     size: 12
-  }), "\u5207\u6362\u8D26\u53F7"), /*#__PURE__*/React.createElement("button", {
+  }), startLabel), !needsLogin && !protection && !engineActive && runningCount > 0 && onSwitchExclusive && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: () => onSwitchExclusive(account.id),
+    disabled: busy,
+    title: "\u505C\u6B62\u5176\u4ED6\u8D26\u53F7\uFF0C\u4EC5\u8FD0\u884C\u6B64\u8D26\u53F7",
+    "aria-label": `仅挂此号 ${account.name}`
+  }, "\u4EC5\u6302\u6B64\u53F7"), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm",
     onClick: () => onLogout(account.id),
     disabled: busy,
     title: needsLogin ? "清除本机保存的失效登录凭证" : "退出此账号登录",
-    "aria-label": `${needsLogin ? "清除" : "退出"} ${account.name} 的登录`
+    "aria-label": `${needsLogin ? "清除登录" : "退出登录"} ${account.name}`
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "power",
     size: 13
@@ -506,9 +532,12 @@ const AccountPage = ({
   account,
   avatar,
   avatars = {},
+  maxConcurrent = 3,
   onScan,
   onView,
   onSwitch,
+  onSetRunning,
+  onSwitchExclusive,
   onLogout,
   onRemove,
   onProtection,
@@ -524,6 +553,7 @@ const AccountPage = ({
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
   const checkingSafety = Boolean(safetyProbe?.loading);
   const locationParts = [hold.room_label, hold.operation_label].filter(Boolean);
+  const runningCount = (accounts || []).filter(item => item.running || item.engine_active).length;
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8D26\u53F7"
@@ -533,9 +563,13 @@ const AccountPage = ({
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head group-head-action"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "btn-row"
   }, /*#__PURE__*/React.createElement("span", {
     className: "group-head-title"
-  }, "B \u7AD9\u8D26\u53F7"), /*#__PURE__*/React.createElement("button", {
+  }, "B \u7AD9\u8D26\u53F7"), accounts.length > 1 && /*#__PURE__*/React.createElement("span", {
+    className: "scope-tag"
+  }, runningCount > 1 ? `${runningCount} 号同时挂机中` : `最多支持 ${maxConcurrent} 号同时挂机`)), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn primary sm",
     onClick: () => onScan(""),
@@ -547,9 +581,12 @@ const AccountPage = ({
     key: item.id,
     account: item,
     isActive: item.id === activeId,
+    runningCount: runningCount,
     image: item.id === activeId ? avatar || avatars[item.id] : avatars[item.id],
     onView: onView,
     onSwitch: onSwitch,
+    onSetRunning: onSetRunning,
+    onSwitchExclusive: onSwitchExclusive,
     onScan: onScan,
     onLogout: onLogout,
     onRemove: onRemove,

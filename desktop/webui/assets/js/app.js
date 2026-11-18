@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"cfb4771e2eed22f1878b6c62408bf883d06919ba0b6f733f937e62e9e4086d55","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"cabda28aaeb721b3bffc8fdb2b15ed206c973319c8b9088b4f64ae9ab1d35ca5"} */
+/* BiliOshi JSX {"code_sha256":"0841e38ef13ecc9c5b6c7f482912cd5a3321dd0564de27de84c936ffd00dba28","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"b69f8773f04ef8fb5b2024bead908050c3aeef0d09c97552b9707ac54f13f62b"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -73,6 +73,7 @@ const Sidebar = ({
   onPage,
   account,
   activeAccount,
+  runningCount = 0,
   paused,
   avatar,
   onQuit,
@@ -80,7 +81,7 @@ const Sidebar = ({
   collapsed,
   inert
 }) => {
-  const state = activeAccount && window.accountStateLabel ? window.accountStateLabel(activeAccount) : account.safety?.blocked ? {
+  const baseState = activeAccount && window.accountStateLabel ? window.accountStateLabel(activeAccount) : account.safety?.blocked ? {
     label: "保护暂停",
     tone: "warn"
   } : !account.signed_in ? {
@@ -93,6 +94,10 @@ const Sidebar = ({
     label: "挂机中",
     tone: "live"
   };
+  const state = baseState.tone === "live" && runningCount > 1 ? {
+    ...baseState,
+    label: `挂机中 · ${runningCount} 号并发`
+  } : baseState;
   return /*#__PURE__*/React.createElement("aside", {
     className: "side",
     inert: inert ? "" : undefined
@@ -1008,13 +1013,34 @@ function App() {
     const result = await invoke(method, [room]);
     if (result?.ok) await refresh();
   };
-  const switchAccount = async accountId => {
+  const maxConcurrent = snap.max_concurrent_accounts || 3;
+  const runningAccountsCount = accounts.filter(item => item.running || item.engine_active).length;
+  const setAccountRunning = async (accountId, enabled) => {
     if (!accountId) return;
-    if (accountId === activeId) {
-      // Silent no-ops read as a broken control; say why nothing changed.
-      toast("当前已是这个账号");
+    const target = accounts.find(item => item.id === accountId);
+    if (!target) return;
+    if (enabled && (!target.signed_in || target.status === "needs_login")) {
+      openQr(accountId);
       return;
     }
+    if (enabled && target.status === "blocked") {
+      openSafety(target);
+      return;
+    }
+    const result = await invoke("set_account_running", [accountId, Boolean(enabled)]);
+    if (result?.ok) {
+      selectionInitialized.current = false;
+      setSelectedId(null);
+      if (enabled) {
+        toast(runningAccountsCount > 0 && !target.engine_active ? `已开启「${target.name}」同时挂机` : `已开启「${target.name}」挂机`);
+      } else {
+        toast(`已停止「${target.name}」挂机`);
+      }
+      await refresh();
+    }
+  };
+  const switchAccount = async (accountId, exclusive = false) => {
+    if (!accountId) return;
     const target = accounts.find(item => item.id === accountId);
     if (!target) return;
     if (!target.signed_in || target.status === "needs_login") {
@@ -1025,11 +1051,19 @@ function App() {
       openSafety(target);
       return;
     }
-    const result = await invoke("switch_account", [accountId]);
+    if (!exclusive && accountId === activeId && (target.engine_active || target.running)) {
+      toast("当前已是这个账号");
+      return;
+    }
+    if (!exclusive && !target.engine_active && !target.running) {
+      await setAccountRunning(accountId, true);
+      return;
+    }
+    const result = await invoke("switch_account", [accountId, Boolean(exclusive)]);
     if (result?.ok) {
       selectionInitialized.current = false;
       setSelectedId(null);
-      toast(`已切换至「${target.name}」`);
+      toast(exclusive ? `已切换为仅挂机「${target.name}」` : runningAccountsCount > 1 ? `已切换查看「${target.name}」，其余账号继续后台挂机` : `已切换至「${target.name}」`);
       await refresh();
     }
   };
@@ -1199,6 +1233,7 @@ function App() {
     onPage: setPage,
     account: account,
     activeAccount: activeAccountObj,
+    runningCount: runningAccountsCount,
     paused: snap.paused,
     avatar: accountAvatar || accountAvatars[activeId],
     onQuit: () => setDialog({
@@ -1321,12 +1356,15 @@ function App() {
     accounts: accounts,
     activeId: activeId,
     viewId: activeId,
+    maxConcurrent: maxConcurrent,
     account: account,
     avatar: accountAvatar,
     avatars: accountAvatars,
     onScan: openQr,
     onView: () => setPage("monitor"),
-    onSwitch: switchAccount,
+    onSwitch: id => switchAccount(id, false),
+    onSetRunning: setAccountRunning,
+    onSwitchExclusive: id => switchAccount(id, true),
     onLogout: id => setDialog({
       type: "logout",
       account: accounts.find(item => item.id === id)

@@ -45,25 +45,25 @@ def _unlock(stream) -> None:
         fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
-def send_paced(
+def shared_lock_path(lock_dir: Path, name: str):
+    """Return install-root shared lock path when running inside an account root."""
+    account_root = Path(lock_dir).parent
+    if (account_root / "account.json").is_file() and account_root.parent.name == "accounts":
+        return account_root.parent.parent / "locks" / name
+    return None
+
+
+def _pace_on_file(
     sender: Callable[[], _Result],
     *,
-    lock_path: Path = None,
-    min_interval: float = MIN_SEND_INTERVAL,
-    jitter_ratio: float = 0.0,
-    lock_timeout: float = LOCK_WAIT_TIMEOUT,
+    lock_path: Path,
+    min_interval: float,
+    jitter_ratio: float,
+    deadline: float,
 ) -> _Result:
-    """Serialize sends and reserve a minimum interval between attempts.
-
-    The timestamp is written before sending so a failed request is paced too.
-    The OS releases the lock if a worker exits unexpectedly.
-    """
-    lock_path = (
-        Path(lock_path) if lock_path is not None else data_dir() / "locks" / "danmaku-send.lock"
-    )
+    lock_path = Path(lock_path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.touch(exist_ok=True)
-    deadline = time.monotonic() + lock_timeout
     with lock_path.open("r+b") as stream:
         while not _try_lock(stream):
             check_window()
@@ -93,3 +93,42 @@ def send_paced(
             return sender()
         finally:
             _unlock(stream)
+
+
+def send_paced(
+    sender: Callable[[], _Result],
+    *,
+    lock_path: Path = None,
+    min_interval: float = MIN_SEND_INTERVAL,
+    jitter_ratio: float = 0.0,
+    lock_timeout: float = LOCK_WAIT_TIMEOUT,
+    global_lock_path: Path = None,
+    global_min_interval: float = 0.0,
+    global_jitter_ratio: float = 0.0,
+) -> _Result:
+    """Serialize sends and reserve a minimum interval between attempts.
+
+    The timestamp is written before sending so a failed request is paced too.
+    When ``global_lock_path`` is set (multi-account install root), per-account
+    pacing acquires first and install-root cross-account pacing second.
+    """
+    primary = (
+        Path(lock_path) if lock_path is not None else data_dir() / "locks" / "danmaku-send.lock"
+    )
+    deadline = time.monotonic() + lock_timeout
+    inner = sender
+    if global_lock_path is not None and global_min_interval > 0:
+        inner = lambda: _pace_on_file(
+            sender,
+            lock_path=Path(global_lock_path),
+            min_interval=global_min_interval,
+            jitter_ratio=global_jitter_ratio,
+            deadline=deadline,
+        )
+    return _pace_on_file(
+        inner,
+        lock_path=primary,
+        min_interval=min_interval,
+        jitter_ratio=jitter_ratio,
+        deadline=deadline,
+    )

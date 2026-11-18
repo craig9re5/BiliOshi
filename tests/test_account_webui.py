@@ -252,6 +252,25 @@ class AccountWebUiTests(unittest.TestCase):
         self.assertTrue(Path(result["zip_path"]).is_file())
         self.assertTrue(any("desktop.log" in f for f in result["included_files"]))
 
+    def test_set_account_running_enables_concurrent_watch_and_live_background_view(self):
+        res = self.api.set_account_running("uid-2", True)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["mode"], "concurrent")
+
+        switched = self.api.switch_account("uid-1")
+        self.assertTrue(switched["ok"])
+        snap = self.api.snapshot()
+        by_id = {item["id"]: item for item in snap["accounts"]}
+        self.assertTrue(by_id["uid-1"]["running"])
+        self.assertTrue(by_id["uid-2"]["running"])
+
+        # Viewing a background running account returns its live snapshot (not stale).
+        self.api.set_view_account("uid-2")
+        view_snap = self.api.snapshot()
+        self.assertFalse(view_snap["view"]["inactive"])
+        self.assertTrue(view_snap["view"]["active"])
+        self.assertEqual(view_snap["view"]["rows"][0]["live_status"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -28,8 +28,8 @@ const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", ac
   settings: DEFAULT_SETTINGS, update: { status: "idle", auto_update: true, can_self_update: false },
   accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
-const Sidebar = ({ page, onPage, account, activeAccount, paused, avatar, onQuit, brandHidden, collapsed, inert }) => {
-  const state = activeAccount && window.accountStateLabel
+const Sidebar = ({ page, onPage, account, activeAccount, runningCount = 0, paused, avatar, onQuit, brandHidden, collapsed, inert }) => {
+  const baseState = activeAccount && window.accountStateLabel
     ? window.accountStateLabel(activeAccount)
     : account.safety?.blocked
       ? { label: "保护暂停", tone: "warn" }
@@ -38,6 +38,9 @@ const Sidebar = ({ page, onPage, account, activeAccount, paused, avatar, onQuit,
         : paused
           ? { label: "已暂停", tone: "muted" }
           : { label: "挂机中", tone: "live" };
+  const state = baseState.tone === "live" && runningCount > 1
+    ? { ...baseState, label: `挂机中 · ${runningCount} 号并发` }
+    : baseState;
   return (
     <aside className="side" inert={inert ? "" : undefined}>
       {!brandHidden && <div className="brand"><div className="logo"><Pulse size={22} /></div>
@@ -723,13 +726,38 @@ function App() {
     if (result?.ok) await refresh();
   };
 
-  const switchAccount = async (accountId) => {
+  const maxConcurrent = snap.max_concurrent_accounts || 3;
+  const runningAccountsCount = accounts.filter((item) => item.running || item.engine_active).length;
+
+  const setAccountRunning = async (accountId, enabled) => {
     if (!accountId) return;
-    if (accountId === activeId) {
-      // Silent no-ops read as a broken control; say why nothing changed.
-      toast("当前已是这个账号");
+    const target = accounts.find((item) => item.id === accountId);
+    if (!target) return;
+    if (enabled && (!target.signed_in || target.status === "needs_login")) {
+      openQr(accountId);
       return;
     }
+    if (enabled && target.status === "blocked") {
+      openSafety(target);
+      return;
+    }
+    const result = await invoke("set_account_running", [accountId, Boolean(enabled)]);
+    if (result?.ok) {
+      selectionInitialized.current = false;
+      setSelectedId(null);
+      if (enabled) {
+        toast(runningAccountsCount > 0 && !target.engine_active
+          ? `已开启「${target.name}」同时挂机`
+          : `已开启「${target.name}」挂机`);
+      } else {
+        toast(`已停止「${target.name}」挂机`);
+      }
+      await refresh();
+    }
+  };
+
+  const switchAccount = async (accountId, exclusive = false) => {
+    if (!accountId) return;
     const target = accounts.find((item) => item.id === accountId);
     if (!target) return;
     if (!target.signed_in || target.status === "needs_login") {
@@ -740,11 +768,23 @@ function App() {
       openSafety(target);
       return;
     }
-    const result = await invoke("switch_account", [accountId]);
+    if (!exclusive && accountId === activeId && (target.engine_active || target.running)) {
+      toast("当前已是这个账号");
+      return;
+    }
+    if (!exclusive && !target.engine_active && !target.running) {
+      await setAccountRunning(accountId, true);
+      return;
+    }
+    const result = await invoke("switch_account", [accountId, Boolean(exclusive)]);
     if (result?.ok) {
       selectionInitialized.current = false;
       setSelectedId(null);
-      toast(`已切换至「${target.name}」`);
+      toast(exclusive
+        ? `已切换为仅挂机「${target.name}」`
+        : runningAccountsCount > 1
+          ? `已切换查看「${target.name}」，其余账号继续后台挂机`
+          : `已切换至「${target.name}」`);
       await refresh();
     }
   };
@@ -859,7 +899,8 @@ function App() {
 
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
-      <Sidebar page={page} onPage={setPage} account={account} activeAccount={activeAccountObj} paused={snap.paused}
+      <Sidebar page={page} onPage={setPage} account={account} activeAccount={activeAccountObj}
+        runningCount={runningAccountsCount} paused={snap.paused}
         avatar={accountAvatar || accountAvatars[activeId]}
         onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} inert={modalOpen} />
       <main className="main" aria-busy={!connected} inert={modalOpen ? "" : undefined}>
@@ -920,8 +961,11 @@ function App() {
           onApplyUpdate={applyUpdate}
           updateBusy={updateBusy || closing} />}
         {page === "account" && <window.AccountPage accounts={accounts} activeId={activeId} viewId={activeId}
+          maxConcurrent={maxConcurrent}
           account={account} avatar={accountAvatar} avatars={accountAvatars} onScan={openQr}
-          onView={() => setPage("monitor")} onSwitch={switchAccount}
+          onView={() => setPage("monitor")} onSwitch={(id) => switchAccount(id, false)}
+          onSetRunning={setAccountRunning}
+          onSwitchExclusive={(id) => switchAccount(id, true)}
           onLogout={(id) => setDialog({ type: "logout", account: accounts.find((item) => item.id === id) })}
           onRemove={(id) => setDialog({ type: "removeAccount", account: accounts.find((item) => item.id === id) })}
           onProtection={(id) => openSafety(accounts.find((item) => item.id === id))}

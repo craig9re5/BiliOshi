@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 from .check_auth import check_login
 from .credentials import cookie_path, parse_cookie_header
-from .danmaku_pacing import send_paced
+from .danmaku_pacing import send_paced, shared_lock_path
 from .operating_mode import current_profile
 from . import safety
 from .members import MEMBERS, load_members
@@ -31,6 +31,7 @@ from .runtime import (
     EVENT_CONTEXT,
     FileLock,
     account_key,
+    session_fingerprint,
     task_day,
     read_json,
     write_json,
@@ -38,7 +39,12 @@ from .runtime import (
 from .context import CURRENT, runtime_path
 from .http import get_json, post_form, post_empty, request_json
 from .redaction import redact
-from .session_headers import DEFAULT_UA, session_headers
+from .session_headers import (
+    DEFAULT_UA,
+    device_session_path,
+    load_device_cookies,
+    session_headers,
+)
 
 
 def _notify(msg: str):
@@ -107,11 +113,16 @@ def _send_danmaku(room_id: int, msg: str, sessdata: str, bili_jct: str) -> bool:
         "csrf_token": bili_jct,
     }
     headers = _make_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room_id}")
+    lock_dir = _runtime_path("_LOCK_DIR")
     try:
         resp = send_paced(
             lambda: _post_form(url, data, headers),
+            lock_path=lock_dir / "danmaku-send.lock",
             min_interval=current_profile().danmaku_send_seconds * safety.pace_multiplier(sessdata),
             jitter_ratio=0.2,
+            global_lock_path=shared_lock_path(lock_dir, "global-danmaku.lock"),
+            global_min_interval=4.2,
+            global_jitter_ratio=0.4,
         )
     except (OSError, TimeoutError) as exc:
         resp = {"code": -1, "message": type(exc).__name__}
@@ -319,12 +330,16 @@ def enter_room(room_id: int, sessdata: str, bili_jct: str) -> bool:
     url = "https://api.live.bilibili.com/xlive/web-room/v1/index/roomEntryAction"
     headers = _make_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room_id}")
     data = {"room_id": str(room_id), "platform": "pc", "csrf": bili_jct, "csrf_token": bili_jct}
+    lock_dir = _runtime_path("_LOCK_DIR")
     try:
         resp = send_paced(
             lambda: _post_form(url, data, headers),
-            lock_path=_runtime_path("_LOCK_DIR") / "room-entry.lock",
+            lock_path=lock_dir / "room-entry.lock",
             min_interval=1.5,
             jitter_ratio=0.4,
+            global_lock_path=shared_lock_path(lock_dir, "global-room-entry.lock"),
+            global_min_interval=3.2,
+            global_jitter_ratio=0.45,
         )
     except (OSError, TimeoutError):
         resp = _post_form(url, data, headers)
@@ -345,11 +360,32 @@ _X25KN_UA = DEFAULT_UA
 _X25KN_HMAC_FUNCS = ["md5", "sha1", "sha256", "sha224", "sha512", "sha384"]
 
 
-def _fetch_live_buvid(sessdata, bili_jct):
+def _fetch_device_spi(sessdata, bili_jct):
     result = _get_json(
         "https://api.bilibili.com/x/frontend/finger/spi", _make_headers(sessdata, bili_jct)
     )
-    return (result.get("data") or {}).get("b_3") if result and result.get("code") == 0 else None
+    if not result or result.get("code") != 0:
+        return None, None
+    data = result.get("data") or {}
+    return data.get("b_3") or None, data.get("b_4") or None
+
+
+def _fetch_live_buvid(sessdata, bili_jct):
+    b_3, _ = _fetch_device_spi(sessdata, bili_jct)
+    return b_3
+
+
+def _persist_and_return_buvid(sessdata: str, bili_jct: str, cookies_path: Path) -> Optional[str]:
+    b_3, b_4 = _fetch_device_spi(sessdata, bili_jct)
+    if b_3 and sessdata:
+        try:
+            payload = {"fingerprint": session_fingerprint(sessdata), "buvid3": str(b_3)}
+            if b_4:
+                payload["buvid4"] = str(b_4)
+            write_json(device_session_path(cookies_path), payload)
+        except OSError:
+            pass
+    return b_3
 
 
 def _ensure_live_buvid(
@@ -364,14 +400,15 @@ def _ensure_live_buvid(
         context = saved.get("qr_login_context") or {}
         cookies = context.get("cookies") or {}
         if cookies.get("SESSDATA") == sessdata and cookies.get("bili_jct") == bili_jct:
-            return (
-                cookies.get("LIVE_BUVID")
-                or cookies.get("buvid3")
-                or _fetch_live_buvid(sessdata, bili_jct)
-            )
+            found = cookies.get("LIVE_BUVID") or cookies.get("buvid3")
+            if found:
+                return found
     except (OSError, ValueError) as exc:
         _log({"type": "credential_read_error", "error": type(exc).__name__})
-    return _fetch_live_buvid(sessdata, bili_jct)
+    cached = load_device_cookies(sessdata, cookies_path)
+    if cached.get("LIVE_BUVID") or cached.get("buvid3"):
+        return cached.get("LIVE_BUVID") or cached.get("buvid3")
+    return _persist_and_return_buvid(sessdata, bili_jct, cookies_path)
 
 
 def _x25kn_post(url, form, sessdata, bili_jct, referer):

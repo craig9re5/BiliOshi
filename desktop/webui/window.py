@@ -86,6 +86,8 @@ class WebHost:
         self._watch_notices = set()
         self._notified_safety_holds = {}
         self._notified_room_blocks = set()
+        self._live_notice_dedupe = {}
+        self._bound_engines = set()
         self._last_tray_color = None
         self._last_safety_blocked = False
         self._last_zoomed = False
@@ -129,22 +131,36 @@ class WebHost:
                 self._pump_thread.join(timeout=5)
 
     def _bind_notify(self):
-        """Route live notifications from whichever account is currently active."""
+        """Route live notifications from all active account Engines."""
+        if self._host is not None:
+            current_engines = {
+                aid: eng
+                for aid, eng in list(self._host.engines.items())
+                if eng is not None and not eng.suspended
+            }
+            for eng in list(self._bound_engines):
+                if eng not in current_engines.values():
+                    eng.notify_callback = None
+                    self._bound_engines.discard(eng)
+            for aid, eng in current_engines.items():
+                if eng not in self._bound_engines:
+                    eng.notify_callback = (
+                        lambda name, title, _aid=aid: self._commands.put(("notify_account", _aid, name, title))
+                    )
+                    self._bound_engines.add(eng)
+            return
         engine = self._engine
         if engine is None:
             return
         engine.notify_callback = lambda name, title: self._commands.put(("notify", name, title))
 
     def _sync_engine(self):
-        """Follow the host's active Engine after a switch or startup."""
+        """Follow the host's active Engine and keep all running Engines bound."""
         if self._host is None:
             return
         engine = self._host.active_engine()
-        if engine is self._engine:
-            return
-        if self._engine is not None:
-            self._engine.notify_callback = None
-        self._engine = engine
+        if engine is not self._engine:
+            self._engine = engine
         self._bind_notify()
 
     def _on_loaded(self):
@@ -458,6 +474,10 @@ class WebHost:
             if self._updater.is_ready() and not any(
                 row.get("live_status") == 1 or row.get("active")
                 for row in snapshot.get("rows", [])
+            ) and not any(
+                (acc.get("live_room_count") or 0) > 0
+                for acc in snapshot.get("accounts") or []
+                if acc.get("running")
             ):
                 self._updater.wake()
             return True
@@ -543,9 +563,28 @@ class WebHost:
                 command = self._commands.get_nowait()
             except queue.Empty:
                 return
-            if isinstance(command, tuple) and command[0] == "notify":
-                _, name, title = command
-                self._notify(f"【{name}】开播了：{title}", "ビリ推し · 开播提醒")
+            if isinstance(command, tuple) and command[0] in ("notify", "notify_account"):
+                if command[0] == "notify":
+                    _, name, title = command
+                    account_prefix = ""
+                else:
+                    _, aid, name, title = command
+                    account_prefix = ""
+                    if self._host is not None and len(self._host.active_engine_ids()) > 1:
+                        try:
+                            acct_name = self._host.store.get(aid).get("name", "")
+                            account_prefix = f"[{acct_name}] " if acct_name else ""
+                        except Exception:
+                            account_prefix = ""
+                now_m = time.monotonic()
+                stale_keys = [k for k, ts in self._live_notice_dedupe.items() if now_m - ts > 300.0]
+                for k in stale_keys:
+                    self._live_notice_dedupe.pop(k, None)
+                dedupe_key = (str(name), str(title))
+                if dedupe_key in self._live_notice_dedupe:
+                    continue
+                self._live_notice_dedupe[dedupe_key] = now_m
+                self._notify(f"{account_prefix}【{name}】开播了：{title}", "ビリ推し · 开播提醒")
                 continue
             if self._closing.is_set() and command not in {"show", "logs", "exit", "supervisor_exit"}:
                 continue
@@ -686,7 +725,16 @@ class WebHost:
         warnings = bool(snap.get("error") or snap.get("ui_error") or safety.get("blocked") or any(
             row.get("connection_warning") or row.get("watch_warning") for row in rows))
         accounts = snap.get("accounts") or []
-        running = sum(1 for row in accounts if row.get("running"))
+        running_accounts = [row for row in accounts if row.get("running")]
+        running = len(running_accounts)
+        total_live = sum(int(row.get("live_room_count") or 0) for row in running_accounts)
+        bg_blocked = any(
+            row.get("state") == "protection" or (row.get("safety") or {}).get("blocked")
+            for row in accounts
+            if row.get("engine_active") or row.get("watch_enabled")
+        )
+        warnings = warnings or bg_blocked
+        all_paused = bool(snap.get("global_paused") or (snap.get("paused") and running == 0))
         if snap.get("global_paused"):
             title = "全部暂停"
         elif safety.get("blocked"):
@@ -697,22 +745,22 @@ class WebHost:
                 title = "冷却中" if safety.get("until") else "保护暂停"
         elif warnings:
             title = "需要处理"
+        elif running > 1:
+            title = f"{running} 个账号挂机中 · {total_live} 房开播" if total_live else f"{running} 个账号等待开播"
         elif snap.get("paused"):
             title = "已暂停"
-        elif running > 1:
-            title = f"{running} 个账号挂机中"
         elif active:
             title = f"{active} 个直播间挂机中"
         else:
             title = "等待开播"
         self._tray.title = "ビリ推し · " + title
-        color = "#f2ab55" if warnings else "#9ca9af" if snap.get("paused") else "#63d4b2"
+        color = "#f2ab55" if warnings else "#9ca9af" if all_paused else "#63d4b2"
         if color != self._last_tray_color:
             from desktop.widgets import icon_image
 
             self._tray.icon = icon_image(color)
             self._last_tray_color = color
-        self._last_safety_blocked = bool(safety.get("blocked"))
+        self._last_safety_blocked = bool(safety.get("blocked") or bg_blocked)
         self._tray.update_menu()
 
     def _notify_watch_warnings(self, snap):
@@ -739,16 +787,13 @@ class WebHost:
                             "ビリ推し · 连接提醒" if connection else "ビリ推し · 看播收益提醒"):
                 self._watch_notices.add(key)
 
-    def _notify_safety_events(self, snap):
-        account_id = snap.get("active_account_id") or ""
-        safety = snap.get("safety") or {}
+    def _notify_one_safety_state(self, account_id, acct_name, safety):
         prev = self._notified_safety_holds.get(account_id)
         if not safety.get("blocked"):
             if prev is not None:
                 self._notified_safety_holds.pop(account_id, None)
                 if prev[0] not in ("auth", "credentials"):
-                    acct = snap.get("account") or ""
-                    prefix = f"【{acct}】" if acct else ""
+                    prefix = f"【{acct_name}】" if acct_name else ""
                     msg = f"{prefix}账号保护状态已解除，挂机监控已恢复。"
                     self._notify(msg, "ビリ推し · 保护暂停已解除")
                     self.emit("toast", {"message": msg, "tone": "info"})
@@ -760,8 +805,7 @@ class WebHost:
         if prev == key:
             return
         self._notified_safety_holds[account_id] = key
-        acct = snap.get("account") or ""
-        prefix = f"【{acct}】" if acct else ""
+        prefix = f"【{acct_name}】" if acct_name else ""
         interaction_only = safety.get("scope") == "interaction"
         title = (
             "ビリ推し · 互动保护冷却（看播继续）"
@@ -779,6 +823,23 @@ class WebHost:
             msg += f"（预计 {time.strftime('%H:%M:%S', time.localtime(safety['until']))} 恢复）"
         self._notify(msg, title)
         self.emit("toast", {"message": msg, "tone": "warn" if interaction_only else "error"})
+
+    def _notify_safety_events(self, snap):
+        accounts = snap.get("accounts") or []
+        if accounts:
+            for item in accounts:
+                aid = item.get("id") or ""
+                if not aid:
+                    continue
+                is_active = aid == (snap.get("active_account_id") or "")
+                hold = (snap.get("safety") if is_active else item.get("safety")) or {}
+                self._notify_one_safety_state(aid, item.get("name") or item.get("account") or "", hold)
+            return
+        self._notify_one_safety_state(
+            snap.get("active_account_id") or "",
+            snap.get("account") or "",
+            snap.get("safety") or {},
+        )
 
     def _notify_room_blocks(self, snap):
         account_id = snap.get("active_account_id") or ""

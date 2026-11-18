@@ -332,7 +332,7 @@ class Api:
         value = {key: summary.get(key) for key in (
             "id", "uid", "name", "face", "created_at", "last_used_at",
             "last_checked_at", "status", "watch_enabled", "credential_token",
-            "signed_in", "running", "paused", "global_paused", "state", "room_count",
+            "signed_in", "engine_active", "running", "paused", "global_paused", "state", "room_count",
             "live_room_count", "gain", "snapshot_at", "stale", "safety", "account",
         )}
         return _public(value)
@@ -361,11 +361,14 @@ class Api:
         controls, rooms, ui_error = self._copy_state_locked()
         if failed:
             ui_error = "界面刷新失败，正在自动重试。"
+        from desktop.host import MAX_CONCURRENT_ACCOUNTS
+
         snap.update(
             schema=2,
             active_account_id=self._host.active_id,
             view_account_id=self._host.view_id,
             mode=self._store.mode,
+            max_concurrent_accounts=MAX_CONCURRENT_ACCOUNTS,
             global_paused=self._host.global_paused,
             active=snap.get("active", bool(self._host.active_id)),
             inactive=False,
@@ -404,6 +407,57 @@ class Api:
         return _public(snap)
 
     def _view_snapshot(self, account_id):
+        live_engine = self._host.engine_for(account_id) if self._host is not None else None
+        if live_engine is not None and not live_engine.suspended:
+            try:
+                live_snap = live_engine.snapshot(blocking=False)
+            except Exception:
+                live_snap = None
+            if isinstance(live_snap, dict):
+                root = self._store.account_root(account_id)
+                try:
+                    settings = self._read_settings(root)
+                except (OSError, ValueError):
+                    settings = {key: False for key in _SETTING_FLAGS}
+                    settings["run_mode"] = "stable"
+                    settings["check_minutes"] = 5
+                summary = self._host.account_summary(account_id)
+                rows = copy.deepcopy(live_snap.get("rows") or [])
+                hold = live_snap.get("safety") or {"blocked": False}
+                view = {
+                    **self._empty_snapshot(),
+                    **live_snap,
+                    "schema": 2,
+                    "account_id": account_id,
+                    "account": live_snap.get("account") or summary.get("name", ""),
+                    "account_confirmed": bool(live_snap.get("account_confirmed") or summary.get("account")),
+                    "rows": rows,
+                    "settings": _public(settings),
+                    "accountInfo": {
+                        "signed_in": summary.get("signed_in", False),
+                        "name": live_snap.get("account") or summary.get("name", ""),
+                        "confirmed": bool(live_snap.get("account_confirmed")),
+                        "checked_at": live_snap.get("account_checked_at", 0),
+                        "safety": hold,
+                        "credentials_error": "",
+                    },
+                    "operations": {"controls": {}, "rooms": {}},
+                    "active": True,
+                    "inactive": False,
+                    "engine_busy": False,
+                    "closing": self._closing.is_set(),
+                    "ui_error": "",
+                    "notifications": {"available": False},
+                }
+                for row in view["rows"]:
+                    row["account_id"] = account_id
+                    row["operation"] = {}
+                    row["actions"] = {
+                        action: self._room_reason(view, row, action, False)
+                        for action in ("open", "redo", "reconnect", "wear", "remove")
+                    }
+                view["recovery"] = recovery_route(view)
+                return _public(view)
         root = self._store.account_root(account_id)
         try:
             status = read_json(root / "state/last-snapshot.json", {})
@@ -625,19 +679,40 @@ class Api:
         self._ui.push_now()
         return {"ok": True, "view": self._host.view_id}
 
-    def switch_account(self, account_id):
+    def switch_account(self, account_id, exclusive=False):
         if self._host is None:
             return {"ok": False, "error": "当前版本只支持单账号。"}
         try:
             with self._mutations, self._control_mutations:
-                self._host.switch_to(account_id)
+                self._host.switch_to(account_id, exclusive=bool(exclusive))
         except Exception as exc:
             logging.exception("Switch active account failed account_id=%s", account_id)
             message = str(exc) if str(exc) else "切换账号失败，请稍后重试。"
             return {"ok": False, "error": message}
         self._sync_active()
         self._ui.push_now()
-        return {"ok": True, "active": self._host.active_id}
+        return {"ok": True, "active": self._host.active_id, "mode": self._store.mode}
+
+    def set_account_running(self, account_id, enabled):
+        if self._host is None:
+            return {"ok": False, "error": "当前版本只支持单账号。"}
+        if type(enabled) is not bool:
+            return {"ok": False, "error": "运行状态必须为 true 或 false。"}
+        try:
+            with self._mutations, self._control_mutations:
+                self._host.set_account_running(account_id, enabled)
+        except Exception as exc:
+            logging.exception("Set account running failed account_id=%s enabled=%s", account_id, enabled)
+            message = str(exc) if str(exc) else "无法修改此账号的挂机状态。"
+            return {"ok": False, "error": message}
+        self._sync_active()
+        self._ui.push_now()
+        return {
+            "ok": True,
+            "active": self._host.active_id,
+            "running": enabled,
+            "mode": self._store.mode,
+        }
 
     def set_account_paused(self, account_id, paused):
         if self._host is None:
@@ -854,6 +929,13 @@ class Api:
                     logging.exception("Applying saved web settings failed")
                     return {"ok": False, "saved": True, "error": "设置已保存，但应用失败，请重试保存或查看日志。"}
             else:
+                if self._host is not None and target_id:
+                    bg_engine = self._host.engine_for(target_id)
+                    if bg_engine is not None and not bg_engine.suspended:
+                        try:
+                            bg_engine.reload_settings()
+                        except Exception:
+                            logging.exception("Applying background account settings failed account_id=%s", target_id)
                 self._ui.push_now()
             result = {"ok": True}
             if warning:

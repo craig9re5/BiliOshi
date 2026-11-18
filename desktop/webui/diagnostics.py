@@ -206,6 +206,10 @@ class _DiagnosticSession:
         self.host.push_now()
         self.wait("!document.querySelector('.statusbar')?.textContent.includes('正在检查')")
         self.check("switch back without QR", True)
+        self.check(
+            "both account engines remain active concurrently",
+            len(self.accounts_host.active_engine_ids()) == 2,
+        )
 
     def _verify_window_chrome(self) -> None:
         eval_js = self.host._window.evaluate_js

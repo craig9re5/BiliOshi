@@ -1,3 +1,4 @@
+import hashlib
 import random
 import re
 import sys
@@ -29,7 +30,20 @@ def send_danmaku_batch(
     available = [m for m in pool if m not in used]
     if not available:
         available = list(pool)
-    random.shuffle(available)
+    if messages is None and sessdata and len(available) >= max(count, 1) * 2:
+        # Partition the shared default corpus by account+room hash so two local
+        # accounts lighting up medals in the same room pick from disjoint slices.
+        ordered = list(available)
+        digest = hashlib.sha256(f"{sessdata}:{room_id}".encode("utf-8")).digest()
+        slot = int.from_bytes(digest[:4], "big") % 2
+        half = len(ordered) // 2
+        preferred = ordered[:half] if slot == 0 else ordered[half:]
+        fallback = ordered[half:] if slot == 0 else ordered[:half]
+        random.shuffle(preferred)
+        random.shuffle(fallback)
+        available = preferred + fallback
+    else:
+        random.shuffle(available)
     sent_ok = 0
     attempted = 0
     in_probation = safety.probation_until(sessdata) > 0

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"d40e9ce69ccbedc762e4598e29022e0765cc6f80803e6f0de327fc741398c703","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"0acfa6aebd569aecfde73770303ba97e810cd74435a33ae3ff26d140e005a458"} */
+/* BiliOshi JSX {"code_sha256":"332087c668474412b3f380dbd565c091c95ba8da4453cc24eff08e9152274ba8","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"9a02be2c300a323e58c35a498e3238efdba7d32b4fcb304ec45dc228b3f6be7e"} */
 (function () {
 "use strict";
 /* Account tabs. One account is displayed and active at a time; switching is
@@ -79,6 +79,7 @@ const AccountTabs = ({
   onAdd
 }) => {
   if (!accounts || !accounts.length) return null;
+  const runningCount = accounts.filter(item => item.running).length;
   const move = (event, index) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -100,7 +101,7 @@ const AccountTabs = ({
     const image = avatars[account.id];
     const live = account.live_room_count || 0;
     const liveText = live ? ` · ${live} 个开播` : "";
-    const actionText = selected ? "当前使用" : "点击切换";
+    const actionText = selected ? "当前查看" : account.running ? "点击切换查看 · 后台保持挂机" : runningCount > 0 ? "点击开启同时挂机" : "点击开始挂机";
     return /*#__PURE__*/React.createElement("button", {
       type: "button",
       key: account.id,

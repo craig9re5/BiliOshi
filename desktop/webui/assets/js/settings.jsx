@@ -286,10 +286,15 @@ const SettingsPage = ({
   </>);
 };
 
-const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogout, onRemove, onProtection, busy }) => {
+const AccountRow = ({
+  account, isActive, image, runningCount = 0,
+  onSwitch, onSetRunning, onSwitchExclusive, onScan, onLogout, onRemove, onProtection, busy
+}) => {
   const state = window.accountStateLabel(account);
   const needsLogin = !account.signed_in || account.status === "needs_login";
   const protection = account.status === "blocked" || Boolean(account.safety?.blocked);
+  const engineActive = Boolean(account.engine_active || account.running);
+  const startLabel = runningCount > 0 ? "同时挂机" : "开启挂机";
   const issueText = protection
     ? (account.safety?.reason || "账号操作已暂停，需在平台处理")
     : needsLogin
@@ -302,33 +307,57 @@ const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogo
       <div className="account-item-main">
         <div className="account-item-title">
           <strong>{account.name}</strong>
-          {isActive && <span className="mini-tag live">当前使用</span>}
-          {!isActive && !needsLogin && !protection && <span className={`mini-tag ${state.tone}`}>{state.label}</span>}
+          {isActive && <span className="mini-tag">当前查看</span>}
+          {!needsLogin && !protection && <span className={`mini-tag ${state.tone}`}>{state.label}</span>}
           {needsLogin && <span className="mini-tag warn">需要重新扫码</span>}
           {protection && <span className="mini-tag warn">需在平台处理</span>}
         </div>
-        <div className="account-item-meta">UID {account.uid}</div>
+        <div className="account-item-meta">
+          UID {account.uid}{account.room_count > 0 ? ` · 关注 ${account.room_count} 位` : ""}
+          {account.live_room_count > 0 ? ` · ${account.live_room_count} 房直播中` : ""}
+        </div>
         {issueText && <div className="account-item-sub warn">{issueText}</div>}
       </div>
       <div className="account-item-actions">
         {protection && (
-          <button type="button" className="btn sm" onClick={() => onProtection(account.id)}>
+          <button type="button" className="btn sm" onClick={() => onProtection(account.id)}
+            aria-label={`查看原因 ${account.name}`}>
             查看原因
           </button>
         )}
         {needsLogin && (
-          <button type="button" className="btn sm primary" onClick={() => onScan(account.id)}>
+          <button type="button" className="btn sm primary" onClick={() => onScan(account.id)}
+            aria-label={`重新扫码 ${account.name}`}>
             <Icon name="qr" size={12} />重新扫码
           </button>
         )}
-        {!isActive && !needsLogin && !protection && (
-          <button type="button" className="btn sm primary" onClick={() => onSwitch(account.id)} disabled={busy}>
-            <Icon name="play" size={12} />切换账号
+        {!needsLogin && !protection && engineActive && !isActive && (
+          <button type="button" className="btn sm primary" onClick={() => onSwitch(account.id)} disabled={busy}
+            aria-label={`查看 ${account.name}`}>
+            查看
+          </button>
+        )}
+        {!needsLogin && !protection && engineActive && onSetRunning && (
+          <button type="button" className="btn sm" onClick={() => onSetRunning(account.id, false)} disabled={busy}
+            aria-label={`停止挂机 ${account.name}`}>
+            停止挂机
+          </button>
+        )}
+        {!needsLogin && !protection && !engineActive && onSetRunning && (
+          <button type="button" className="btn sm primary" onClick={() => onSetRunning(account.id, true)} disabled={busy}
+            aria-label={`${startLabel} ${account.name}`}>
+            <Icon name="play" size={12} />{startLabel}
+          </button>
+        )}
+        {!needsLogin && !protection && !engineActive && runningCount > 0 && onSwitchExclusive && (
+          <button type="button" className="btn sm" onClick={() => onSwitchExclusive(account.id)} disabled={busy}
+            title="停止其他账号，仅运行此账号" aria-label={`仅挂此号 ${account.name}`}>
+            仅挂此号
           </button>
         )}
         <button type="button" className="btn sm" onClick={() => onLogout(account.id)}
           disabled={busy} title={needsLogin ? "清除本机保存的失效登录凭证" : "退出此账号登录"}
-          aria-label={`${needsLogin ? "清除" : "退出"} ${account.name} 的登录`}>
+          aria-label={`${needsLogin ? "清除登录" : "退出登录"} ${account.name}`}>
           <Icon name="power" size={13} />
           <span>{needsLogin ? "清除登录" : "退出登录"}</span>
         </button>
@@ -341,26 +370,36 @@ const AccountRow = ({ account, isActive, image, onView, onSwitch, onScan, onLogo
   );
 };
 
-const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, onScan, onView, onSwitch,
-  onLogout, onRemove, onProtection, onResumeSafety, onCheckSafety, safetyProbe, onCheck, busy, version }) => {
+const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, maxConcurrent = 3, onScan, onView, onSwitch,
+  onSetRunning, onSwitchExclusive, onLogout, onRemove, onProtection, onResumeSafety, onCheckSafety, safetyProbe, onCheck, busy, version }) => {
   const hold = account.safety || {};
   const cooldown = hold.blocked && hold.until > Date.now() / 1000;
   const needsLogin = hold.kind === "auth" || hold.kind === "credentials";
   const checkingSafety = Boolean(safetyProbe?.loading);
   const locationParts = [hold.room_label, hold.operation_label].filter(Boolean);
+  const runningCount = (accounts || []).filter((item) => item.running || item.engine_active).length;
   return (<>
     <div className="settings" data-screen-label="账号"><div className="settings-inner">
       <section className="group card">
         <header className="group-head group-head-action">
-          <span className="group-head-title">B 站账号</span>
+          <div className="btn-row">
+            <span className="group-head-title">B 站账号</span>
+            {accounts.length > 1 && (
+              <span className="scope-tag">
+                {runningCount > 1 ? `${runningCount} 号同时挂机中` : `最多支持 ${maxConcurrent} 号同时挂机`}
+              </span>
+            )}
+          </div>
           <button type="button" className="btn primary sm" onClick={() => onScan("")} disabled={busy}>
             <Icon name="plus" size={13} />添加账号
           </button>
         </header>
         {accounts.length ? accounts.map((item) => <AccountRow key={item.id} account={item}
           isActive={item.id === activeId}
+          runningCount={runningCount}
           image={item.id === activeId ? (avatar || avatars[item.id]) : avatars[item.id]}
-          onView={onView} onSwitch={onSwitch} onScan={onScan} onLogout={onLogout} onRemove={onRemove} onProtection={onProtection}
+          onView={onView} onSwitch={onSwitch} onSetRunning={onSetRunning} onSwitchExclusive={onSwitchExclusive}
+          onScan={onScan} onLogout={onLogout} onRemove={onRemove} onProtection={onProtection}
           busy={busy} />)
           : <div className="empty list-empty"><Icon name="user" size={24} />
             <strong>尚未添加 B 站账号</strong>

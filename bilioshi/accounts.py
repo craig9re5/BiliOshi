@@ -537,6 +537,10 @@ class AccountStore:
             fingerprint = None
         self._delete_credential_file(account_id)
         root = self.path_for_id(account_id)
+        try:
+            (root / "state" / "device-session.json").unlink(missing_ok=True)
+        except OSError:
+            pass
         if fingerprint:
             bindings = root / "state" / "account-bindings.json"
             if bindings.exists():

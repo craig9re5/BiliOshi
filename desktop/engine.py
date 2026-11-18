@@ -301,6 +301,11 @@ class Engine:
             self.force_probe = True
             self.manual_check_at = time.time()
 
+    def stagger_initial_check(self, delay_seconds):
+        with self.lock:
+            if delay_seconds and delay_seconds > 0:
+                self.next_check = max(self.next_check, time.time() + float(delay_seconds))
+
     def suspend(self, reason="account_suspended"):
         """Stop this account's IO but keep its Engine, thread and Job alive."""
         with self.lock:

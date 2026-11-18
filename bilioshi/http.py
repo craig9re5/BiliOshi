@@ -1,6 +1,7 @@
 """One HTTP/JSON boundary. Failures have explicit, credential-free metadata."""
 
 from collections import deque
+import hashlib
 import http.client
 import json
 import logging
@@ -94,6 +95,19 @@ class _ConnectionPool:
 _POOL = _ConnectionPool()
 
 
+def _session_pool_bucket(headers) -> str:
+    cookie_header = headers.get("Cookie") or headers.get("cookie") or ""
+    if not cookie_header:
+        return "anon"
+    try:
+        sessdata = parse_cookie_header(cookie_header).get("SESSDATA", "")
+    except Exception:
+        sessdata = ""
+    if not sessdata:
+        return "anon"
+    return hashlib.sha256(sessdata.encode("utf-8")).hexdigest()[:16]
+
+
 class _PooledOpenMixin:
     """Reuse persistent HTTP/1.1 connections inside urllib OpenerDirector."""
 
@@ -112,7 +126,12 @@ class _PooledOpenMixin:
         req_timeout = getattr(req, "timeout", None)
         timeout = req_timeout if req_timeout is not None else 10
         scheme = req.type or "http"
-        pool_key = (scheme, host, id(http_conn_args.get("context")))
+        bucket = _session_pool_bucket(headers)
+        pool_key = (
+            (scheme, host, id(http_conn_args.get("context")))
+            if bucket == "anon"
+            else (scheme, host, id(http_conn_args.get("context")), bucket)
+        )
 
         conn = _POOL.acquire(pool_key)
         reused = conn is not None

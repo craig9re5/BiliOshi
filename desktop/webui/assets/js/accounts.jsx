@@ -34,6 +34,7 @@ const AccountAvatar = ({ account, size = "sm", image }) => {
 
 const AccountTabs = ({ accounts, activeId, avatars = {}, onSelect, onAdd }) => {
   if (!accounts || !accounts.length) return null;
+  const runningCount = accounts.filter((item) => item.running).length;
   const move = (event, index) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -53,7 +54,13 @@ const AccountTabs = ({ accounts, activeId, avatars = {}, onSelect, onAdd }) => {
           const image = avatars[account.id];
           const live = account.live_room_count || 0;
           const liveText = live ? ` · ${live} 个开播` : "";
-          const actionText = selected ? "当前使用" : "点击切换";
+          const actionText = selected
+            ? "当前查看"
+            : account.running
+              ? "点击切换查看 · 后台保持挂机"
+              : runningCount > 0
+                ? "点击开启同时挂机"
+                : "点击开始挂机";
           return <button type="button" key={account.id} id={`account-tab-${account.id}`} role="tab"
             aria-selected={selected} aria-controls="monitor-body" tabIndex={selected ? 0 : -1}
             className={`account-tab ${selected ? "active" : ""}`}

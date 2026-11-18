@@ -9,7 +9,7 @@ from unittest.mock import patch
 from bilioshi.accounts import AccountStore
 from bilioshi.runtime import save_login
 from bilioshi.secret_store import FORMAT
-from desktop.host import AccountHost
+from desktop.host import AccountHost, HostError
 
 
 def fake_seal(value):
@@ -145,6 +145,55 @@ class AccountHostTests(unittest.TestCase):
         self.assertIsNone(self.host.engine_for("uid-1"))
         self.assertIsNone(self.store.active_id)
         self.assertEqual([row["id"] for row in self.store.accounts()], ["uid-2"])
+
+    def test_concurrent_watch_keeps_multiple_engines_running_and_isolates_faults(self):
+        for uid in (3, 4):
+            row, _ = self.store.upsert(uid, f"账号{uid}")
+            self.store.ensure_root(row["id"], uid)
+            save_login(f"sess-{uid}", f"csrf-{uid}", self.store.credential_path(row["id"]))
+
+        self.host.start()
+        self.host.set_account_running("uid-2", True)
+
+        self.assertEqual(self.store.mode, "concurrent")
+        self.assertTrue(self.store.get("uid-1")["watch_enabled"])
+        self.assertTrue(self.store.get("uid-2")["watch_enabled"])
+        self.assertFalse(self.host.engine_for("uid-1").suspended)
+        self.assertFalse(self.host.engine_for("uid-2").suspended)
+
+        # Switching view/focus in concurrent mode must not suspend background accounts.
+        self.host.switch_to("uid-1")
+        self.assertFalse(self.host.engine_for("uid-2").suspended)
+        by_id = {item["id"]: item for item in self.host.summaries()}
+        self.assertTrue(by_id["uid-1"]["running"])
+        self.assertTrue(by_id["uid-2"]["running"])
+
+        # Soft cap at 3 concurrent accounts.
+        self.host.set_account_running("uid-3", True)
+        with self.assertRaises(HostError):
+            self.host.set_account_running("uid-4", True)
+
+        # Global pause suspends all 3 running engines and resumes all 3.
+        self.host.set_global_paused(True)
+        for aid in ("uid-1", "uid-2", "uid-3"):
+            self.assertTrue(self.host.engine_for(aid).suspended)
+        self.host.set_global_paused(False)
+        for aid in ("uid-1", "uid-2", "uid-3"):
+            self.assertFalse(self.host.engine_for(aid).suspended)
+
+        # Single-account platform hold (-352) isolates to uid-1 only.
+        self.host.engine_for("uid-1").safety = {"blocked": True, "kind": "review", "scope": "account"}
+        by_id = {item["id"]: item for item in self.host.summaries()}
+        self.assertEqual(by_id["uid-1"]["state"], "protection")
+        self.assertFalse(by_id["uid-1"]["running"])
+        self.assertEqual(by_id["uid-2"]["state"], "running")
+        self.assertTrue(by_id["uid-2"]["running"])
+
+        # Stopping uid-3 closes its engine while uid-2 continues running.
+        self.host.set_account_running("uid-3", False)
+        self.assertIsNone(self.host.engine_for("uid-3"))
+        self.assertFalse(self.store.get("uid-3")["watch_enabled"])
+        self.assertTrue(self.host.account_summary("uid-2")["running"])
 
 
 if __name__ == "__main__":

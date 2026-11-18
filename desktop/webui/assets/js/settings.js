@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"92c60d933cf4b98e9daded68d4ea935ec8f27422c2d9f336233b3b70401e75b8","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"876ee10d40f8b1beb341e52d87258f0baa4ba2a6923f6f583217bb61eb46c24c"} */
+/* BiliOshi JSX {"code_sha256":"51e9982b48b492d6fac984a27e46164b71e9fd789930f21ba2d4c9ca19aed89e","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"8836eff41f7e0bbff984bcd54818eb17c34b934f005dba34f792c1e95ae46fec"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -239,6 +239,7 @@ const ThemeOptions = ({
 const SettingsPage = ({
   settings,
   onSetting,
+  onSettingsBatch,
   pendingSettings,
   theme = "system",
   onTheme,
@@ -257,11 +258,29 @@ const SettingsPage = ({
   const systemDark = useSystemDark();
   const disabled = key => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
+  const coinEnabled = Boolean(settings.do_coin);
+  const coinTarget = coinEnabled ? Math.max(1, Math.min(5, Number(settings.coin_target ?? 5))) : 0;
   const dayThemeName = (DAY_THEME_CHOICES.find(item => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
   const accountScopeLabel = scope?.name ? `当前账号 · ${scope.name}` : "当前账号生效";
   const updateState = update?.status || "idle";
   const updateChecking = Boolean(updateBusy || ["checking", "downloading", "verifying", "applying"].includes(updateState));
-  const updateDesc = updateState === "checking" ? "正在检查 GitHub 最新发行版…" : updateState === "downloading" ? `正在后台下载 v${update?.latest_version || ""}…` : updateState === "verifying" ? `正在离线预检 v${update?.latest_version || ""}…` : updateState === "applying" ? "正在重启并完成安装…" : updateState === "ready" ? update?.waiting_reason ? `新版本 v${update.ready_version} 已就绪 · ${update.waiting_reason}` : `新版本 v${update?.ready_version || ""} 已下载校验就绪` : updateState === "update_available" ? update?.self_update_reason ? `发现新版本 v${update.latest_version}（${update.self_update_reason}）` : `发现新版本 v${update?.latest_version || ""}` : updateState === "up_to_date" ? update?.last_checked_at ? `当前已是最新版本 · 上次检查 ${relativeTime(update.last_checked_at)}` : "当前已是最新版本" : updateState === "error" && update?.error ? update.error : "提交问题反馈时建议附带版本号与脱敏诊断包";
+  const updateDesc = updateState === "checking" ? "正在检查最新版本…" : updateState === "downloading" ? `正在下载新版本 v${update?.latest_version || ""}…` : updateState === "verifying" ? `正在校验新版本 v${update?.latest_version || ""}…` : updateState === "applying" ? "正在重启并安装更新…" : updateState === "ready" ? update?.waiting_reason ? `新版本 v${update.ready_version} 已就绪 · ${update.waiting_reason}` : `新版本 v${update?.ready_version || ""} 已下载就绪` : updateState === "update_available" ? `发现新版本 v${update?.latest_version || ""}` : updateState === "up_to_date" ? update?.last_checked_at ? `当前已是最新版本 · 上次检查 ${relativeTime(update.last_checked_at)}` : "当前已是最新版本" : updateState === "error" && update?.error ? update.error : "检查新版本或自动保持最新";
+  const changeAutoCoin = nextCount => {
+    const count = Number(nextCount) || 0;
+    if (typeof onSettingsBatch === "function") {
+      if (count <= 0) onSettingsBatch({
+        do_coin: false
+      });else onSettingsBatch({
+        do_coin: true,
+        coin_target: count
+      });
+      return;
+    }
+    if (count <= 0) onSetting("do_coin", false);else {
+      onSetting("do_coin", true);
+      onSetting("coin_target", count);
+    }
+  };
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8BBE\u7F6E"
@@ -271,11 +290,70 @@ const SettingsPage = ({
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head group-head-meta"
-  }, /*#__PURE__*/React.createElement("span", null, "\u6BCF\u65E5\u4EFB\u52A1"), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u6BCF\u65E5\u7B7E\u5230"), /*#__PURE__*/React.createElement("span", {
+    className: "scope-tag"
+  }, accountScopeLabel)), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u81EA\u52A8\u5B8C\u6210\u65E5\u5E38\u7ECF\u9A8C",
+    desc: "\u6BCF\u65E5\u81EA\u52A8\u9886\u53D6\u767B\u5F55\u3001\u89C2\u770B\u4E0E\u5206\u4EAB\u7ECF\u9A8C"
+  }, /*#__PURE__*/React.createElement(Switch, {
+    label: "\u81EA\u52A8\u5B8C\u6210\u65E5\u5E38\u7ECF\u9A8C",
+    checked: settings.auto_daily_exp !== false,
+    disabled: disabled("auto_daily_exp"),
+    onChange: value => onSetting("auto_daily_exp", value)
+  })), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u6BCF\u65E5\u81EA\u52A8\u6295\u5E01",
+    desc: "\u9ED8\u8BA4\u5173\u95ED\u4EE5\u4FDD\u62A4\u786C\u5E01\uFF0C\u5F00\u542F\u540E\u6309\u6BCF\u65E5\u4E0A\u9650\u81EA\u52A8\u8865\u9F50"
+  }, /*#__PURE__*/React.createElement(Choice, {
+    label: "\u6BCF\u65E5\u81EA\u52A8\u6295\u5E01",
+    value: coinTarget,
+    disabled: disabled("do_coin") || disabled("coin_target"),
+    options: [{
+      value: 0,
+      label: "关闭"
+    }, {
+      value: 1,
+      label: "1 枚"
+    }, {
+      value: 2,
+      label: "2 枚"
+    }, {
+      value: 3,
+      label: "3 枚"
+    }, {
+      value: 4,
+      label: "4 枚"
+    }, {
+      value: 5,
+      label: "5 枚"
+    }],
+    onChange: changeAutoCoin
+  })), coinTarget > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SettingRow, {
+    className: "setting-sub",
+    name: "\u4F18\u5148\u6295\u7ED9\u5173\u6CE8\u4E3B\u64AD",
+    desc: "\u4F18\u5148\u4ECE\u5F53\u524D\u5173\u6CE8\u5217\u8868\u548C\u7C89\u4E1D\u724C\u4E3B\u64AD\u7684\u6295\u7A3F\u4E2D\u6311\u9009\u89C6\u9891"
+  }, /*#__PURE__*/React.createElement(Switch, {
+    label: "\u4F18\u5148\u6295\u7ED9\u5173\u6CE8\u4E3B\u64AD",
+    checked: settings.prefer_medals !== false,
+    disabled: disabled("prefer_medals"),
+    onChange: value => onSetting("prefer_medals", value)
+  })), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "setting-sub",
+    name: "\u6295\u5E01\u65F6\u540C\u65F6\u70B9\u8D5E",
+    desc: "\u6BCF\u6B21\u6295\u5E01\u65F6\u987A\u4FBF\u4E3A\u8BE5\u89C6\u9891\u70B9\u8D5E"
+  }, /*#__PURE__*/React.createElement(Switch, {
+    label: "\u6295\u5E01\u65F6\u540C\u65F6\u70B9\u8D5E",
+    checked: Boolean(settings.coin_with_like),
+    disabled: disabled("coin_with_like"),
+    onChange: value => onSetting("coin_with_like", value)
+  })))), /*#__PURE__*/React.createElement("section", {
+    className: "group card"
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "group-head group-head-meta"
+  }, /*#__PURE__*/React.createElement("span", null, "\u76F4\u64AD\u5E94\u63F4"), /*#__PURE__*/React.createElement("span", {
     className: "scope-tag"
   }, accountScopeLabel)), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u70B9\u4EAE\u7C89\u4E1D\u724C",
-    desc: "\u724C\u5B50\u7184\u706D\u65F6\u53D1\u9001\u5F39\u5E55\u91CD\u65B0\u70B9\u4EAE"
+    desc: "\u4EC5\u5728\u4E3B\u64AD\u5F00\u64AD\u65F6\u53D1\u9001\u5F39\u5E55\u91CD\u65B0\u70B9\u4EAE\u7184\u706D\u7684\u724C\u5B50"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u70B9\u4EAE\u7C89\u4E1D\u724C",
     checked: settings.auto_revive,
@@ -283,12 +361,20 @@ const SettingsPage = ({
     onChange: value => onSetting("auto_revive", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5B8C\u6210\u5F39\u5E55\u4EFB\u52A1",
-    desc: "\u81EA\u52A8\u8865\u9F50\u6BCF\u65E5\u5F39\u5E55\u4EB2\u5BC6\u5EA6\u4EFB\u52A1"
+    desc: "\u4EC5\u5728\u4E3B\u64AD\u5F00\u64AD\u65F6\u81EA\u52A8\u8865\u9F50\u6BCF\u65E5\u5F39\u5E55\u4EB2\u5BC6\u5EA6\u4EFB\u52A1"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5B8C\u6210\u5F39\u5E55\u4EFB\u52A1",
     checked: settings.auto_danmaku_intimacy,
     disabled: disabled("auto_danmaku_intimacy"),
     onChange: value => onSetting("auto_danmaku_intimacy", value)
+  })), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u53D1\u5F39\u5E55\u524D\u4F69\u6234\u7C89\u4E1D\u724C",
+    desc: "\u5F00\u64AD\u6267\u884C\u5F39\u5E55\u4EFB\u52A1\u524D\u81EA\u52A8\u4F69\u6234\u5BF9\u5E94\u4E3B\u64AD\u7684\u7C89\u4E1D\u724C"
+  }, /*#__PURE__*/React.createElement(Switch, {
+    label: "\u53D1\u5F39\u5E55\u524D\u4F69\u6234\u7C89\u4E1D\u724C",
+    checked: settings.auto_wear !== false,
+    disabled: disabled("auto_wear"),
+    onChange: value => onSetting("auto_wear", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u76F4\u64AD\u70B9\u8D5E",
     desc: "\u8FDB\u5165\u5F00\u64AD\u76F4\u64AD\u95F4\u540E\u81EA\u52A8\u5B8C\u6210\u70B9\u8D5E"
@@ -303,7 +389,7 @@ const SettingsPage = ({
     className: "group-head"
   }, "\u8FD0\u884C\u4E0E\u542F\u52A8"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5F00\u64AD\u901A\u77E5",
-    desc: "\u5F53\u524D\u8D26\u53F7\u5173\u6CE8\u7684\u4E3B\u64AD\u5F00\u64AD\u65F6\u5F39\u51FA\u7CFB\u7EDF\u63D0\u9192"
+    desc: "\u5F53\u524D\u8D26\u53F7\u5173\u6CE8\u7684\u4E3B\u64AD\u5F00\u64AD\u65F6\u5F39\u51FA\u684C\u9762\u63D0\u9192"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5F00\u64AD\u901A\u77E5",
     checked: settings.notify_on_live,
@@ -311,20 +397,12 @@ const SettingsPage = ({
     onChange: value => onSetting("notify_on_live", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5F00\u673A\u542F\u52A8",
-    desc: "\u672C\u673A\u5168\u5C40\u751F\u6548\uFF0C\u767B\u5F55\u7CFB\u7EDF\u540E\u5728\u6258\u76D8\u9759\u9ED8\u8FD0\u884C"
+    desc: "\u672C\u673A\u5168\u5C40\u751F\u6548\uFF0C\u767B\u5F55\u540E\u5728\u6258\u76D8\u9759\u9ED8\u8FD0\u884C"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5F00\u673A\u542F\u52A8",
     checked: settings.autostart,
     disabled: disabled("autostart"),
     onChange: value => onSetting("autostart", value)
-  })), /*#__PURE__*/React.createElement(SettingRow, {
-    name: "\u81EA\u52A8\u66F4\u65B0",
-    desc: "\u540E\u53F0\u81EA\u52A8\u4E0B\u8F7D\u6821\u9A8C\u65B0\u7248\uFF0C\u5E76\u5728\u65E0\u76F4\u64AD\u6302\u673A\u65F6\u9759\u9ED8\u5B89\u88C5\uFF08\u672C\u673A\u5168\u5C40\u751F\u6548\uFF09"
-  }, /*#__PURE__*/React.createElement(Switch, {
-    label: "\u81EA\u52A8\u66F4\u65B0",
-    checked: settings.auto_update !== false,
-    disabled: disabled("auto_update"),
-    onChange: value => onSetting("auto_update", value)
   })), ENABLE_RUN_MODE_SWITCH && /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u6A21\u5F0F",
     desc: "\u7A33\u5065\u6A21\u5F0F\u63A8\u8350\u65E5\u5E38\u6302\u673A\uFF1B\u6FC0\u8FDB\u6A21\u5F0F\u68C0\u6D4B\u66F4\u9891\u7E41\uFF08\u6309\u8D26\u53F7\u72EC\u7ACB\u4FDD\u5B58\uFF09"
@@ -341,62 +419,6 @@ const SettingsPage = ({
     }],
     onChange: value => onSetting("run_mode", value)
   }))), /*#__PURE__*/React.createElement("section", {
-    className: "group card"
-  }, /*#__PURE__*/React.createElement("header", {
-    className: "group-head"
-  }, "\u65E5\u5FD7\u4E0E\u8BCA\u65AD\u53CD\u9988"), /*#__PURE__*/React.createElement(SettingRow, {
-    name: "\u8FD0\u884C\u65E5\u5FD7",
-    desc: scope ? "可分别查看当前账号挂机日志或主程序全局日志" : "打开日志文件所在目录，便于排障"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "btn-row"
-  }, /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm",
-    onClick: onLogs
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "folder",
-    size: 13
-  }), scope ? "账号日志" : "查看日志"), scope && onHostLogs && /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm",
-    onClick: onHostLogs
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "folder",
-    size: 13
-  }), "\u4E3B\u7A0B\u5E8F\u65E5\u5FD7"))), /*#__PURE__*/React.createElement(SettingRow, {
-    name: "\u4E00\u952E\u5BFC\u51FA\u8BCA\u65AD\u5305",
-    desc: "\u6253\u5305\u65E5\u5FD7\u3001\u8FD1\u671F\u62A5\u9519\u4E0E\u73AF\u5883\u6458\u8981\uFF0C\u81EA\u52A8\u79FB\u9664\u51ED\u8BC1\u5E76\u9ED8\u8BA4\u533F\u540D\u5316\u8EAB\u4EFD"
-  }, /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm primary",
-    onClick: onDiagnostics
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "download",
-    size: 13
-  }), "\u5BFC\u51FA\u8BCA\u65AD\u5305")), version && /*#__PURE__*/React.createElement(SettingRow, {
-    name: "\u7248\u672C\u4FE1\u606F",
-    desc: updateDesc
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "btn-row"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "version-pill"
-  }, "v", version), updateState === "ready" && update?.can_self_update && onApplyUpdate ? /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm primary",
-    disabled: Boolean(updateBusy || updateState === "applying"),
-    onClick: onApplyUpdate
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "download",
-    size: 13
-  }), "\u7ACB\u5373\u91CD\u542F\u66F4\u65B0") : onCheckUpdate && /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm",
-    disabled: updateChecking,
-    onClick: onCheckUpdate
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "refresh",
-    size: 13
-  }), "\u68C0\u67E5\u66F4\u65B0")))), /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head group-head-meta"
@@ -420,7 +442,78 @@ const SettingsPage = ({
     onChange: onDayTheme,
     ariaLabel: "\u767D\u5929\u9ED8\u8BA4\u4E3B\u9898",
     isDayPicker: true
-  }))))));
+  }))), /*#__PURE__*/React.createElement("details", {
+    className: "group card settings-dev"
+  }, /*#__PURE__*/React.createElement("summary", {
+    className: "group-head group-head-meta dev-summary"
+  }, /*#__PURE__*/React.createElement("span", null, "\u5F00\u53D1\u8005\u4E0E\u8BCA\u65AD"), /*#__PURE__*/React.createElement("span", {
+    className: "dev-summary-right"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "dev-summary-hint"
+  }, "\u65E5\u5FD7 \xB7 \u8BCA\u65AD\u5305 \xB7 \u7248\u672C\u66F4\u65B0"), /*#__PURE__*/React.createElement(Icon, {
+    name: "chevron",
+    size: 14
+  }))), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u8FD0\u884C\u65E5\u5FD7",
+    desc: scope ? "可分别查看当前账号日志或主程序全局日志" : "打开日志文件所在目录，便于排障"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "btn-row"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onLogs
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "folder",
+    size: 13
+  }), scope ? "账号日志" : "查看日志"), scope && onHostLogs && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onHostLogs
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "folder",
+    size: 13
+  }), "\u4E3B\u7A0B\u5E8F\u65E5\u5FD7"))), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u4E00\u952E\u5BFC\u51FA\u8BCA\u65AD\u5305",
+    desc: "\u6253\u5305\u65E5\u5FD7\u3001\u8FD1\u671F\u62A5\u9519\u4E0E\u73AF\u5883\u6458\u8981\uFF0C\u81EA\u52A8\u79FB\u9664\u767B\u5F55\u51ED\u8BC1\u5E76\u9ED8\u8BA4\u533F\u540D\u5316"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onDiagnostics
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "download",
+    size: 13
+  }), "\u5BFC\u51FA\u8BCA\u65AD\u5305")), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u81EA\u52A8\u66F4\u65B0",
+    desc: "\u540E\u53F0\u81EA\u52A8\u83B7\u53D6\u65B0\u7248\u5E76\u5728\u7A7A\u95F2\u65F6\u5B89\u88C5\uFF08\u5168\u5C40\u751F\u6548\uFF09"
+  }, /*#__PURE__*/React.createElement(Switch, {
+    label: "\u81EA\u52A8\u66F4\u65B0",
+    checked: settings.auto_update !== false,
+    disabled: disabled("auto_update"),
+    onChange: value => onSetting("auto_update", value)
+  })), version && /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u5F53\u524D\u7248\u672C",
+    desc: updateDesc
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "btn-row"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "version-pill"
+  }, "v", version), updateState === "ready" && update?.can_self_update && onApplyUpdate ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    disabled: Boolean(updateBusy || updateState === "applying"),
+    onClick: onApplyUpdate
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "download",
+    size: 13
+  }), "\u7ACB\u5373\u91CD\u542F\u66F4\u65B0") : onCheckUpdate && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    disabled: updateChecking,
+    onClick: onCheckUpdate
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "refresh",
+    size: 13
+  }), "\u68C0\u67E5\u66F4\u65B0")))))));
 };
 const AccountRow = ({
   account,
@@ -616,7 +709,7 @@ const AccountPage = ({
     className: "safety-status"
   }, /*#__PURE__*/React.createElement("i", {
     className: `status-dot ${hold.blocked ? "warn" : "ok"}`
-  }), /*#__PURE__*/React.createElement("strong", null, hold.blocked ? hold.kind_label || "保护暂停中" : "状态正常", hold.blocked && hold.code !== undefined && hold.code !== null && `（错误码 ${hold.code}）`), hold.blocked && hold.reason && /*#__PURE__*/React.createElement("span", {
+  }), /*#__PURE__*/React.createElement("strong", null, hold.blocked ? hold.kind_label || "保护暂停中" : "状态正常"), hold.blocked && hold.reason && /*#__PURE__*/React.createElement("span", {
     className: "safety-reason"
   }, hold.reason)), hold.blocked && locationParts.length > 0 && /*#__PURE__*/React.createElement("small", {
     className: "safety-time"
@@ -624,9 +717,9 @@ const AccountPage = ({
     className: "safety-time"
   }, "\u6700\u65E9\u81EA\u52A8\u6062\u590D\uFF1A", absoluteTime(hold.until)), !cooldown && hold.blocked && hold.next_probe_at && /*#__PURE__*/React.createElement("small", {
     className: "safety-time"
-  }, "\u4E0B\u6B21\u81EA\u52A8\u590D\u68C0\uFF1A", absoluteTime(hold.next_probe_at)), hold.pace_multiplier > 1 && /*#__PURE__*/React.createElement("small", {
+  }, "\u4E0B\u6B21\u81EA\u52A8\u68C0\u6D4B\uFF1A", absoluteTime(hold.next_probe_at)), hold.pace_multiplier > 1 && /*#__PURE__*/React.createElement("small", {
     className: "safety-time"
-  }, "\u4ECA\u65E5\u9632\u98CE\u63A7\u964D\u9891\u4FDD\u62A4\uFF1A\u4E92\u52A8\u53D1\u9001\u95F4\u9694\u5DF2\u8C03\u6574\u4E3A ", hold.pace_multiplier, "\xD7")), /*#__PURE__*/React.createElement("div", {
+  }, "\u4ECA\u65E5\u4FDD\u62A4\u964D\u901F\u4E2D\uFF1A\u4E92\u52A8\u95F4\u9694\u5DF2\u653E\u6162\u81F3 ", hold.pace_multiplier, "\xD7")), /*#__PURE__*/React.createElement("div", {
     className: "safety-actions"
   }, (!account.signed_in || needsLogin) && /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -644,7 +737,7 @@ const AccountPage = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "shield",
     size: 13
-  }), /*#__PURE__*/React.createElement("span", null, "\u67E5\u770B\u8BE6\u60C5\u4E0E\u6392\u67E5")), !cooldown && onCheckSafety && /*#__PURE__*/React.createElement("button", {
+  }), /*#__PURE__*/React.createElement("span", null, "\u67E5\u770B\u8BE6\u60C5")), !cooldown && onCheckSafety && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm primary",
     onClick: () => onCheckSafety(true),

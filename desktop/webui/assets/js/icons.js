@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"443bbe3836b4948bf42658d5492c6cf9e8baaf4bcf038fac229d754ed835bc2b","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"71ba5003ef98a5279b503fa652f74e81ebe9445b16ad855df67ce3d43aff1ab5"} */
+/* BiliOshi JSX {"code_sha256":"e23bd79054b715b81aef0487e16574bb568c111cc4d7d0a97a11f7a56d560b56","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"icons.jsx","source_sha256":"bb15a1171fd97b7ca689436787976f98bce593ca256c8d5d379fc2a4ce4b35d3"} */
 (function () {
 "use strict";
 /* Hand-drawn 16px stroke icons — one weight, round caps, currentColor.
@@ -229,7 +229,37 @@ const Icon = ({
     }),
     heart: /*#__PURE__*/React.createElement("path", {
       d: "M12 19.5s-6.8-4.2-8.4-8.3c-.9-2.8 1-5.5 3.9-5.5 1.8 0 3.3.9 4.5 2.4 1.2-1.5 2.7-2.4 4.5-2.4 2.9 0 4.8 2.7 3.9 5.5-1.6 4.1-8.4 8.3-8.4 8.3Z"
-    })
+    }),
+    sparkles: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("rect", {
+      x: "4",
+      y: "5.5",
+      width: "16",
+      height: "14.5",
+      rx: "2.4"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M8 3.6v3.4M16 3.6v3.4M4 10h16M9.4 14.8l1.8 1.8 3.6-3.6"
+    })),
+    coin: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("circle", {
+      cx: "12",
+      cy: "12",
+      r: "8.4"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M12 7.8v8.4M9.4 10h5.2"
+    })),
+    share: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("path", {
+      d: "M12 4.5v10M8.2 8.2 12 4.5l3.8 3.7"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M5 14.5v3.6c0 1 .8 1.9 1.9 1.9h10.2c1 0 1.9-.9 1.9-1.9v-3.6"
+    })),
+    video: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("rect", {
+      x: "3.5",
+      y: "5.5",
+      width: "17",
+      height: "13",
+      rx: "2.4"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M10.2 9.2v5.6L15 12l-4.8-2.8Z"
+    }))
   };
   return /*#__PURE__*/React.createElement("svg", common, paths[name] || paths.info);
 };

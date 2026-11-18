@@ -64,34 +64,84 @@ const QrModal = ({ qr, onClose, onRetry }) => {
   );
 };
 
-const AddMemberModal = ({ query, onQuery, result, loading, adding, onSearch, onAdd, onClose, onSyncMedals }) => (
-  <Modal title="添加主播" desc="通过直播间号、UID 或直播间链接查找" onClose={onClose}
-    actions={<>
-      <button type="button" className="btn" onClick={onClose}>取消</button>
-      <button type="button" className="btn primary" onClick={onAdd} disabled={!result?.ok || loading || adding}>
-        {adding ? "正在添加…" : "添加主播"}</button>
-    </>}>
-    <form className="field-row" onSubmit={(event) => {
-      event.preventDefault();
-      if (loading || adding) return;
-      if (result?.ok) { onAdd(); return; }
-      if (query.trim()) onSearch();
-    }}>
-      <input className="input" value={query} onChange={(event) => onQuery(event.target.value)}
-        aria-label="直播间号、UID 或链接" placeholder="直播间号、UID 或链接（回车查找，再次回车添加）" autoFocus disabled={adding} />
-      <button type="submit" className="btn" disabled={loading || adding || !query.trim()}>{loading ? "查找中…" : "查找"}</button>
-    </form>
-    {result?.ok && <div className="member-preview"><span className="account-avatar">{Array.from(result.member.name || "?")[0]}</span>
-      <div><div className="account-name">{result.member.name}</div>
-        <div className="account-meta">直播间 {result.member.room} · UID {result.member.uid}</div></div></div>}
-    {result && !result.ok && <div className="field-error" role="alert">{result.error}</div>}
-    {onSyncMedals && <div className="field-note" style={{ marginTop: "12px", textAlign: "center" }}>
-      <button type="button" className="link-btn" onClick={() => { onClose(); onSyncMedals(); }}>
-        从已有粉丝牌批量同步 →
-      </button>
-    </div>}
-  </Modal>
-);
+const AddMemberModal = ({ query, onQuery, result, loading, adding, onSearch, onAdd, onClose, onSyncMedals }) => {
+  const [pickedUid, setPickedUid] = useState(null);
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  useEffect(() => {
+    if (candidates.length) {
+      const firstValid = candidates.find((item) => item.room) || candidates[0];
+      setPickedUid(firstValid?.uid || null);
+    } else {
+      setPickedUid(null);
+    }
+  }, [result]);
+
+  const picked = candidates.length
+    ? (candidates.find((item) => item.uid === pickedUid) || null)
+    : (result?.ok ? result.member : null);
+  const canAdd = Boolean(picked && (picked.room || picked.room_id) && !loading && !adding);
+
+  const submitAdd = (candidate = null) => {
+    const target = candidate || picked;
+    if (!target || !(target.room || target.room_id) || loading || adding) return;
+    onAdd(candidates.length || candidate ? target : null);
+  };
+
+  return (
+    <Modal title="添加主播" desc="输入直播间号、UID、主播昵称或链接查找" onClose={onClose} wide={candidates.length > 0}
+      actions={<>
+        <button type="button" className="btn" onClick={onClose}>取消</button>
+        <button type="button" className="btn primary" onClick={() => submitAdd()} disabled={!canAdd}>
+          {adding ? "正在添加…" : "添加主播"}</button>
+      </>}>
+      <form className="field-row" onSubmit={(event) => {
+        event.preventDefault();
+        if (event.nativeEvent?.isComposing || loading || adding) return;
+        if (canAdd && !candidates.length) { submitAdd(); return; }
+        if (query.trim()) onSearch();
+      }}>
+        <input className="input" value={query} onChange={(event) => onQuery(event.target.value)}
+          aria-label="直播间号、UID、主播昵称或链接" placeholder="直播间号、UID、主播昵称或链接" autoFocus disabled={adding} />
+        <button type="submit" className="btn" disabled={loading || adding || !query.trim()}>{loading ? "查找中…" : "查找"}</button>
+      </form>
+      {result?.ok && result.member && <div className="member-preview"><span className="account-avatar">{Array.from(result.member.name || "?")[0]}</span>
+        <div><div className="account-name">{result.member.name}</div>
+          <div className="account-meta">直播间 {result.member.room} · UID {result.member.uid}</div></div></div>}
+      {candidates.length > 0 && (
+        <div className="candidate-list" role="listbox" aria-label="匹配主播列表">
+          {candidates.map((item) => {
+            const active = item.uid === pickedUid;
+            const hasRoom = Boolean(item.room || item.room_id);
+            return (
+              <button type="button" key={item.uid} role="option" aria-selected={active}
+                className={`candidate-row ${active ? "selected" : ""} ${!hasRoom ? "no-room" : ""}`}
+                onClick={() => setPickedUid(item.uid)}
+                onDoubleClick={() => { if (hasRoom) submitAdd(item); }}>
+                <span className="account-avatar small">{Array.from(item.name || "?")[0]}</span>
+                <span className="candidate-main">
+                  <span className="account-name">{item.name}</span>
+                  <span className="account-meta">
+                    {hasRoom ? `直播间 ${item.room || item.room_id}` : "未开通直播间"} · 粉丝 {item.fans || "未知"}
+                  </span>
+                </span>
+                <span className={`pill ${item.live_status === "直播中" ? "live" : "muted"}`}>{item.live_status || "待更新"}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {picked && !picked.room && !picked.room_id && (
+        <div className="field-error" role="status">该用户尚未开通直播间，请选择其他主播。</div>
+      )}
+      {result && !result.ok && <div className="field-error" role="alert">{result.error}</div>}
+      {onSyncMedals && <div className="field-note" style={{ marginTop: "12px", textAlign: "center" }}>
+        <button type="button" className="link-btn" onClick={() => { onClose(); onSyncMedals(); }}>
+          从已有粉丝牌批量同步 →
+        </button>
+      </div>}
+    </Modal>
+  );
+};
 
 const MedalsModal = ({ data, selected, onToggle, onSetSelection, onImport, onClose, loading, importing, error, onRetry }) => {
   const [filter, setFilter] = useState("");
@@ -504,20 +554,14 @@ const SafetyModal = ({
             <h3 id="safety-dialog-title">{info.kind_label || "账号保护暂停"}</h3>
             <p className="safety-modal-sub">
               {account?.name ? `${account.name} · ` : ""}
-              {info.since ? `触发于 ${absoluteTime(info.since)}` : "已暂停互动操作以保护账号"}
+              {info.since ? `触发于 ${absoluteTime(info.since)}` : "已暂停部分操作以保护账号"}
             </p>
           </div>
         </div>
-        {info.code !== undefined && info.code !== null && (
-          <span className="version-pill">错误码 {info.code}</span>
-        )}
       </div>
 
       <div className="safety-reason-box">
-        <strong>{info.reason || "检测到平台安全验证或操作受限，已暂停自动化操作。"}</strong>
-        {info.raw_message && info.raw_message !== info.reason && (
-          <div className="safety-raw-msg">平台返回：{info.raw_message}</div>
-        )}
+        <strong>{info.reason || "检测到平台验证或操作受限，已暂停自动化操作。"}</strong>
       </div>
 
       <div className="safety-meta-grid">
@@ -541,7 +585,7 @@ const SafetyModal = ({
         )}
         {!cooldown && info.next_probe_at && (
           <div className="safety-meta-item">
-            <span>下次自动复检</span>
+            <span>下次自动检测</span>
             <strong>
               {absoluteTime(info.next_probe_at)}（{formatCountdown(info.next_probe_at, nowSec)}）
               {typeof info.auto_recover_remaining === "number" && ` · 今日自动恢复剩余 ${info.auto_recover_remaining} 次`}
@@ -550,7 +594,7 @@ const SafetyModal = ({
         )}
         {info.pace_multiplier > 1 && (
           <div className="safety-meta-item">
-            <span>今日防风控降频</span>
+            <span>今日保护降速</span>
             <strong>
               已自动放慢至 {info.pace_multiplier}× 互动发送间隔
               {info.probation_until > nowSec ? `（观察期剩余 ${formatCountdown(info.probation_until, nowSec).replace("后", "")}）` : ""}
@@ -559,8 +603,8 @@ const SafetyModal = ({
         )}
         {!cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && (
           <div className="safety-meta-item">
-            <span>自动复检状态</span>
-            <strong>已达本轮自动复检或今日恢复上限，请人工确认后恢复</strong>
+            <span>自动检测状态</span>
+            <strong>已达本轮自动检测或今日恢复上限，请人工确认后恢复</strong>
           </div>
         )}
       </div>
@@ -574,11 +618,21 @@ const SafetyModal = ({
         </div>
       )}
 
+      {((info.code !== undefined && info.code !== null) || (info.raw_message && info.raw_message !== info.reason)) && (
+        <details className="safety-tech">
+          <summary>更多排查细节（反馈问题时可查看）</summary>
+          <div className="safety-tech-body">
+            {info.code !== undefined && info.code !== null && <div>返回代码：{info.code}</div>}
+            {info.raw_message && info.raw_message !== info.reason && <div>平台返回：{info.raw_message}</div>}
+          </div>
+        </details>
+      )}
+
       {lastProbe && (
         <div className={`safety-probe-box ${lastProbe.passed ? "ok" : "fail"}`} role="status" aria-live="polite">
           <div className="safety-probe-summary">
             <Icon name={lastProbe.passed ? "check" : "alert"} size={13} />
-            <span>{lastProbe.summary || (lastProbe.passed ? "只读自检通过" : "只读自检未通过")}</span>
+            <span>{lastProbe.summary || (lastProbe.passed ? "账号状态检测通过" : "账号状态检测未通过")}</span>
             {lastProbe.at && <small>{absoluteTime(lastProbe.at)}</small>}
           </div>
           {checks.length > 0 && (

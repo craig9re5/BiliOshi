@@ -43,7 +43,7 @@ def _read_cached_json(path, default=None):
                 _READ_CACHE.clear()
             _READ_CACHE[key] = (new_sig, value)
     return value
-from .policies import DANMAKU_SESSION_ATTEMPT_LIMIT, LIVE_LIKE_BATCHES
+from .policies import COIN_DAILY_ATTEMPT_LIMIT, DANMAKU_SESSION_ATTEMPT_LIMIT, LIVE_LIKE_BATCHES
 from .redaction import redact
 
 RATE_COOLDOWN = 300
@@ -69,7 +69,7 @@ KIND_LABELS = {
     "review": "安全验证 / 风控拦截",
     "permission": "权限或禁言限制",
     "rate": "请求频率限制",
-    "edge_limit": "边缘网关限流",
+    "edge_limit": "短时访问限制",
     "uncertain": "操作结果待核验",
     "auth": "登录凭证失效",
     "credentials": "本机凭证异常",
@@ -78,8 +78,11 @@ KIND_LABELS = {
 OPERATION_LABELS = {
     "danmaku": "发送弹幕",
     "like": "直播点赞",
-    "heartbeat": "观看心跳",
-    "other": "接口请求",
+    "heartbeat": "观看状态同步",
+    "coin": "视频投币",
+    "share": "视频分享",
+    "watch": "视频观看",
+    "other": "账号操作",
 }
 HEARTBEAT_PATHS = {
     "/xlive/data-interface/v1/x25Kn/E",
@@ -150,7 +153,7 @@ def describe_hold(hold, members=None):
         steps = [
             f"打开{room_desc or '任意已关注的 B 站直播间'}，确认网页端登录正常且能正常加载直播画面。",
             "在直播间尝试手动发送 1 条弹幕或点赞，观察是否弹出滑块/安全验证并完成验证。",
-            "若近期切换过网络/代理或同时挂机多个直播间，建议等待 15 分钟冷却后再点下方「检测并自动恢复」。",
+            "若近期切换过网络环境或同时挂机多个直播间，建议等待 15 分钟冷却后再点下方「检测并自动恢复」。",
         ]
         action_url = f"https://live.bilibili.com/{room_id}" if room_id else "https://live.bilibili.com/"
         action_label = "打开触发直播间" if room_id else "打开 B 站直播"
@@ -165,12 +168,12 @@ def describe_hold(hold, members=None):
     elif kind in ("rate", "edge_limit"):
         steps = [
             (
-                "此状态属于短时限流保护，已仅暂停自动弹幕与点赞，各直播间看播心跳与亲密度正常继续。"
+                "当前互动触发了短时访问限制，已仅暂停自动弹幕与点赞，各直播间挂机看播正常继续。"
                 if interaction_only
-                else "此状态属于平台短时限流保护，通常无需去 B 站做额外操作。"
+                else "当前操作触发了平台短时访问限制，通常无需在 B 站做额外操作。"
             ),
             "等待下方倒计时结束后，程序会自动恢复正常任务。",
-            "如频繁触发限流，可适当减少同时开启自动弹幕与点赞的房间或账号数量。",
+            "如频繁出现限制，可适当减少同时开启自动弹幕与点赞的房间或账号数量。",
         ]
         action_url = "https://live.bilibili.com/"
         action_label = "打开 B 站直播"
@@ -178,24 +181,24 @@ def describe_hold(hold, members=None):
         steps = [
             (
                 f"刚才在{room_desc or '直播间'}执行「{op_label or '互动操作'}」时遇到网络超时或服务端异常，"
-                + ("已仅暂停重复发送互动，看播心跳正常继续。" if interaction_only else "为避免重复发送已暂时停机。")
+                + ("已仅暂停重复发送互动，看播正常继续。" if interaction_only else "为避免重复执行已暂时停机。")
             ),
-            "可打开直播间或粉丝团任务面板，确认今日弹幕/点赞计数是否已实际到账。",
-            "程序会在约 1 分钟后自动做只读复检并进入低速试探恢复；也可直接点击下方「检测并自动恢复」。",
+            "可打开直播间或粉丝团任务面板，确认今日任务进度是否已实际到账。",
+            "程序会在约 1 分钟后自动检测状态并进入试探恢复；也可直接点击下方「检测并自动恢复」。",
         ]
         action_url = f"https://live.bilibili.com/{room_id}" if room_id else "https://live.bilibili.com/"
         action_label = "打开触发直播间" if room_id else "打开 B 站直播"
     elif kind in ("auth", "credentials"):
         steps = [
-            "当前 B 站登录 Cookie 已过期、在网页端退出登录或本机凭证无法解密。",
-            "请直接点击下方「重新扫码登录」，使用哔哩哔哩手机客户端扫码更新凭证即可恢复。",
+            "当前 B 站登录状态已失效或需要重新授权。",
+            "请直接点击下方「重新扫码登录」，使用哔哩哔哩手机客户端扫码即可恢复。",
         ]
         action_url = "https://live.bilibili.com/"
         action_label = "打开 B 站直播"
     else:
         steps = [
             "检测到连续网络请求失败，程序已进入短暂冷却以保护账号。",
-            "请确认本机网络或分流连接畅通，冷却结束后将自动恢复巡检。",
+            "请确认本机网络连接畅通，冷却结束后将自动恢复。",
         ]
         action_url = "https://live.bilibili.com/"
         action_label = "打开 B 站直播"
@@ -204,9 +207,9 @@ def describe_hold(hold, members=None):
         "kind_label": KIND_LABELS.get(kind, "账号保护暂停"),
         "scope": scope,
         "scope_label": (
-            "仅暂停弹幕/点赞互动 · 看播心跳正常继续"
+            "仅暂停弹幕/点赞互动 · 挂机看播正常继续"
             if interaction_only
-            else "全账号暂停（含看播连接与互动）"
+            else "全账号暂停（含挂机看播与日常操作）"
         ),
         "operation_label": op_label,
         "room_id": room_id,
@@ -393,9 +396,10 @@ def classify(response):
             "频率限制",
             "请求过快",
             "发言过快",
+            "msg in 1s",
         )
     ):
-        return "rate", "收到频率限制，账号操作已冷却", RATE_COOLDOWN
+        return "rate", "触发操作频率限制，账号操作已冷却", RATE_COOLDOWN
     if code in (403, -403) or any(
         word in message
         for word in ("禁言", "权限不足", "封禁", "黑名单", "等级不足", "仅粉丝")
@@ -407,7 +411,7 @@ def classify(response):
         and response.get("bili_code") not in (-352, -412)
         and not any(word in message for word in ("验证码", "安全验证", "风控"))
     ):
-        return "edge_limit", "触发边缘网关短时限流（HTTP 412），已进入短暂冷却", EDGE_LIMIT_COOLDOWN
+        return "edge_limit", "触发平台短时访问限制，已进入短暂冷却", EDGE_LIMIT_COOLDOWN
     if code in (412, -412, -352) or any(word in message for word in ("验证码", "安全验证", "风控")):
         return "review", "收到验证或异常拒绝，请在平台检查后手动恢复", None
     return None
@@ -726,6 +730,12 @@ def operation(url, data, method):
         kind = "like"
     elif parsed.path in HEARTBEAT_PATHS:
         kind = "heartbeat"
+    elif parsed.path == "/x/web-interface/coin/add":
+        kind = "coin"
+    elif parsed.path == "/x/web-interface/share/add":
+        kind = "share"
+    elif parsed.path == "/x/click-interface/web/heartbeat":
+        kind = "watch"
     else:
         kind = "other"
     return {"path": parsed.path, "room": room, "kind": kind, "method": method}
@@ -739,14 +749,20 @@ def reserve(sessdata, op):
     hold = status(sessdata)
     if hold["blocked"] and not (is_interaction_only(hold) and is_watch_operation(op, mutation=True)):
         return blocked_response(hold)
-    if op["kind"] not in ("danmaku", "like"):
+    if op["kind"] not in ("danmaku", "like", "coin"):
         return None
-    if op.get("room"):
+    if op["kind"] in ("danmaku", "like") and op.get("room"):
         room_hold = room_capability_blocked(sessdata, op["room"], op["kind"])
         if room_hold:
             return blocked_response({**room_hold, "kind": "room_permission"})
-    counter = f"{task_day()}:{op['room']}:{op['kind']}"
-    limit = DANMAKU_SESSION_ATTEMPT_LIMIT if op["kind"] == "danmaku" else LIVE_LIKE_BATCHES * 3
+    scope_key = "main" if op["kind"] == "coin" else op.get("room", "")
+    counter = f"{task_day()}:{scope_key}:{op['kind']}"
+    if op["kind"] == "danmaku":
+        limit = DANMAKU_SESSION_ATTEMPT_LIMIT
+    elif op["kind"] == "like":
+        limit = LIVE_LIKE_BATCHES * 3
+    else:
+        limit = COIN_DAILY_ATTEMPT_LIMIT
     allowed = [False]
 
     def change(current):
@@ -764,7 +780,8 @@ def reserve(sessdata, op):
 
     update_json(_path(key), change, {})
     if not allowed[0]:
-        return blocked_response({"kind": "budget", "reason": "今日该房间操作尝试已达上限"})
+        reason = "今日投币请求次数已达上限" if op["kind"] == "coin" else "今日该房间操作尝试已达上限"
+        return blocked_response({"kind": "budget", "reason": reason})
     return None
 
 
@@ -792,7 +809,7 @@ def observe(sessdata, url, response, *, mutation=False, op=None):
             # Keep a single IO attempt. After cooldown, workers establish a new E chain;
             # replaying an X payload could reuse stale sequence/timestamp state.
             hold_account(
-                sessdata, "network", "心跳连接异常，冷却后自动重建会话",
+                sessdata, "network", "看播连接异常，冷却后自动重连",
                 code=response.get("code"), seconds=NETWORK_COOLDOWN, operation=op,
                 raw_message=raw_msg,
             )
@@ -828,9 +845,9 @@ def observe(sessdata, url, response, *, mutation=False, op=None):
             )
             return
         if kind == "rate" and op_info.get("kind") in INTERACTION_OPS:
-            reason = "收到频率限制，互动操作已冷却（看播连接正常继续）"
+            reason = "收到频率限制，互动操作已冷却（看播正常继续）"
         elif kind == "edge_limit" and op_info.get("kind") in INTERACTION_OPS:
-            reason = "触发边缘网关短时限流（HTTP 412），互动已冷却（看播连接正常继续）"
+            reason = "触发平台短时访问限制，互动操作已冷却（看播正常继续）"
         if kind in ("rate", "edge_limit") and response.get("retry_after"):
             delay = max(delay, response["retry_after"])
         hold_account(sessdata, kind, reason, code=response.get("code"), seconds=delay,
@@ -923,7 +940,7 @@ def auto_resume(sessdata, checks, *, summary="", root=None):
             "checks": list(checks or []),
         },
     )
-    return True, "只读复检通过，保护暂停已自动解除；进入低速试探观察期，当天预算保留"
+    return True, "状态检测通过，保护暂停已自动解除；进入低速试探观察期，当天额度保留"
 
 
 def resume(sessdata, *, confirmed=False, root=None):

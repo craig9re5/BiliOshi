@@ -177,6 +177,14 @@ class SettingsPanel(tk.Frame):
                 "run_mode": run_mode,
                 "check_minutes": profile_for(run_mode).check_minutes,
             }
+            for key, attr in (
+                ("auto_wear", "var_auto_wear"),
+                ("auto_daily_exp", "var_auto_daily_exp"),
+                ("do_coin", "var_do_coin"),
+            ):
+                var = getattr(self, attr, None)
+                if var is not None:
+                    changes[key] = bool(var.get())
         def change(settings):
             settings = {**settings, **changes}
             settings.pop("danmaku", None)

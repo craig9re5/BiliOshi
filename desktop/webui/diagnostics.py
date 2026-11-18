@@ -253,8 +253,12 @@ class _DiagnosticSession:
     def _verify_settings_and_theme(self) -> None:
         eval_js = self.host._window.evaluate_js
         settings_path = self.first_root / "settings.json"
+        self.click('button[aria-label="每日签到"]')
+        self.wait("document.querySelector('.chrome-title')?.textContent === '每日签到'")
+        self.check("daily check-in tasks rendered", eval_js("document.querySelectorAll('.daily-task').length === 4"))
         self.click('button[aria-label="设置"]')
         self.wait("document.querySelector('.chrome-title')?.textContent === '设置'")
+        self.check("developer settings collapsed by default", eval_js("!document.querySelector('.settings-dev')?.open"))
         self.click('[role="switch"][aria-label="直播点赞"]')
         self.wait("document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]')?.getAttribute('aria-checked') === 'true'")
         self.wait("!document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]').disabled")
@@ -297,7 +301,7 @@ class _DiagnosticSession:
 
     def _verify_account_page_and_qr(self) -> None:
         eval_js = self.host._window.evaluate_js
-        self.click('button[aria-label="账号"]')
+        self.click('button[aria-label="账号管理"]')
         self.wait("document.querySelector('.chrome-title')?.textContent === '账号'")
         self.check("account rendered", "示例账号" in eval_js("document.body.innerText"))
         self.check("both accounts listed", eval_js("document.querySelectorAll('.account-item').length === 2"))

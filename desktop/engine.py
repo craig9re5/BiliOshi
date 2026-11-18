@@ -82,6 +82,14 @@ class Engine:
         status = read_status(root)
         self.medals = status.get("medals", {})
         self.tasks = status.get("tasks", {})
+        self.daily_lock = threading.Lock()
+        self.daily_running = False
+        self.daily_thread = None
+        self.daily = {}
+        self.profile = {}
+        self.auto_daily_attempted_day = ""
+        self._probe_verified_for_daily = False
+        self._load_daily_cache()
         self.known_live = set()
         self.notify_callback = None
         self._config_files_sig = None
@@ -197,6 +205,12 @@ class Engine:
                 clear_account_profile(self.root)
                 self.medals, self.tasks, self.statuses = ({}, {}, {})
                 self.status_times, self.status_errors, self.task_errors = ({}, {}, {})
+                self.daily = {}
+                self.profile = {}
+                self.auto_daily_attempted_day = ""
+                self._probe_verified_for_daily = False
+            elif config.get("do_coin") and not self.config.get("do_coin"):
+                self.auto_daily_attempted_day = ""
             keep = {m["room"] for m in members}
             self.manual_reconnects = {room: request for room, request in self.manual_reconnects.items() if room in keep}
             self.worker_retries = {room: retry for room, retry in self.worker_retries.items() if room in keep}
@@ -562,9 +576,133 @@ class Engine:
             self.persist(exited=True)
         if self.thread.is_alive():
             self.thread.join(timeout=5)
+        daily_thread = getattr(self, "daily_thread", None)
+        if daily_thread is not None and daily_thread.is_alive():
+            daily_thread.join(timeout=5)
         # This runs in the control executor, not Tk. Finish any accepted IO before exit.
         if self.notifications is not None:
             self.notifications.join(timeout=5)
+
+    def _load_daily_cache(self):
+        try:
+            saved = read_json(self.root / "state" / "daily-exp.json", {})
+        except (OSError, ValueError):
+            saved = {}
+        if isinstance(saved, dict):
+            self.daily = saved
+            user = saved.get("user")
+            if isinstance(user, dict):
+                self.profile = dict(user)
+
+    def _daily_needs_run(self, today):
+        if not self.config.get("auto_daily_exp", True):
+            return False
+        if not isinstance(self.daily, dict) or self.daily.get("day") != today or not self.daily.get("ok"):
+            return True
+        ledger = self.daily.get("ledger") or {}
+        if not isinstance(ledger, dict):
+            return True
+        if not (ledger.get("login") and ledger.get("watch") and ledger.get("share")):
+            return True
+        if self.config.get("do_coin"):
+            target = max(0, min(5, int(self.config.get("coin_target", 5) or 0)))
+            if int(ledger.get("coins_count") or 0) < target:
+                return True
+        return False
+
+    def _run_daily_worker(self, *, auto=False, only_task=None):
+        try:
+            if auto:
+                with self.lock:
+                    cfg = dict(self.config)
+                    members = list(self.members)
+                    if self.suspended or self.paused or self.stopping.is_set() or blocks_watch(self.safety):
+                        return None
+                res = self.application.run_daily(
+                    do_coin=bool(cfg.get("do_coin", False)),
+                    coin_target=max(0, min(5, int(cfg.get("coin_target", 5) or 0))),
+                    prefer_medals=bool(cfg.get("prefer_medals", True)),
+                    coin_with_like=bool(cfg.get("coin_with_like", False)),
+                    members=members,
+                )
+            else:
+                res = self.execute_daily_sync(only_task=only_task)
+            return res
+        except Exception:
+            logging.exception("Daily EXP background execution failed")
+            return None
+        finally:
+            with self.lock:
+                self.daily_running = False
+                if auto:
+                    self._load_daily_cache()
+                    if not self.stopping.is_set() and not self.suspended:
+                        self.persist()
+
+    def _maybe_schedule_daily(self, now):
+        if (
+            self.suspended
+            or self.paused
+            or self.stopping.is_set()
+            or not self._probe_verified_for_daily
+            or blocks_watch(self.safety)
+            or self.daily_running
+            or not self.config.get("auto_daily_exp", True)
+        ):
+            return
+        today = task_day()
+        if self.auto_daily_attempted_day == today:
+            return
+        if not self._daily_needs_run(today):
+            self.auto_daily_attempted_day = today
+            return
+        self.auto_daily_attempted_day = today
+        self.daily_running = True
+        self.daily_thread = threading.Thread(
+            target=self._run_daily_worker,
+            kwargs={"auto": True},
+            name="daily-exp",
+            daemon=True,
+        )
+        self.daily_thread.start()
+
+    def execute_daily_sync(self, *, only_task=None, refresh_only=False):
+        with self.daily_lock:
+            with self.lock:
+                self.daily_running = True
+                cfg = dict(self.config)
+                members = list(self.members)
+            try:
+                do_coin = bool(cfg.get("do_coin", False))
+                coin_target = max(0, min(5, int(cfg.get("coin_target", 5) or 0)))
+                if refresh_only:
+                    res = self.application.daily_status(do_coin=do_coin, coin_target=coin_target)
+                else:
+                    if only_task == "coin":
+                        do_coin = True
+                        if coin_target <= 0:
+                            coin_target = 5
+                    res = self.application.run_daily(
+                        do_coin=do_coin,
+                        coin_target=coin_target,
+                        prefer_medals=bool(cfg.get("prefer_medals", True)),
+                        coin_with_like=bool(cfg.get("coin_with_like", False)),
+                        only_task=only_task,
+                        members=members,
+                    )
+                with self.lock:
+                    if isinstance(res, dict) and "user" in res:
+                        self.profile = dict(res["user"])
+                    if isinstance(res, dict) and ("ledger" in res or "tasks" in res):
+                        self.daily = res
+                    else:
+                        self._load_daily_cache()
+                    self.safety = self.application.safety_status()
+                    self.persist()
+                return res
+            finally:
+                with self.lock:
+                    self.daily_running = False
 
     def _read_room_state(self, room):
         path = self.root / "state" / f"{room}.json"
@@ -824,6 +962,7 @@ class Engine:
                 raise
             self.probe_started = now
             self.next_check = now + self.config["check_minutes"] * 60
+        self._maybe_schedule_daily(now)
 
     def run(self):
         while not self.stopping.is_set():
@@ -851,6 +990,8 @@ class Engine:
         """Apply live statuses, fan medals, growth samples, and task counters from probe."""
         self.account = result.get("account", "")
         self.account_checked_at = now
+        if self.account:
+            self._probe_verified_for_daily = True
         observed = result.get("observed", now)
         received = {str(k): v for k, v in result["statuses"].items()}
         self.status_errors = {}

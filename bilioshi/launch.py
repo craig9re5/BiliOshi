@@ -9,4 +9,6 @@ def watch_arguments(member, policy):
         argv.append("--no-danmaku")
     if policy.get("auto_like", False):
         argv.append("--live-likes")
+    if policy.get("auto_wear") is False:
+        argv.append("--no-wear")
     return argv

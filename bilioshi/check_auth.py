@@ -35,6 +35,65 @@ def _public_uid(value) -> int:
     return 0
 
 
+def parse_nav_profile(data: dict) -> dict:
+    """Extract sanitized public identity, level, EXP and coin fields from /nav data."""
+    name = data.get("uname") or "已登录账号"
+    face = data.get("face")
+    level_info = data.get("level_info") if isinstance(data.get("level_info"), dict) else {}
+    level = int(level_info.get("current_level") or 0)
+    current_exp = int(level_info.get("current_exp") or 0)
+    raw_next = level_info.get("next_exp", 0)
+    is_max_level = level >= 6 or (isinstance(raw_next, str) and raw_next == "--")
+    try:
+        next_exp = 0 if is_max_level else int(raw_next or 0)
+    except (TypeError, ValueError):
+        next_exp = 0
+    try:
+        coins = round(float(data.get("money") or 0), 1)
+    except (TypeError, ValueError):
+        coins = 0.0
+    vip_label = ""
+    if isinstance(data.get("vip_label"), dict):
+        vip_label = str(data["vip_label"].get("text") or "")
+    elif isinstance(data.get("vip"), dict):
+        vip_label = str(((data["vip"].get("label")) or {}).get("text") or "")
+    return {
+        "name": name,
+        "uid": _public_uid(data.get("mid")),
+        "face": face if isinstance(face, str) else "",
+        "level": level,
+        "current_exp": current_exp,
+        "next_exp": next_exp,
+        "is_max_level": is_max_level,
+        "coins": coins,
+        "vip_label": vip_label,
+    }
+
+
+def check_daily_profile(sessdata: str, bili_jct: str) -> Tuple[bool, str, dict]:
+    """Validate credentials and return identity plus account level/EXP/coins."""
+    try:
+        body = request_json(
+            "https://api.bilibili.com/x/web-interface/nav",
+            session_headers(sessdata, bili_jct),
+            timeout=15,
+            auth_probe=True,
+        )
+    except (OSError, ValueError, RuntimeError) as exc:
+        return (False, f"登录状态检查失败: {type(exc).__name__}", {"error_kind": "network"})
+    if body.get("error_kind") == "network":
+        return (False, "网络连接异常，请稍后重试", {"error_kind": "network"})
+    data = body.get("data") or {}
+    if body.get("code") == 0 and data.get("isLogin") is True:
+        profile = parse_nav_profile(data)
+        return (True, profile["name"], profile)
+    return (
+        False,
+        f"{body.get('code', '?')} {body.get('message', '账号未登录')}",
+        {"error_kind": body.get("error_kind", "auth")},
+    )
+
+
 def check_login_profile(sessdata: str, bili_jct: str) -> Tuple[bool, str, dict]:
     """Validate credentials and keep only the public identity fields the UI needs."""
     try:

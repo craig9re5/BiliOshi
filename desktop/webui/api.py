@@ -43,19 +43,22 @@ _SECRET_FIELDS = {
     "access_token", "refresh_token", "secret_key",
 }
 _SETTING_FLAGS = (
-    "auto_revive", "auto_danmaku_intimacy", "auto_like", "notify_on_live", "autostart", "auto_update", "paused",
+    "auto_revive", "auto_danmaku_intimacy", "auto_like", "auto_wear",
+    "auto_daily_exp", "do_coin", "prefer_medals", "coin_with_like",
+    "notify_on_live", "autostart", "auto_update", "paused",
 )
 _PENDING_MESSAGES = {
     "redo": "正在补齐任务", "wear": "正在佩戴粉丝牌", "reconnect": "正在请求重连",
     "remove": "正在移除主播", "settings": "正在保存并应用设置", "pause": "正在调整挂机状态",
     "check": "正在请求检查", "safety": "正在检查账号并解除保护暂停",
-    "safety_check": "正在检测账号风控与会话状态", "logout": "正在退出登录",
+    "safety_check": "正在检测账号状态", "logout": "正在退出登录",
     "account_safety": "正在检查账号并解除保护暂停",
-    "account_safety_check": "正在检测账号风控与会话状态",
+    "account_safety_check": "正在检测账号状态",
     "clear_room_block": "正在解除该直播间互动限制",
     "dismiss_task_error": "正在清除任务提醒",
     "dismiss_watch_warning": "正在清除收益提醒",
     "add": "正在添加主播", "import": "正在导入粉丝牌主播",
+    "run_daily": "正在执行每日签到", "refresh_daily": "正在刷新签到进度",
     "export_diagnostic": "正在导出脱敏诊断包",
     "check_update": "正在检查版本更新",
     "apply_update": "正在重启并安装更新",
@@ -65,7 +68,7 @@ _PENDING_MESSAGES = {
 _ACTIVE_VIEW_ONLY = {
     "add", "import", "resolve", "medals", "check", "pause",
     "safety", "safety_check", "remove", "clear_room_block",
-    "dismiss_task_error", "dismiss_watch_warning",
+    "dismiss_task_error", "dismiss_watch_warning", "run_daily", "refresh_daily",
 }
 
 
@@ -203,6 +206,9 @@ class Api:
             "paused": False,
             "safety": {"blocked": False},
             "rows": [],
+            "daily": {},
+            "daily_running": False,
+            "profile": {},
             "checking": False,
             "error": "",
             "active": False,
@@ -295,6 +301,7 @@ class Api:
     def _read_settings(self, root):
         config, _ = load_config(root)
         value = {key: config.get(key, False) for key in _SETTING_FLAGS}
+        value["coin_target"] = max(0, min(5, int(config.get("coin_target", 5))))
         value["run_mode"] = config.get("run_mode", "stable")
         value["check_minutes"] = profile_for(value["run_mode"]).check_minutes
         value["auto_update"] = load_updater_settings(self._host_root)["auto_update"]
@@ -419,6 +426,7 @@ class Api:
                     settings = self._read_settings(root)
                 except (OSError, ValueError):
                     settings = {key: False for key in _SETTING_FLAGS}
+                    settings["coin_target"] = 5
                     settings["run_mode"] = "stable"
                     settings["check_minutes"] = 5
                 summary = self._host.account_summary(account_id)
@@ -472,6 +480,7 @@ class Api:
             settings = self._read_settings(root)
         except (OSError, ValueError):
             settings = {key: False for key in _SETTING_FLAGS}
+            settings["coin_target"] = 5
             settings["run_mode"] = "stable"
             settings["check_minutes"] = 5
         rows = copy.deepcopy(status.get("rows") or [])
@@ -850,7 +859,7 @@ class Api:
         return self._run(kind, operation, room=room)
 
     def save_settings(self, changes, account_id=None):
-        if not isinstance(changes, dict) or set(changes) - {*_SETTING_FLAGS, "run_mode", "check_minutes"}:
+        if not isinstance(changes, dict) or set(changes) - {*_SETTING_FLAGS, "coin_target", "run_mode", "check_minutes"}:
             return {"ok": False, "error": "设置格式无效，请重新打开设置。"}
         for key in _SETTING_FLAGS:
             if key in changes and type(changes[key]) is not bool:
@@ -871,6 +880,13 @@ class Api:
         if self._store is None and app_autostart is not None:
             # Legacy single-root settings historically stored this flag too.
             payload["autostart"] = app_autostart
+        if "coin_target" in payload:
+            val = payload["coin_target"]
+            if isinstance(val, str) and val.isascii() and val.isdigit():
+                val = int(val)
+            if type(val) is not int or not 0 <= val <= 5:
+                return {"ok": False, "error": "每日投币数需为 0 到 5 之间的整数。"}
+            payload["coin_target"] = val
         if "run_mode" in payload and (
             not isinstance(payload["run_mode"], str) or payload["run_mode"] not in PROFILES
         ):
@@ -1319,29 +1335,96 @@ class Api:
 
     def resolve_member(self, query):
         if not isinstance(query, str) or not query.strip():
-            return {"ok": False, "error": "请输入房间号、短号、UID 或直播间链接。"}
+            return {"ok": False, "error": "请输入房间号、UID、主播昵称或链接。"}
 
         def resolve():
-            info = self._engine.application.resolve(query.strip())
+            res = self._engine.application.resolve_candidates(query.strip())
+            if isinstance(res, dict) and "type" in res:
+                if res["type"] == "found":
+                    return {"ok": True, "member": res["data"]}
+                if res["type"] == "multiple":
+                    return {"ok": True, "candidates": res["data"]}
+                return {"ok": False, "error": res.get("message") or "没有找到对应主播。"}
+            info = res if isinstance(res, dict) else self._engine.application.resolve(query.strip())
             return {"ok": True, "member": info} if info else {
-                "ok": False, "error": "没有找到对应主播，请核对房间号或链接。"}
+                "ok": False, "error": "没有找到对应主播，请核对房间号、昵称或链接。"}
 
         return self._run("resolve", resolve, mutating=False)
 
     def add_member(self, query):
+        if isinstance(query, dict):
+            try:
+                uid = _positive_id(query.get("uid"))
+                room = _positive_id(query.get("room") or query.get("room_id"))
+            except ValueError:
+                return {"ok": False, "error": "所选主播尚未开通直播间，无法添加到直播总览。"}
+            name = str(query.get("name") or f"主播_{uid}").strip()
+            candidate = {"uid": uid, "room": room, "name": name}
+
+            def add_selected():
+                self._engine.application.add_members([candidate])
+                self._ui.apply_settings()
+                self._engine.check_now()
+                return {"ok": True, "member": candidate}
+
+            return self._run("add", add_selected)
+
         if not isinstance(query, str) or not query.strip():
-            return {"ok": False, "error": "请输入房间号、短号、UID 或直播间链接。"}
+            return {"ok": False, "error": "请输入房间号、UID、主播昵称或链接。"}
 
         def add():
             info = self._engine.application.resolve(query.strip())
             if not info:
-                return {"ok": False, "error": "没有找到对应主播，请核对房间号或链接。"}
+                return {"ok": False, "error": "没有找到对应主播，请核对房间号、昵称或链接。"}
             self._engine.application.add_members([info])
             self._ui.apply_settings()
             self._engine.check_now()
             return {"ok": True, "member": info}
 
         return self._run("add", add)
+
+    def refresh_daily(self):
+        def refresh():
+            res = self._engine.execute_daily_sync(refresh_only=True)
+            if not isinstance(res, dict):
+                return {"ok": False, "error": "无法读取今日签到进度，稍后重试。"}
+            ok = bool(res.get("ok"))
+            return {
+                "ok": ok,
+                "daily": res,
+                **({"message": "今日进度已更新"} if ok else {"error": res.get("error") or "读取今日进度失败"}),
+            }
+
+        return self._run("refresh_daily", refresh, mutating=False)
+
+    def run_daily(self, only_task=None):
+        if only_task not in (None, "", "watch", "share", "coin"):
+            return {"ok": False, "error": "未知签到任务类型。"}
+        task = only_task or None
+
+        def execute():
+            res = self._engine.execute_daily_sync(only_task=task, refresh_only=False)
+            if not isinstance(res, dict):
+                return {"ok": False, "error": "每日签到执行失败，稍后重试。"}
+            ok = bool(res.get("ok"))
+            failed = [
+                str(t.get("error") or t.get("message") or "未完成")
+                for t in (res.get("tasks") or [])
+                if isinstance(t, dict) and not t.get("success")
+            ]
+            gain = int(res.get("submitted_gain") or 0)
+            msg = (
+                f"已完成今日签到（本次 +{gain} 经验）"
+                if ok and gain > 0
+                else ("今日经验任务已全部完成" if ok else (failed[0] if failed else (res.get("error") or "部分任务未完成")))
+            )
+            return {
+                "ok": ok,
+                "daily": res,
+                **({"message": msg} if ok else {"error": msg}),
+            }
+
+        return self._run("run_daily", execute)
 
     def _fetch_medals(self):
         signature = _signature(self._root / "credentials.json")

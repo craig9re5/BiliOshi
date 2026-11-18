@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"0841e38ef13ecc9c5b6c7f482912cd5a3321dd0564de27de84c936ffd00dba28","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"b69f8773f04ef8fb5b2024bead908050c3aeef0d09c97552b9707ac54f13f62b"} */
+/* BiliOshi JSX {"code_sha256":"8a856cabcbd501a8aab2557d40c04eaca7ce60acb1a3af66d376576366de172d","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"c9856f5b018ad119328c0b88cec885ea959080676e82362d611b4971ef8f73f9"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -22,6 +22,12 @@ const DEFAULT_SETTINGS = {
   auto_revive: true,
   auto_danmaku_intimacy: true,
   auto_like: false,
+  auto_wear: true,
+  auto_daily_exp: true,
+  do_coin: false,
+  coin_target: 5,
+  prefer_medals: true,
+  coin_with_like: false,
   notify_on_live: true,
   run_mode: "stable",
   check_minutes: 5,
@@ -50,6 +56,10 @@ const applyDocumentDayTheme = value => {
 };
 const EMPTY_SNAPSHOT = {
   rows: [],
+  daily: {},
+  daily_running: false,
+  profile: {},
+  today: "",
   paused: false,
   checking: false,
   error: "",
@@ -114,7 +124,7 @@ const Sidebar = ({
   }, "\u30D3\u30EA\u63A8\u3057"))), /*#__PURE__*/React.createElement("nav", {
     className: "nav",
     "aria-label": "\u4E3B\u5BFC\u822A"
-  }, [["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"], ["account", "user", "账号"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
+  }, [["monitor", "monitor", "直播总览"], ["daily", "sparkles", "每日签到"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"]].map(([key, icon, text]) => /*#__PURE__*/React.createElement("button", {
     type: "button",
     key: key,
     className: "nav-item",
@@ -144,7 +154,8 @@ const Sidebar = ({
     className: "sidebar-account",
     onClick: () => onPage("account"),
     title: "\u8D26\u53F7\u7BA1\u7406",
-    "aria-label": "\u8D26\u53F7\u7BA1\u7406"
+    "aria-label": "\u8D26\u53F7\u7BA1\u7406",
+    "aria-current": page === "account" ? "page" : undefined
   }, /*#__PURE__*/React.createElement("span", {
     className: "sidebar-avatar"
   }, avatar ? /*#__PURE__*/React.createElement("img", {
@@ -161,6 +172,7 @@ const Sidebar = ({
 };
 const pageTitles = {
   monitor: "直播总览",
+  daily: "每日签到",
   growth: "成长记录",
   automation: "设置",
   account: "账号"
@@ -357,6 +369,7 @@ function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [connected, setConnected] = useState(false);
   const [controlBusy, setControlBusy] = useState(false);
+  const [dailyBusy, setDailyBusy] = useState(false);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [busyRoom, setBusyRoom] = useState(null);
   const [pendingSettings, setPendingSettings] = useState(new Set());
@@ -493,7 +506,7 @@ function App() {
             };
           });
         } else if (event.type === "open_login") handlers.current.openQr?.();else if (event.type === "show_page" || event.type === "navigate") {
-          if (["monitor", "growth", "automation", "account"].includes(payload.page)) setPage(payload.page);
+          if (["monitor", "daily", "growth", "automation", "account"].includes(payload.page)) setPage(payload.page);
         } else if (event.type === "add_member") handlers.current.openAdd?.();else if (event.type === "sync_medals") handlers.current.openMedals?.();else if (event.type === "open_diagnostic") handlers.current.openDiagnostics?.();else if (event.type === "toast") toast(payload.message, payload.tone);else if (event.type === "action_result") {
           const text = payload.error || payload.message;
           if (text) toast(text, payload.ok === false ? "warn" : "info");
@@ -710,15 +723,24 @@ function App() {
       if (alive.current) setBusyRoom(roomPending.current.values().next().value ?? null);
     }
   };
-  const setSetting = (key, value) => {
-    settingOverrides.current[key] = value;
-    settingsBatch.current[key] = value;
-    setPendingSettings(current => new Set(current).add(key));
+  const setSettingsBatch = updates => {
+    if (!updates || typeof updates !== "object") return;
+    const keys = Object.keys(updates);
+    if (!keys.length) return;
+    for (const key of keys) {
+      settingOverrides.current[key] = updates[key];
+      settingsBatch.current[key] = updates[key];
+    }
+    setPendingSettings(current => {
+      const next = new Set(current);
+      for (const k of keys) next.add(k);
+      return next;
+    });
     setSnap(current => ({
       ...current,
       settings: {
         ...current.settings,
-        [key]: value
+        ...updates
       }
     }));
     window.clearTimeout(settingsTimer.current);
@@ -727,25 +749,48 @@ function App() {
       const payload = {
         ...settingsBatch.current
       };
-      const keys = Object.keys(payload);
+      const flushedKeys = Object.keys(payload);
       settingsBatch.current = {};
-      if (!keys.length) return;
+      if (!flushedKeys.length) return;
       settingsQueue.current = settingsQueue.current.catch(() => {}).then(async () => {
         try {
           await invoke("save_settings", [payload, targetAccount]);
-          for (const k of keys) delete settingOverrides.current[k];
+          for (const k of flushedKeys) delete settingOverrides.current[k];
           await refresh();
         } finally {
           if (alive.current) {
             setPendingSettings(current => {
               const next = new Set(current);
-              for (const k of keys) next.delete(k);
+              for (const k of flushedKeys) next.delete(k);
               return next;
             });
           }
         }
       });
     }, 150);
+  };
+  const setSetting = (key, value) => setSettingsBatch({
+    [key]: value
+  });
+  const refreshDaily = async () => {
+    if (dailyBusy || closing) return;
+    setDailyBusy(true);
+    try {
+      await invoke("refresh_daily");
+      await refresh();
+    } finally {
+      if (alive.current) setDailyBusy(false);
+    }
+  };
+  const runDaily = async (onlyTask = null) => {
+    if (dailyBusy || closing) return;
+    setDailyBusy(true);
+    try {
+      await invoke("run_daily", onlyTask ? [onlyTask] : []);
+      await refresh();
+    } finally {
+      if (alive.current) setDailyBusy(false);
+    }
   };
   const closeQr = () => {
     qrOpen.current = false;
@@ -821,16 +866,23 @@ function App() {
       if (generation === searchGeneration.current) setSearching(false);
     }
   };
-  const add = async () => {
-    if (!searchResult?.ok || dialogBusy) return;
+  const add = async (picked = null) => {
+    if (!searchResult?.ok && !picked || dialogBusy) return;
     setDialogBusy(true);
     try {
-      const result = await invoke("add_member", [query.trim()]);
+      const payload = picked && (picked.room || picked.room_id) ? {
+        uid: picked.uid,
+        room: picked.room || picked.room_id,
+        name: picked.name
+      } : query.trim();
+      const result = await invoke("add_member", [payload]);
       if (result?.ok) {
         setDialog(null);
-        toast(`已添加 ${result.member?.name || searchResult.member.name}`);
+        toast(`已添加 ${result.member?.name || picked?.name || searchResult?.member?.name || ""}`);
         await refresh();
-      } else setSearchResult(result);
+      } else {
+        setSearchResult(result);
+      }
     } finally {
       if (alive.current) setDialogBusy(false);
     }
@@ -976,7 +1028,7 @@ function App() {
       if (!alive.current) return;
       const probeResult = {
         passed: Boolean(result?.passed),
-        summary: result?.summary || (result?.passed ? "只读自检通过" : "只读自检未通过"),
+        summary: result?.summary || (result?.passed ? "账号状态检测通过" : "账号状态检测未通过"),
         checks: Array.isArray(result?.checks) ? result.checks : [],
         at: Date.now() / 1000
       };
@@ -986,13 +1038,13 @@ function App() {
       });
       if (result?.resumed || result?.ok && !result?.hold?.blocked) {
         setDialog(null);
-        toast(result?.summary || "只读自检通过，保护暂停已解除", "info");
+        toast(result?.summary || "账号状态检测通过，保护暂停已解除", "info");
         await refresh();
       } else if (result?.hold?.kind === "auth") {
         toast(result?.summary || "登录凭证已失效，请重新扫码登录", "error");
         await refresh();
       } else if (result && result.passed === false) {
-        toast(result.summary || "只读自检未通过", "error");
+        toast(result.summary || "账号状态检测未通过", "error");
         await refresh();
       }
     } catch {
@@ -1288,7 +1340,7 @@ function App() {
     checking: snap.checking,
     controlBusy: controlBusy,
     closing: closing
-  })), /*#__PURE__*/React.createElement(WindowButtons, null)), (page === "monitor" && accounts.length > 0 || (page === "growth" || page === "automation") && accounts.length > 1) && /*#__PURE__*/React.createElement(window.AccountTabs, {
+  })), /*#__PURE__*/React.createElement(WindowButtons, null)), (page === "monitor" && accounts.length > 0 || (page === "daily" || page === "growth" || page === "automation") && accounts.length > 1) && /*#__PURE__*/React.createElement(window.AccountTabs, {
     accounts: accounts,
     activeId: activeId,
     avatars: accountAvatars,
@@ -1328,6 +1380,19 @@ function App() {
     onClearRoomBlock: clearRoomBlock,
     onDismissTaskError: room => dismissRoomNotice("dismiss_task_error", room),
     onDismissWatchWarning: room => dismissRoomNotice("dismiss_watch_warning", room)
+  }), page === "daily" && /*#__PURE__*/React.createElement(window.DailyPage, {
+    daily: viewed.daily,
+    dailyRunning: Boolean(viewed.daily_running),
+    today: viewed.today,
+    settings: snap.settings || DEFAULT_SETTINGS,
+    account: account,
+    profile: viewed.profile,
+    busy: dailyBusy || closing,
+    onRun: runDaily,
+    onRefresh: refreshDaily,
+    onOpenLogin: () => openQr(activeId),
+    onOpenSafety: () => openSafety(),
+    onOpenSettings: () => setPage("automation")
   }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
     viewId: activeId,
     images: images,
@@ -1337,6 +1402,7 @@ function App() {
   }), page === "automation" && /*#__PURE__*/React.createElement(window.SettingsPage, {
     settings: snap.settings || DEFAULT_SETTINGS,
     onSetting: setSetting,
+    onSettingsBatch: setSettingsBatch,
     pendingSettings: pendingSettings,
     theme: theme,
     onTheme: chooseTheme,

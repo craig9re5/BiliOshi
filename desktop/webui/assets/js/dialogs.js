@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"f5696e436e9fdef2362b96f0f65beda97f93a7252a0f00d24a8adb292bc4b9c5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"fc98764353a1e9411743fce9395711bafdba05a16119b05e44eb818ddc4b7e5f"} */
+/* BiliOshi JSX {"code_sha256":"b9992f9a1d8ac098467909f76e80c4917ca9819b0bc0cb5bfb6a4653c4af0f76","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"406b48ffb74167d67e4ee306b132b1ed3af7559e708f6763a422d9fd1146904b"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -123,68 +123,119 @@ const AddMemberModal = ({
   onAdd,
   onClose,
   onSyncMedals
-}) => /*#__PURE__*/React.createElement(Modal, {
-  title: "\u6DFB\u52A0\u4E3B\u64AD",
-  desc: "\u901A\u8FC7\u76F4\u64AD\u95F4\u53F7\u3001UID \u6216\u76F4\u64AD\u95F4\u94FE\u63A5\u67E5\u627E",
-  onClose: onClose,
-  actions: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn",
-    onClick: onClose
-  }, "\u53D6\u6D88"), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn primary",
-    onClick: onAdd,
-    disabled: !result?.ok || loading || adding
-  }, adding ? "正在添加…" : "添加主播"))
-}, /*#__PURE__*/React.createElement("form", {
-  className: "field-row",
-  onSubmit: event => {
-    event.preventDefault();
-    if (loading || adding) return;
-    if (result?.ok) {
-      onAdd();
-      return;
+}) => {
+  const [pickedUid, setPickedUid] = useState(null);
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  useEffect(() => {
+    if (candidates.length) {
+      const firstValid = candidates.find(item => item.room) || candidates[0];
+      setPickedUid(firstValid?.uid || null);
+    } else {
+      setPickedUid(null);
     }
-    if (query.trim()) onSearch();
-  }
-}, /*#__PURE__*/React.createElement("input", {
-  className: "input",
-  value: query,
-  onChange: event => onQuery(event.target.value),
-  "aria-label": "\u76F4\u64AD\u95F4\u53F7\u3001UID \u6216\u94FE\u63A5",
-  placeholder: "\u76F4\u64AD\u95F4\u53F7\u3001UID \u6216\u94FE\u63A5\uFF08\u56DE\u8F66\u67E5\u627E\uFF0C\u518D\u6B21\u56DE\u8F66\u6DFB\u52A0\uFF09",
-  autoFocus: true,
-  disabled: adding
-}), /*#__PURE__*/React.createElement("button", {
-  type: "submit",
-  className: "btn",
-  disabled: loading || adding || !query.trim()
-}, loading ? "查找中…" : "查找")), result?.ok && /*#__PURE__*/React.createElement("div", {
-  className: "member-preview"
-}, /*#__PURE__*/React.createElement("span", {
-  className: "account-avatar"
-}, Array.from(result.member.name || "?")[0]), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-  className: "account-name"
-}, result.member.name), /*#__PURE__*/React.createElement("div", {
-  className: "account-meta"
-}, "\u76F4\u64AD\u95F4 ", result.member.room, " \xB7 UID ", result.member.uid))), result && !result.ok && /*#__PURE__*/React.createElement("div", {
-  className: "field-error",
-  role: "alert"
-}, result.error), onSyncMedals && /*#__PURE__*/React.createElement("div", {
-  className: "field-note",
-  style: {
-    marginTop: "12px",
-    textAlign: "center"
-  }
-}, /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: "link-btn",
-  onClick: () => {
-    onClose();
-    onSyncMedals();
-  }
-}, "\u4ECE\u5DF2\u6709\u7C89\u4E1D\u724C\u6279\u91CF\u540C\u6B65 \u2192")));
+  }, [result]);
+  const picked = candidates.length ? candidates.find(item => item.uid === pickedUid) || null : result?.ok ? result.member : null;
+  const canAdd = Boolean(picked && (picked.room || picked.room_id) && !loading && !adding);
+  const submitAdd = (candidate = null) => {
+    const target = candidate || picked;
+    if (!target || !(target.room || target.room_id) || loading || adding) return;
+    onAdd(candidates.length || candidate ? target : null);
+  };
+  return /*#__PURE__*/React.createElement(Modal, {
+    title: "\u6DFB\u52A0\u4E3B\u64AD",
+    desc: "\u8F93\u5165\u76F4\u64AD\u95F4\u53F7\u3001UID\u3001\u4E3B\u64AD\u6635\u79F0\u6216\u94FE\u63A5\u67E5\u627E",
+    onClose: onClose,
+    wide: candidates.length > 0,
+    actions: /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn",
+      onClick: onClose
+    }, "\u53D6\u6D88"), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn primary",
+      onClick: () => submitAdd(),
+      disabled: !canAdd
+    }, adding ? "正在添加…" : "添加主播"))
+  }, /*#__PURE__*/React.createElement("form", {
+    className: "field-row",
+    onSubmit: event => {
+      event.preventDefault();
+      if (event.nativeEvent?.isComposing || loading || adding) return;
+      if (canAdd && !candidates.length) {
+        submitAdd();
+        return;
+      }
+      if (query.trim()) onSearch();
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "input",
+    value: query,
+    onChange: event => onQuery(event.target.value),
+    "aria-label": "\u76F4\u64AD\u95F4\u53F7\u3001UID\u3001\u4E3B\u64AD\u6635\u79F0\u6216\u94FE\u63A5",
+    placeholder: "\u76F4\u64AD\u95F4\u53F7\u3001UID\u3001\u4E3B\u64AD\u6635\u79F0\u6216\u94FE\u63A5",
+    autoFocus: true,
+    disabled: adding
+  }), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    className: "btn",
+    disabled: loading || adding || !query.trim()
+  }, loading ? "查找中…" : "查找")), result?.ok && result.member && /*#__PURE__*/React.createElement("div", {
+    className: "member-preview"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "account-avatar"
+  }, Array.from(result.member.name || "?")[0]), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "account-name"
+  }, result.member.name), /*#__PURE__*/React.createElement("div", {
+    className: "account-meta"
+  }, "\u76F4\u64AD\u95F4 ", result.member.room, " \xB7 UID ", result.member.uid))), candidates.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "candidate-list",
+    role: "listbox",
+    "aria-label": "\u5339\u914D\u4E3B\u64AD\u5217\u8868"
+  }, candidates.map(item => {
+    const active = item.uid === pickedUid;
+    const hasRoom = Boolean(item.room || item.room_id);
+    return /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      key: item.uid,
+      role: "option",
+      "aria-selected": active,
+      className: `candidate-row ${active ? "selected" : ""} ${!hasRoom ? "no-room" : ""}`,
+      onClick: () => setPickedUid(item.uid),
+      onDoubleClick: () => {
+        if (hasRoom) submitAdd(item);
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "account-avatar small"
+    }, Array.from(item.name || "?")[0]), /*#__PURE__*/React.createElement("span", {
+      className: "candidate-main"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "account-name"
+    }, item.name), /*#__PURE__*/React.createElement("span", {
+      className: "account-meta"
+    }, hasRoom ? `直播间 ${item.room || item.room_id}` : "未开通直播间", " \xB7 \u7C89\u4E1D ", item.fans || "未知")), /*#__PURE__*/React.createElement("span", {
+      className: `pill ${item.live_status === "直播中" ? "live" : "muted"}`
+    }, item.live_status || "待更新"));
+  })), picked && !picked.room && !picked.room_id && /*#__PURE__*/React.createElement("div", {
+    className: "field-error",
+    role: "status"
+  }, "\u8BE5\u7528\u6237\u5C1A\u672A\u5F00\u901A\u76F4\u64AD\u95F4\uFF0C\u8BF7\u9009\u62E9\u5176\u4ED6\u4E3B\u64AD\u3002"), result && !result.ok && /*#__PURE__*/React.createElement("div", {
+    className: "field-error",
+    role: "alert"
+  }, result.error), onSyncMedals && /*#__PURE__*/React.createElement("div", {
+    className: "field-note",
+    style: {
+      marginTop: "12px",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "link-btn",
+    onClick: () => {
+      onClose();
+      onSyncMedals();
+    }
+  }, "\u4ECE\u5DF2\u6709\u7C89\u4E1D\u724C\u6279\u91CF\u540C\u6B65 \u2192")));
+};
 const MedalsModal = ({
   data,
   selected,
@@ -733,13 +784,9 @@ const SafetyModal = ({
     id: "safety-dialog-title"
   }, info.kind_label || "账号保护暂停"), /*#__PURE__*/React.createElement("p", {
     className: "safety-modal-sub"
-  }, account?.name ? `${account.name} · ` : "", info.since ? `触发于 ${absoluteTime(info.since)}` : "已暂停互动操作以保护账号"))), info.code !== undefined && info.code !== null && /*#__PURE__*/React.createElement("span", {
-    className: "version-pill"
-  }, "\u9519\u8BEF\u7801 ", info.code)), /*#__PURE__*/React.createElement("div", {
+  }, account?.name ? `${account.name} · ` : "", info.since ? `触发于 ${absoluteTime(info.since)}` : "已暂停部分操作以保护账号")))), /*#__PURE__*/React.createElement("div", {
     className: "safety-reason-box"
-  }, /*#__PURE__*/React.createElement("strong", null, info.reason || "检测到平台安全验证或操作受限，已暂停自动化操作。"), info.raw_message && info.raw_message !== info.reason && /*#__PURE__*/React.createElement("div", {
-    className: "safety-raw-msg"
-  }, "\u5E73\u53F0\u8FD4\u56DE\uFF1A", info.raw_message)), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("strong", null, info.reason || "检测到平台验证或操作受限，已暂停自动化操作。")), /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-grid"
   }, info.scope_label && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
@@ -749,17 +796,21 @@ const SafetyModal = ({
     className: "safety-meta-item"
   }, /*#__PURE__*/React.createElement("span", null, "\u81EA\u52A8\u6062\u590D\u65F6\u95F4"), /*#__PURE__*/React.createElement("strong", null, absoluteTime(info.until), "\uFF08", formatCountdown(info.until, nowSec), "\uFF09")), !cooldown && info.next_probe_at && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
-  }, /*#__PURE__*/React.createElement("span", null, "\u4E0B\u6B21\u81EA\u52A8\u590D\u68C0"), /*#__PURE__*/React.createElement("strong", null, absoluteTime(info.next_probe_at), "\uFF08", formatCountdown(info.next_probe_at, nowSec), "\uFF09", typeof info.auto_recover_remaining === "number" && ` · 今日自动恢复剩余 ${info.auto_recover_remaining} 次`)), info.pace_multiplier > 1 && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u4E0B\u6B21\u81EA\u52A8\u68C0\u6D4B"), /*#__PURE__*/React.createElement("strong", null, absoluteTime(info.next_probe_at), "\uFF08", formatCountdown(info.next_probe_at, nowSec), "\uFF09", typeof info.auto_recover_remaining === "number" && ` · 今日自动恢复剩余 ${info.auto_recover_remaining} 次`)), info.pace_multiplier > 1 && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
-  }, /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5\u9632\u98CE\u63A7\u964D\u9891"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u81EA\u52A8\u653E\u6162\u81F3 ", info.pace_multiplier, "\xD7 \u4E92\u52A8\u53D1\u9001\u95F4\u9694", info.probation_until > nowSec ? `（观察期剩余 ${formatCountdown(info.probation_until, nowSec).replace("后", "")}）` : "")), !cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5\u4FDD\u62A4\u964D\u901F"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u81EA\u52A8\u653E\u6162\u81F3 ", info.pace_multiplier, "\xD7 \u4E92\u52A8\u53D1\u9001\u95F4\u9694", info.probation_until > nowSec ? `（观察期剩余 ${formatCountdown(info.probation_until, nowSec).replace("后", "")}）` : "")), !cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
-  }, /*#__PURE__*/React.createElement("span", null, "\u81EA\u52A8\u590D\u68C0\u72B6\u6001"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u8FBE\u672C\u8F6E\u81EA\u52A8\u590D\u68C0\u6216\u4ECA\u65E5\u6062\u590D\u4E0A\u9650\uFF0C\u8BF7\u4EBA\u5DE5\u786E\u8BA4\u540E\u6062\u590D"))), steps.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u81EA\u52A8\u68C0\u6D4B\u72B6\u6001"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u8FBE\u672C\u8F6E\u81EA\u52A8\u68C0\u6D4B\u6216\u4ECA\u65E5\u6062\u590D\u4E0A\u9650\uFF0C\u8BF7\u4EBA\u5DE5\u786E\u8BA4\u540E\u6062\u590D"))), steps.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "safety-steps"
   }, /*#__PURE__*/React.createElement("div", {
     className: "safety-section-label"
   }, "\u6392\u67E5\u4E0E\u5904\u7406\u6B65\u9AA4"), /*#__PURE__*/React.createElement("ol", null, steps.map((step, index) => /*#__PURE__*/React.createElement("li", {
     key: index
-  }, step)))), lastProbe && /*#__PURE__*/React.createElement("div", {
+  }, step)))), (info.code !== undefined && info.code !== null || info.raw_message && info.raw_message !== info.reason) && /*#__PURE__*/React.createElement("details", {
+    className: "safety-tech"
+  }, /*#__PURE__*/React.createElement("summary", null, "\u66F4\u591A\u6392\u67E5\u7EC6\u8282\uFF08\u53CD\u9988\u95EE\u9898\u65F6\u53EF\u67E5\u770B\uFF09"), /*#__PURE__*/React.createElement("div", {
+    className: "safety-tech-body"
+  }, info.code !== undefined && info.code !== null && /*#__PURE__*/React.createElement("div", null, "\u8FD4\u56DE\u4EE3\u7801\uFF1A", info.code), info.raw_message && info.raw_message !== info.reason && /*#__PURE__*/React.createElement("div", null, "\u5E73\u53F0\u8FD4\u56DE\uFF1A", info.raw_message))), lastProbe && /*#__PURE__*/React.createElement("div", {
     className: `safety-probe-box ${lastProbe.passed ? "ok" : "fail"}`,
     role: "status",
     "aria-live": "polite"
@@ -768,7 +819,7 @@ const SafetyModal = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: lastProbe.passed ? "check" : "alert",
     size: 13
-  }), /*#__PURE__*/React.createElement("span", null, lastProbe.summary || (lastProbe.passed ? "只读自检通过" : "只读自检未通过")), lastProbe.at && /*#__PURE__*/React.createElement("small", null, absoluteTime(lastProbe.at))), checks.length > 0 && /*#__PURE__*/React.createElement("ul", {
+  }), /*#__PURE__*/React.createElement("span", null, lastProbe.summary || (lastProbe.passed ? "账号状态检测通过" : "账号状态检测未通过")), lastProbe.at && /*#__PURE__*/React.createElement("small", null, absoluteTime(lastProbe.at))), checks.length > 0 && /*#__PURE__*/React.createElement("ul", {
     className: "safety-probe-checks"
   }, checks.map((item, idx) => /*#__PURE__*/React.createElement("li", {
     key: idx,

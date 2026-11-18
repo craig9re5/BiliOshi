@@ -154,53 +154,106 @@ const ThemeOptions = ({
 );
 
 const SettingsPage = ({
-  settings, onSetting, pendingSettings, theme = "system", onTheme, dayTheme = "white", onDayTheme,
+  settings, onSetting, onSettingsBatch, pendingSettings, theme = "system", onTheme, dayTheme = "white", onDayTheme,
   scope, onLogs, onHostLogs, onDiagnostics, version, update, onCheckUpdate, onApplyUpdate, updateBusy
 }) => {
   const systemDark = useSystemDark();
   const disabled = (key) => pendingSettings.has(key);
   const runMode = settings.run_mode || "stable";
+  const coinEnabled = Boolean(settings.do_coin);
+  const coinTarget = coinEnabled ? Math.max(1, Math.min(5, Number(settings.coin_target ?? 5))) : 0;
   const dayThemeName = (DAY_THEME_CHOICES.find((item) => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
   const accountScopeLabel = scope?.name ? `当前账号 · ${scope.name}` : "当前账号生效";
   const updateState = update?.status || "idle";
   const updateChecking = Boolean(updateBusy || ["checking", "downloading", "verifying", "applying"].includes(updateState));
   const updateDesc = updateState === "checking"
-    ? "正在检查 GitHub 最新发行版…"
+    ? "正在检查最新版本…"
     : updateState === "downloading"
-      ? `正在后台下载 v${update?.latest_version || ""}…`
+      ? `正在下载新版本 v${update?.latest_version || ""}…`
       : updateState === "verifying"
-        ? `正在离线预检 v${update?.latest_version || ""}…`
+        ? `正在校验新版本 v${update?.latest_version || ""}…`
         : updateState === "applying"
-          ? "正在重启并完成安装…"
+          ? "正在重启并安装更新…"
           : updateState === "ready"
             ? (update?.waiting_reason
               ? `新版本 v${update.ready_version} 已就绪 · ${update.waiting_reason}`
-              : `新版本 v${update?.ready_version || ""} 已下载校验就绪`)
+              : `新版本 v${update?.ready_version || ""} 已下载就绪`)
             : updateState === "update_available"
-              ? (update?.self_update_reason
-                ? `发现新版本 v${update.latest_version}（${update.self_update_reason}）`
-                : `发现新版本 v${update?.latest_version || ""}`)
+              ? `发现新版本 v${update?.latest_version || ""}`
               : updateState === "up_to_date"
                 ? (update?.last_checked_at
                   ? `当前已是最新版本 · 上次检查 ${relativeTime(update.last_checked_at)}`
                   : "当前已是最新版本")
                 : updateState === "error" && update?.error
                   ? update.error
-                  : "提交问题反馈时建议附带版本号与脱敏诊断包";
+                  : "检查新版本或自动保持最新";
+
+  const changeAutoCoin = (nextCount) => {
+    const count = Number(nextCount) || 0;
+    if (typeof onSettingsBatch === "function") {
+      if (count <= 0) onSettingsBatch({ do_coin: false });
+      else onSettingsBatch({ do_coin: true, coin_target: count });
+      return;
+    }
+    if (count <= 0) onSetting("do_coin", false);
+    else {
+      onSetting("do_coin", true);
+      onSetting("coin_target", count);
+    }
+  };
+
   return (<>
     <div className="settings" data-screen-label="设置"><div className="settings-inner">
       <section className="group card">
         <header className="group-head group-head-meta">
-          <span>每日任务</span>
+          <span>每日签到</span>
           <span className="scope-tag">{accountScopeLabel}</span>
         </header>
-        <SettingRow name="点亮粉丝牌" desc="牌子熄灭时发送弹幕重新点亮">
+        <SettingRow name="自动完成日常经验" desc="每日自动领取登录、观看与分享经验">
+          <Switch label="自动完成日常经验" checked={settings.auto_daily_exp !== false} disabled={disabled("auto_daily_exp")}
+            onChange={(value) => onSetting("auto_daily_exp", value)} />
+        </SettingRow>
+        <SettingRow name="每日自动投币" desc="默认关闭以保护硬币，开启后按每日上限自动补齐">
+          <Choice label="每日自动投币" value={coinTarget} disabled={disabled("do_coin") || disabled("coin_target")}
+            options={[
+              { value: 0, label: "关闭" },
+              { value: 1, label: "1 枚" },
+              { value: 2, label: "2 枚" },
+              { value: 3, label: "3 枚" },
+              { value: 4, label: "4 枚" },
+              { value: 5, label: "5 枚" },
+            ]}
+            onChange={changeAutoCoin} />
+        </SettingRow>
+        {coinTarget > 0 && (
+          <>
+            <SettingRow className="setting-sub" name="优先投给关注主播" desc="优先从当前关注列表和粉丝牌主播的投稿中挑选视频">
+              <Switch label="优先投给关注主播" checked={settings.prefer_medals !== false} disabled={disabled("prefer_medals")}
+                onChange={(value) => onSetting("prefer_medals", value)} />
+            </SettingRow>
+            <SettingRow className="setting-sub" name="投币时同时点赞" desc="每次投币时顺便为该视频点赞">
+              <Switch label="投币时同时点赞" checked={Boolean(settings.coin_with_like)} disabled={disabled("coin_with_like")}
+                onChange={(value) => onSetting("coin_with_like", value)} />
+            </SettingRow>
+          </>
+        )}
+      </section>
+      <section className="group card">
+        <header className="group-head group-head-meta">
+          <span>直播应援</span>
+          <span className="scope-tag">{accountScopeLabel}</span>
+        </header>
+        <SettingRow name="点亮粉丝牌" desc="仅在主播开播时发送弹幕重新点亮熄灭的牌子">
           <Switch label="点亮粉丝牌" checked={settings.auto_revive} disabled={disabled("auto_revive")}
             onChange={(value) => onSetting("auto_revive", value)} />
         </SettingRow>
-        <SettingRow name="完成弹幕任务" desc="自动补齐每日弹幕亲密度任务">
+        <SettingRow name="完成弹幕任务" desc="仅在主播开播时自动补齐每日弹幕亲密度任务">
           <Switch label="完成弹幕任务" checked={settings.auto_danmaku_intimacy} disabled={disabled("auto_danmaku_intimacy")}
             onChange={(value) => onSetting("auto_danmaku_intimacy", value)} />
+        </SettingRow>
+        <SettingRow name="发弹幕前佩戴粉丝牌" desc="开播执行弹幕任务前自动佩戴对应主播的粉丝牌">
+          <Switch label="发弹幕前佩戴粉丝牌" checked={settings.auto_wear !== false} disabled={disabled("auto_wear")}
+            onChange={(value) => onSetting("auto_wear", value)} />
         </SettingRow>
         <SettingRow name="直播点赞" desc="进入开播直播间后自动完成点赞">
           <Switch label="直播点赞" checked={settings.auto_like} disabled={disabled("auto_like")}
@@ -209,60 +262,19 @@ const SettingsPage = ({
       </section>
       <section className="group card">
         <header className="group-head">运行与启动</header>
-        <SettingRow name="开播通知" desc="当前账号关注的主播开播时弹出系统提醒">
+        <SettingRow name="开播通知" desc="当前账号关注的主播开播时弹出桌面提醒">
           <Switch label="开播通知" checked={settings.notify_on_live} disabled={disabled("notify_on_live")}
             onChange={(value) => onSetting("notify_on_live", value)} />
         </SettingRow>
-        <SettingRow name="开机启动" desc="本机全局生效，登录系统后在托盘静默运行">
+        <SettingRow name="开机启动" desc="本机全局生效，登录后在托盘静默运行">
           <Switch label="开机启动" checked={settings.autostart} disabled={disabled("autostart")}
             onChange={(value) => onSetting("autostart", value)} />
-        </SettingRow>
-        <SettingRow name="自动更新" desc="后台自动下载校验新版，并在无直播挂机时静默安装（本机全局生效）">
-          <Switch label="自动更新" checked={settings.auto_update !== false} disabled={disabled("auto_update")}
-            onChange={(value) => onSetting("auto_update", value)} />
         </SettingRow>
         {ENABLE_RUN_MODE_SWITCH && (
           <SettingRow name="运行模式" desc="稳健模式推荐日常挂机；激进模式检测更频繁（按账号独立保存）">
             <Choice label="运行模式" value={runMode} disabled={disabled("run_mode")}
               options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
               onChange={(value) => onSetting("run_mode", value)} />
-          </SettingRow>
-        )}
-      </section>
-      <section className="group card">
-        <header className="group-head">日志与诊断反馈</header>
-        <SettingRow name="运行日志" desc={scope ? "可分别查看当前账号挂机日志或主程序全局日志" : "打开日志文件所在目录，便于排障"}>
-          <div className="btn-row">
-            <button type="button" className="btn sm" onClick={onLogs}>
-              <Icon name="folder" size={13} />{scope ? "账号日志" : "查看日志"}
-            </button>
-            {scope && onHostLogs && (
-              <button type="button" className="btn sm" onClick={onHostLogs}>
-                <Icon name="folder" size={13} />主程序日志
-              </button>
-            )}
-          </div>
-        </SettingRow>
-        <SettingRow name="一键导出诊断包" desc="打包日志、近期报错与环境摘要，自动移除凭证并默认匿名化身份">
-          <button type="button" className="btn sm primary" onClick={onDiagnostics}>
-            <Icon name="download" size={13} />导出诊断包
-          </button>
-        </SettingRow>
-        {version && (
-          <SettingRow name="版本信息" desc={updateDesc}>
-            <div className="btn-row">
-              <span className="version-pill">v{version}</span>
-              {updateState === "ready" && update?.can_self_update && onApplyUpdate ? (
-                <button type="button" className="btn sm primary" disabled={Boolean(updateBusy || updateState === "applying")}
-                  onClick={onApplyUpdate}>
-                  <Icon name="download" size={13} />立即重启更新
-                </button>
-              ) : onCheckUpdate && (
-                <button type="button" className="btn sm" disabled={updateChecking} onClick={onCheckUpdate}>
-                  <Icon name="refresh" size={13} />检查更新
-                </button>
-              )}
-            </div>
           </SettingRow>
         )}
       </section>
@@ -282,6 +294,53 @@ const SettingsPage = ({
           </SettingRow>
         )}
       </section>
+      <details className="group card settings-dev">
+        <summary className="group-head group-head-meta dev-summary">
+          <span>开发者与诊断</span>
+          <span className="dev-summary-right">
+            <span className="dev-summary-hint">日志 · 诊断包 · 版本更新</span>
+            <Icon name="chevron" size={14} />
+          </span>
+        </summary>
+        <SettingRow name="运行日志" desc={scope ? "可分别查看当前账号日志或主程序全局日志" : "打开日志文件所在目录，便于排障"}>
+          <div className="btn-row">
+            <button type="button" className="btn sm" onClick={onLogs}>
+              <Icon name="folder" size={13} />{scope ? "账号日志" : "查看日志"}
+            </button>
+            {scope && onHostLogs && (
+              <button type="button" className="btn sm" onClick={onHostLogs}>
+                <Icon name="folder" size={13} />主程序日志
+              </button>
+            )}
+          </div>
+        </SettingRow>
+        <SettingRow name="一键导出诊断包" desc="打包日志、近期报错与环境摘要，自动移除登录凭证并默认匿名化">
+          <button type="button" className="btn sm" onClick={onDiagnostics}>
+            <Icon name="download" size={13} />导出诊断包
+          </button>
+        </SettingRow>
+        <SettingRow name="自动更新" desc="后台自动获取新版并在空闲时安装（全局生效）">
+          <Switch label="自动更新" checked={settings.auto_update !== false} disabled={disabled("auto_update")}
+            onChange={(value) => onSetting("auto_update", value)} />
+        </SettingRow>
+        {version && (
+          <SettingRow name="当前版本" desc={updateDesc}>
+            <div className="btn-row">
+              <span className="version-pill">v{version}</span>
+              {updateState === "ready" && update?.can_self_update && onApplyUpdate ? (
+                <button type="button" className="btn sm primary" disabled={Boolean(updateBusy || updateState === "applying")}
+                  onClick={onApplyUpdate}>
+                  <Icon name="download" size={13} />立即重启更新
+                </button>
+              ) : onCheckUpdate && (
+                <button type="button" className="btn sm" disabled={updateChecking} onClick={onCheckUpdate}>
+                  <Icon name="refresh" size={13} />检查更新
+                </button>
+              )}
+            </div>
+          </SettingRow>
+        )}
+      </details>
     </div></div>
   </>);
 };
@@ -414,7 +473,6 @@ const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, maxCon
               <i className={`status-dot ${hold.blocked ? "warn" : "ok"}`} />
               <strong>
                 {hold.blocked ? (hold.kind_label || "保护暂停中") : "状态正常"}
-                {hold.blocked && hold.code !== undefined && hold.code !== null && `（错误码 ${hold.code}）`}
               </strong>
               {hold.blocked && hold.reason && <span className="safety-reason">{hold.reason}</span>}
             </div>
@@ -423,10 +481,10 @@ const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, maxCon
             )}
             {cooldown && <small className="safety-time">最早自动恢复：{absoluteTime(hold.until)}</small>}
             {!cooldown && hold.blocked && hold.next_probe_at && (
-              <small className="safety-time">下次自动复检：{absoluteTime(hold.next_probe_at)}</small>
+              <small className="safety-time">下次自动检测：{absoluteTime(hold.next_probe_at)}</small>
             )}
             {hold.pace_multiplier > 1 && (
-              <small className="safety-time">今日防风控降频保护：互动发送间隔已调整为 {hold.pace_multiplier}×</small>
+              <small className="safety-time">今日保护降速中：互动间隔已放慢至 {hold.pace_multiplier}×</small>
             )}
           </div>
           <div className="safety-actions">
@@ -440,7 +498,7 @@ const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, maxCon
               <>
                 <button type="button" className="btn sm" onClick={() => onResumeSafety()} disabled={busy || checkingSafety}>
                   <Icon name="shield" size={13} />
-                  <span>查看详情与排查</span>
+                  <span>查看详情</span>
                 </button>
                 {!cooldown && onCheckSafety && (
                   <button type="button" className="btn sm primary" onClick={() => onCheckSafety(true)} disabled={busy || checkingSafety}>

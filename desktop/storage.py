@@ -23,9 +23,29 @@ def load_config(root):
     config.setdefault("auto_like", config.get("live_likes", False))
     config.setdefault("notify_on_live", True)
     config.setdefault("autostart", False)
-    for key in ("auto_revive", "auto_danmaku_intimacy", "auto_like", "notify_on_live", "paused"):
+    config.setdefault("auto_daily_exp", True)
+    config.setdefault("do_coin", False)
+    config.setdefault("coin_target", 5)
+    config.setdefault("prefer_medals", True)
+    config.setdefault("coin_with_like", False)
+    config.setdefault("auto_wear", True)
+    for key in (
+        "auto_revive",
+        "auto_danmaku_intimacy",
+        "auto_like",
+        "notify_on_live",
+        "paused",
+        "auto_daily_exp",
+        "do_coin",
+        "prefer_medals",
+        "coin_with_like",
+        "auto_wear",
+    ):
         if key in config and type(config[key]) is not bool:
             raise ValueError(f"{key} 必须为 true 或 false")
+    coin_target = config.get("coin_target", 5)
+    if type(coin_target) is not int or not 0 <= coin_target <= 5:
+        raise ValueError("coin_target 必须为 0–5 的整数")
     config.pop("danmaku", None)
     config.pop("live_likes", None)
     members = load_account_members(root) if (root / ACCOUNT_MARKER).exists() else load_members(root)
@@ -44,6 +64,12 @@ def initialize(root, defaults):
             "auto_revive": True,
             "auto_danmaku_intimacy": True,
             "auto_like": False,
+            "auto_wear": True,
+            "auto_daily_exp": True,
+            "do_coin": False,
+            "coin_target": 5,
+            "prefer_medals": True,
+            "coin_with_like": False,
             "notify_on_live": True,
             "autostart": False,
             "paused": False,

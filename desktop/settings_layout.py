@@ -38,6 +38,33 @@ def build_automation(self, container, config, p):
         lambda r: ToggleSwitch(r, variable=self.var_auto_like, px=p),
         px=p,
     )
+    create_divider(card_auto, px=p)
+    self.var_auto_wear = tk.BooleanVar(value=bool(config.get("auto_wear", True)))
+    create_setting_row(
+        card_auto,
+        "发弹幕前佩戴粉丝牌",
+        "在开播房间发送弹幕前自动佩戴对应粉丝牌",
+        lambda r: ToggleSwitch(r, variable=self.var_auto_wear, px=p),
+        px=p,
+    )
+    create_divider(card_auto, px=p)
+    self.var_auto_daily_exp = tk.BooleanVar(value=bool(config.get("auto_daily_exp", True)))
+    create_setting_row(
+        card_auto,
+        "自动每日经验签到",
+        "每日自动完成登录、观看与分享经验任务",
+        lambda r: ToggleSwitch(r, variable=self.var_auto_daily_exp, px=p),
+        px=p,
+    )
+    create_divider(card_auto, px=p)
+    self.var_do_coin = tk.BooleanVar(value=bool(config.get("do_coin", False)))
+    create_setting_row(
+        card_auto,
+        "每日自动投币",
+        "每日自动投币以获得额外经验（默认关闭）",
+        lambda r: ToggleSwitch(r, variable=self.var_do_coin, px=p),
+        px=p,
+    )
 
 
 def build_system(self, container, config, p):

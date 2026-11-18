@@ -7,6 +7,7 @@ registry is written only after the account files can be read back.
 
 import json
 import logging
+import os
 import re
 import shutil
 import tempfile
@@ -18,12 +19,14 @@ from .accounts import AccountStore, _account_id
 from . import safety
 from .members import validate_members
 from .runtime import (
+    data_dir,
     read_json,
     save_login,
     session_fingerprint,
+    update_json,
     write_json,
 )
-from .secret_store import is_envelope
+from .secret_store import is_envelope, unseal_external
 
 
 _ROOM_STATE = re.compile(r"^[0-9]+\.json$")
@@ -365,6 +368,128 @@ def _migrate_account_data(root, store, uid, profile, sessdata, bili_jct):
     )
 
 
+def _bilicheckin_default_dir():
+    if os.name == "nt":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home())) / "BiliCheckin"
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "bilicheckin"
+
+
+def _read_external_credentials(path):
+    if not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    if raw.get("SESSDATA") and raw.get("bili_jct"):
+        return raw
+    if raw.get("version") == 1 and raw.get("backend"):
+        try:
+            return unseal_external(raw)
+        except RuntimeError:
+            return {}
+    return {}
+
+
+def import_bilicheckin_data(root, store, *, source_root=None):
+    """Copy existing BiliCheckin accounts, streamers and daily settings once without modifying source."""
+    root = Path(root)
+    marker = root / "state" / "bilicheckin-import-v1.json"
+    if marker.exists():
+        return 0
+    if source_root is None:
+        if os.environ.get("BILIOSHI_APP_DATA") or root != data_dir():
+            return 0
+        source_root = _bilicheckin_default_dir()
+    else:
+        source_root = Path(source_root)
+    registry_path = source_root / "state" / "accounts.json"
+    if not source_root.is_dir() or not registry_path.is_file():
+        return 0
+    try:
+        external_reg = json.loads(registry_path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return 0
+    rows = external_reg.get("accounts") if isinstance(external_reg, dict) else None
+    if not isinstance(rows, list):
+        return 0
+
+    imported = 0
+    daily_keys = ("auto_daily_exp", "do_coin", "coin_target", "prefer_medals", "coin_with_like", "auto_wear")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        uid = row.get("uid")
+        if type(uid) is not int or uid <= 0:
+            continue
+        account_id = _account_id(uid)
+        ext_root = source_root / "accounts" / account_id
+        if not ext_root.is_dir():
+            continue
+        existing = store.get(account_id) if store.has(account_id) else None
+        acc_root = store.ensure_root(account_id, uid)
+
+        # 1. Credentials (only copy if target account lacks readable credentials)
+        creds = _read_external_credentials(ext_root / "credentials.json")
+        if not store.has_credentials(account_id) and creds.get("SESSDATA") and creds.get("bili_jct"):
+            opts = {"context": creds["qr_login_context"]} if isinstance(creds.get("qr_login_context"), dict) else {}
+            store.save_credentials(account_id, creds["SESSDATA"], creds["bili_jct"], **opts)
+            try:
+                safety.bind_account(creds["SESSDATA"], uid, acc_root)
+            except (OSError, ValueError, TimeoutError):
+                pass
+            imported += 1
+
+        # 2. Merge streamers without dropping any existing BiliOshi entries
+        ext_members = _safe_members(ext_root / "members.json")
+        if ext_members:
+            def merge_members(current):
+                base = list(current) if isinstance(current, list) else []
+                known = {m.get("room") for m in base if isinstance(m, dict)}
+                for item in ext_members:
+                    if item["room"] not in known:
+                        base.append(item)
+                        known.add(item["room"])
+                return validate_members(base)
+            update_json(acc_root / "members.json", merge_members, [])
+
+        # 3. Copy daily EXP settings for new accounts or fill missing keys
+        ext_settings = _safe_settings(ext_root / "settings.json")
+        if ext_settings:
+            def merge_settings(current):
+                base = dict(current) if isinstance(current, dict) else {}
+                for k in daily_keys:
+                    if k in ext_settings and k not in base:
+                        base[k] = ext_settings[k]
+                return base
+            if any(k in ext_settings for k in daily_keys):
+                update_json(acc_root / "settings.json", merge_settings, {})
+
+        # 4. Copy daily EXP progress snapshot & active safety hold if absent in BiliOshi
+        ext_daily = ext_root / "state" / "daily-exp.json"
+        if ext_daily.is_file() and not (acc_root / "state" / "daily-exp.json").exists():
+            _copy_file(ext_daily, acc_root / "state" / "daily-exp.json")
+        ext_safety = ext_root / "state" / "safety" / f"{account_id}.json"
+        if ext_safety.is_file() and not (acc_root / "state" / "safety" / f"{account_id}.json").exists():
+            _copy_file(ext_safety, acc_root / "state" / "safety" / f"{account_id}.json")
+
+        name = str(row.get("name") or f"账号 {uid}")
+        face = str(row.get("face") or "")
+        if existing is None:
+            store.upsert(uid, name, face)
+            if not store.active_id and store.has_credentials(account_id):
+                store.set_active(account_id)
+                store.set_view(account_id)
+
+    try:
+        write_json(marker, {"version": 1, "imported": imported, "at": int(time.time())})
+    except OSError:
+        logging.warning("Cannot write BiliCheckin import marker")
+    return imported
+
+
 def ensure_account_store(root, *, validator=None):
     """Migrate the legacy root once; return a store or a legacy-mode marker."""
     root = Path(root)
@@ -375,6 +500,10 @@ def ensure_account_store(root, *, validator=None):
         store.load()  # Corrupt primary/backup raises; never scan directories.
         if not store.marker_path.exists():
             _write_marker(store, store.active_id)
+        try:
+            import_bilicheckin_data(root, store)
+        except Exception:
+            logging.exception("Optional BiliCheckin data import failed")
         return MigrationResult(store=store, migrated=False, legacy_mode=False)
 
     # A missing registry after migration must not replay stale legacy data over
@@ -384,7 +513,12 @@ def ensure_account_store(root, *, validator=None):
 
     credentials_path = root / "credentials.json"
     if not credentials_path.exists():
-        return _create_empty_registry(store, root)
+        res = _create_empty_registry(store, root)
+        try:
+            import_bilicheckin_data(root, store)
+        except Exception:
+            logging.exception("Optional BiliCheckin data import failed")
+        return res
 
     # Back up the sealed bytes before unsealing or re-sealing anything. A
     # legacy plaintext file is upgraded by read_json first, so the backup never
@@ -397,7 +531,7 @@ def ensure_account_store(root, *, validator=None):
     if error is not None:
         return error
 
-    return _migrate_account_data(
+    res = _migrate_account_data(
         root,
         store,
         uid,
@@ -405,3 +539,8 @@ def ensure_account_store(root, *, validator=None):
         credentials["SESSDATA"],
         credentials["bili_jct"],
     )
+    try:
+        import_bilicheckin_data(root, store)
+    except Exception:
+        logging.exception("Optional BiliCheckin data import failed")
+    return res

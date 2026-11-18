@@ -180,6 +180,7 @@ def build_parser(_gateway):
     )
     parser.add_argument("--no-revive", action="store_true", help="关闭自动点亮阶段")
     parser.add_argument("--no-intimacy-danmaku", action="store_true", help="关闭每日弹幕亲密度阶段")
+    parser.add_argument("--no-wear", action="store_true", help="开播发弹幕前不自动佩戴对应粉丝牌")
     parser.add_argument(
         "--live-likes",
         action="store_true",
@@ -346,7 +347,7 @@ def watch_member(m, i, live_members, args, statuses, medals, sessdata, bili_jct,
         )
         if lock_file:
             lock_file.write_text(str(os.getpid()))
-        if m["uid"] in medals:
+        if not getattr(args, "no_wear", False) and m["uid"] in medals:
             medal = medals[m["uid"]]
             if _gateway.wear_medal(medal["medal_id"], sessdata, bili_jct):
                 print(f"    🏅 已佩戴 {medal['medal_name']}Lv{medal['level']}", file=sys.stderr)

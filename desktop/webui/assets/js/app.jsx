@@ -2,7 +2,8 @@
 
 const { useState, useEffect, useRef, useCallback } = React;
 const { Icon, Pulse, call, bridgeReady, toRoom, roomSortTier } = window;
-const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false,
+const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false, auto_wear: true,
+  auto_daily_exp: true, do_coin: false, coin_target: 5, prefer_medals: true, coin_with_like: false,
   notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false, auto_update: true };
 const THEME_KEYS = ["system", "white", "paper", "mist", "dark"];
 const DAY_THEME_KEYS = ["white", "paper", "mist"];
@@ -24,7 +25,8 @@ const applyDocumentDayTheme = (value) => {
   document.documentElement.dataset.dayTheme = dayTheme;
   return dayTheme;
 };
-const EMPTY_SNAPSHOT = { rows: [], paused: false, checking: false, error: "", account: "", safety: {},
+const EMPTY_SNAPSHOT = { rows: [], daily: {}, daily_running: false, profile: {}, today: "",
+  paused: false, checking: false, error: "", account: "", safety: {},
   settings: DEFAULT_SETTINGS, update: { status: "idle", auto_update: true, can_self_update: false },
   accountInfo: { signed_in: false, name: "", confirmed: false, safety: {} } };
 
@@ -47,7 +49,7 @@ const Sidebar = ({ page, onPage, account, activeAccount, runningCount = 0, pause
         <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
       </div>}
       <nav className="nav" aria-label="主导航">
-        {[ ["monitor", "monitor", "直播总览"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"], ["account", "user", "账号"] ].map(([key, icon, text]) =>
+        {[ ["monitor", "monitor", "直播总览"], ["daily", "sparkles", "每日签到"], ["growth", "trend", "成长记录"], ["automation", "sliders", "设置"] ].map(([key, icon, text]) =>
           <button type="button" key={key} className="nav-item" aria-current={page === key ? "page" : undefined}
             aria-label={text} title={text} onClick={() => onPage(key)}><Icon name={icon} /><span>{text}</span></button>)}
       </nav>
@@ -57,7 +59,7 @@ const Sidebar = ({ page, onPage, account, activeAccount, runningCount = 0, pause
       </nav>
       <div className="sidebar-foot">
         <button type="button" className="sidebar-account" onClick={() => onPage("account")} title="账号管理"
-          aria-label="账号管理">
+          aria-label="账号管理" aria-current={page === "account" ? "page" : undefined}>
           <span className="sidebar-avatar">{avatar ? <img src={avatar} alt="" /> : Array.from(account.name || "?")[0]}</span>
           <span className="sidebar-account-text">
             <strong>{account.name || (account.signed_in ? "等待验证" : "尚未登录")}</strong>
@@ -72,7 +74,7 @@ const Sidebar = ({ page, onPage, account, activeAccount, runningCount = 0, pause
   );
 };
 
-const pageTitles = { monitor: "直播总览", growth: "成长记录", automation: "设置", account: "账号" };
+const pageTitles = { monitor: "直播总览", daily: "每日签到", growth: "成长记录", automation: "设置", account: "账号" };
 
 const WindowButtons = () => {
   const [maximized, setMaximized] = useState(false);
@@ -175,6 +177,7 @@ function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [connected, setConnected] = useState(false);
   const [controlBusy, setControlBusy] = useState(false);
+  const [dailyBusy, setDailyBusy] = useState(false);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [busyRoom, setBusyRoom] = useState(null);
   const [pendingSettings, setPendingSettings] = useState(new Set());
@@ -278,7 +281,7 @@ function App() {
           });
         } else if (event.type === "open_login") handlers.current.openQr?.();
         else if (event.type === "show_page" || event.type === "navigate") {
-          if (["monitor", "growth", "automation", "account"].includes(payload.page)) setPage(payload.page);
+          if (["monitor", "daily", "growth", "automation", "account"].includes(payload.page)) setPage(payload.page);
         } else if (event.type === "add_member") handlers.current.openAdd?.();
         else if (event.type === "sync_medals") handlers.current.openMedals?.();
         else if (event.type === "open_diagnostic") handlers.current.openDiagnostics?.();
@@ -475,34 +478,61 @@ function App() {
     }
   };
 
-  const setSetting = (key, value) => {
-    settingOverrides.current[key] = value;
-    settingsBatch.current[key] = value;
-    setPendingSettings((current) => new Set(current).add(key));
-    setSnap((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
+  const setSettingsBatch = (updates) => {
+    if (!updates || typeof updates !== "object") return;
+    const keys = Object.keys(updates);
+    if (!keys.length) return;
+    for (const key of keys) {
+      settingOverrides.current[key] = updates[key];
+      settingsBatch.current[key] = updates[key];
+    }
+    setPendingSettings((current) => {
+      const next = new Set(current);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+    setSnap((current) => ({ ...current, settings: { ...current.settings, ...updates } }));
     window.clearTimeout(settingsTimer.current);
     const targetAccount = activeId;
     settingsTimer.current = window.setTimeout(() => {
       const payload = { ...settingsBatch.current };
-      const keys = Object.keys(payload);
+      const flushedKeys = Object.keys(payload);
       settingsBatch.current = {};
-      if (!keys.length) return;
+      if (!flushedKeys.length) return;
       settingsQueue.current = settingsQueue.current.catch(() => {}).then(async () => {
         try {
           await invoke("save_settings", [payload, targetAccount]);
-          for (const k of keys) delete settingOverrides.current[k];
+          for (const k of flushedKeys) delete settingOverrides.current[k];
           await refresh();
         } finally {
           if (alive.current) {
             setPendingSettings((current) => {
               const next = new Set(current);
-              for (const k of keys) next.delete(k);
+              for (const k of flushedKeys) next.delete(k);
               return next;
             });
           }
         }
       });
     }, 150);
+  };
+
+  const setSetting = (key, value) => setSettingsBatch({ [key]: value });
+
+  const refreshDaily = async () => {
+    if (dailyBusy || closing) return;
+    setDailyBusy(true);
+    try { await invoke("refresh_daily"); await refresh(); }
+    finally { if (alive.current) setDailyBusy(false); }
+  };
+
+  const runDaily = async (onlyTask = null) => {
+    if (dailyBusy || closing) return;
+    setDailyBusy(true);
+    try {
+      await invoke("run_daily", onlyTask ? [onlyTask] : []);
+      await refresh();
+    } finally { if (alive.current) setDailyBusy(false); }
   };
 
   const closeQr = () => {
@@ -558,13 +588,21 @@ function App() {
     } finally { if (generation === searchGeneration.current) setSearching(false); }
   };
 
-  const add = async () => {
-    if (!searchResult?.ok || dialogBusy) return;
+  const add = async (picked = null) => {
+    if ((!searchResult?.ok && !picked) || dialogBusy) return;
     setDialogBusy(true);
     try {
-      const result = await invoke("add_member", [query.trim()]);
-      if (result?.ok) { setDialog(null); toast(`已添加 ${result.member?.name || searchResult.member.name}`); await refresh(); }
-      else setSearchResult(result);
+      const payload = picked && (picked.room || picked.room_id)
+        ? { uid: picked.uid, room: picked.room || picked.room_id, name: picked.name }
+        : query.trim();
+      const result = await invoke("add_member", [payload]);
+      if (result?.ok) {
+        setDialog(null);
+        toast(`已添加 ${result.member?.name || picked?.name || searchResult?.member?.name || ""}`);
+        await refresh();
+      } else {
+        setSearchResult(result);
+      }
     } finally { if (alive.current) setDialogBusy(false); }
   };
 
@@ -691,20 +729,20 @@ function App() {
       if (!alive.current) return;
       const probeResult = {
         passed: Boolean(result?.passed),
-        summary: result?.summary || (result?.passed ? "只读自检通过" : "只读自检未通过"),
+        summary: result?.summary || (result?.passed ? "账号状态检测通过" : "账号状态检测未通过"),
         checks: Array.isArray(result?.checks) ? result.checks : [],
         at: Date.now() / 1000,
       };
       setSafetyProbe({ loading: false, result: probeResult });
       if (result?.resumed || (result?.ok && !result?.hold?.blocked)) {
         setDialog(null);
-        toast(result?.summary || "只读自检通过，保护暂停已解除", "info");
+        toast(result?.summary || "账号状态检测通过，保护暂停已解除", "info");
         await refresh();
       } else if (result?.hold?.kind === "auth") {
         toast(result?.summary || "登录凭证已失效，请重新扫码登录", "error");
         await refresh();
       } else if (result && result.passed === false) {
-        toast(result.summary || "只读自检未通过", "error");
+        toast(result.summary || "账号状态检测未通过", "error");
         await refresh();
       }
     } catch {
@@ -928,7 +966,7 @@ function App() {
           <WindowButtons />
         </header>
         {((page === "monitor" && accounts.length > 0)
-          || ((page === "growth" || page === "automation") && accounts.length > 1)) && (
+          || ((page === "daily" || page === "growth" || page === "automation") && accounts.length > 1)) && (
           <window.AccountTabs accounts={accounts} activeId={activeId}
             avatars={accountAvatars} onSelect={switchAccount} onAdd={() => openQr("")} />
         )}
@@ -946,9 +984,19 @@ function App() {
           onBatchRemove={batchRemove} onClearRoomBlock={clearRoomBlock}
           onDismissTaskError={(room) => dismissRoomNotice("dismiss_task_error", room)}
           onDismissWatchWarning={(room) => dismissRoomNotice("dismiss_watch_warning", room)} />}
+        {page === "daily" && <window.DailyPage
+          daily={viewed.daily} dailyRunning={Boolean(viewed.daily_running)} today={viewed.today}
+          settings={snap.settings || DEFAULT_SETTINGS}
+          account={account} profile={viewed.profile}
+          busy={dailyBusy || closing}
+          onRun={runDaily} onRefresh={refreshDaily}
+          onOpenLogin={() => openQr(activeId)}
+          onOpenSafety={() => openSafety()}
+          onOpenSettings={() => setPage("automation")} />}
         {page === "growth" && <window.GrowthPage viewId={activeId} images={images} onNeedAvatar={fetchAvatar}
           onOpenAccount={() => setPage("account")} onOpenMonitor={() => setPage("monitor")} />}
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
+          onSettingsBatch={setSettingsBatch}
           pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme}
           dayTheme={dayTheme} onDayTheme={chooseDayTheme}
           scope={accounts.find((item) => item.id === activeId) || null} scopeAll={false}

@@ -35,3 +35,9 @@ def dynamics():
     from .dynamics import main
 
     return run_cli(main)
+
+
+def daily():
+    from .cli.daily import main
+
+    return run_cli(main)

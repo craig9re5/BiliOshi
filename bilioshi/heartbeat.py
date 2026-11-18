@@ -479,11 +479,29 @@ def get_all_user_medals(sessdata, bili_jct):
     return results
 
 
+def resolve_anchor_candidates(
+    query: str, sessdata: str = "", bili_jct: str = "", *, limit: int = 5
+) -> Dict:
+    """Resolve URL, room_id, short_id, UID, fan-medal or streamer name (single or candidate list)."""
+    from .services.lookup import resolve_anchor
+
+    return resolve_anchor(query, sessdata, bili_jct, limit=limit)
+
+
 def resolve_anchor_info(query: str, sessdata: str = "", bili_jct: str = "") -> Optional[Dict]:
-    """根据输入的房间号、短号、UID 或直播间链接自动解析主播信息"""
-    m = re.search("(\\d+)", str(query).strip())
-    if not m:
+    """根据输入的房间号、短号、UID、昵称或链接自动解析单个主播信息"""
+    text = str(query or "").strip()
+    if not text:
         return None
+    m = re.search("(\\d+)", text)
+    if not m or (not text.isascii() or not text.isdigit()) and "live.bilibili.com" not in text and "space.bilibili.com" not in text:
+        from .services.lookup import resolve_single
+
+        hit = resolve_single(text, sessdata, bili_jct)
+        if hit:
+            return hit
+        if not m:
+            return None
     num = int(m.group(1))
     headers = (
         _make_headers(sessdata, bili_jct)

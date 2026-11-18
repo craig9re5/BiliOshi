@@ -64,7 +64,20 @@ class AppContext:
     def run_watch(self, member, policy):
         return self.call("main", watch_arguments(member, policy)) or 0
 
-    def redo(self, room, uid, task_type="all"):
+    def redo(self, room, uid, task_type="all", *, auto_wear=None):
+        if task_type != "like" and auto_wear is not False:
+            should_wear = auto_wear
+            if should_wear is None:
+                try:
+                    settings = read_json(self.root / "settings.json", {})
+                    should_wear = settings.get("auto_wear", True) if isinstance(settings, dict) else True
+                except (OSError, ValueError):
+                    should_wear = True
+            if should_wear and uid:
+                try:
+                    self.wear(uid)
+                except Exception:
+                    pass
         return self.call("redo_member_tasks", room, uid, *self.credentials(), task_type)
 
     def resolve(self, query):
@@ -72,6 +85,49 @@ class AppContext:
         return self.call(
             "resolve_anchor_info", query, saved.get("SESSDATA", ""), saved.get("bili_jct", "")
         )
+
+    def resolve_candidates(self, query, *, limit=5):
+        saved = self._read_credentials()
+        return self.call(
+            "resolve_anchor_candidates",
+            query,
+            saved.get("SESSDATA", ""),
+            saved.get("bili_jct", ""),
+            limit=limit,
+        )
+
+    def daily_status(self, *, do_coin=False, coin_target=5):
+        from .services.daily_exp import check_daily_status
+
+        credentials = self.credentials()
+        with use_context(self.runtime):
+            return check_daily_status(*credentials, do_coin=do_coin, coin_target=coin_target)
+
+    def run_daily(
+        self,
+        *,
+        do_coin=False,
+        coin_target=5,
+        prefer_medals=True,
+        coin_with_like=False,
+        only_task=None,
+        members=None,
+    ):
+        from .services.daily_exp import run_daily_tasks
+
+        credentials = self.credentials()
+        with use_context(self.runtime):
+            if members is None:
+                members = load_members(self.root)
+            return run_daily_tasks(
+                *credentials,
+                do_coin=do_coin,
+                coin_target=coin_target,
+                prefer_medals=prefer_medals,
+                coin_with_like=coin_with_like,
+                only_task=only_task,
+                members=members,
+            )
 
     def validate_credentials_profile(self, sessdata, bili_jct):
         from .credentials import parse_login_import
@@ -144,7 +200,7 @@ class AppContext:
     def _probe_live_endpoints(self, sessdata, bili_jct, hold):
         """Query read-only live endpoints with safety_probe=True to test current risk state."""
         checks = []
-        summary = "只读自检通过：账号会话与直播只读接口均返回正常"
+        summary = "账号状态检测通过：登录状态与平台查询均返回正常"
         with use_context(self.runtime):
             members = load_members(self.root)
             op_room = str((hold.get("operation") or {}).get("room") or "")
@@ -169,13 +225,13 @@ class AppContext:
             status_msg = str(status_resp.get("message") or "").strip()
             checks.append(
                 {
-                    "name": "直播状态接口",
+                    "name": "直播状态查询",
                     "ok": status_ok,
                     "code": status_code,
                     "detail": (
                         f"正常（{target.get('name', room)}）"
                         if status_ok
-                        else f"[{status_code}] {status_msg or '请求异常'}"
+                        else f"{status_msg or '请求异常'}"
                     ),
                 }
             )
@@ -201,10 +257,10 @@ class AppContext:
             club_msg = str(club_resp.get("message") or "").strip()
             checks.append(
                 {
-                    "name": "粉丝团接口",
+                    "name": "粉丝团状态查询",
                     "ok": club_ok,
                     "code": club_code,
-                    "detail": "只读返回正常" if club_ok else f"[{club_code}] {club_msg or '请求异常'}",
+                    "detail": "返回正常" if club_ok else f"{club_msg or '请求异常'}",
                 }
             )
             for resp in (status_resp, club_resp):
@@ -222,13 +278,13 @@ class AppContext:
             if status_ok and club_ok:
                 return checks, True, False, summary
             if {status_code, club_code} & {-352, -412, 412}:
-                return checks, False, False, "只读复检仍触发 B 站风控/验证限制，请先在网页端完成验证后重试"
+                return checks, False, False, "账号状态检测仍受平台验证限制，请先在网页端完成验证后重试"
             failed = next((item for item in checks if not item["ok"]), None)
             return (
                 checks,
                 False,
                 False,
-                f"{failed['name']}未通过：{failed['detail']}" if failed else "只读复检未通过",
+                f"{failed['name']}未通过：{failed['detail']}" if failed else "账号状态检测未通过",
             )
 
     def probe_safety(self, *, auto=False, auto_resume=False):

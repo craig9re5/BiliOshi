@@ -19,6 +19,7 @@ desktop = ["pystray==0.19.5", "Pillow==12.2.0", "qrcode==8.2", "pywebview==6.2.1
 [project.scripts]
 bilioshi-heartbeat = "bilioshi.entrypoints:heartbeat"
 bilioshi-checkin = "bilioshi.entrypoints:checkin"
+bilioshi-daily = "bilioshi.entrypoints:daily"
 bilioshi-videos = "bilioshi.entrypoints:videos"
 bilioshi-dynamics = "bilioshi.entrypoints:dynamics"
 bilioshi-summary = "bilioshi.daily_summary:main"

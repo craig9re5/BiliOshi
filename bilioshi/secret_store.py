@@ -108,3 +108,31 @@ def discard(envelope):
             _keyring().delete_password("BiliOshi", envelope["reference"])
         except Exception:
             raise RuntimeError("旧凭据库条目清理失败，请在系统凭据库中清理 BiliOshi") from None
+
+
+def unseal_external(envelope, *, services=("BiliCheckin", "BiliOshi")):
+    """Read a compatible protected credential envelope from an external install."""
+    try:
+        if not isinstance(envelope, dict) or envelope.get("version") != 1:
+            raise ValueError()
+        if envelope.get("format") not in {FORMAT, "bilicheckin-protected-credentials"}:
+            raise ValueError()
+        if envelope.get("backend") == "dpapi-user":
+            raw = _dpapi(base64.b64decode(envelope["payload"], validate=True), decrypt=True)
+        elif envelope.get("backend") == "os-keyring":
+            ring = _keyring()
+            raw = None
+            for svc in services:
+                raw = ring.get_password(svc, envelope["reference"])
+                if raw is not None:
+                    break
+            if raw is None:
+                raise ValueError()
+        else:
+            raise ValueError()
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise ValueError()
+        return value
+    except Exception:
+        raise RuntimeError("无法读取外部受保护凭证") from None

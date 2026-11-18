@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"b3a968fca8d297849f0766b3ac6c8d2dd0000c693e27447125c6c0bf7cc3f49a","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"5ac811c422d22019885d5bf460eca1fab5f0c43d75022c78fd6f537be22b4ab9"} */
+/* BiliOshi JSX {"code_sha256":"70e75df85b60dc7fc0c90d61d81b68f58b85c4e91a2037e640f3f2d0d4cdbe79","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"fd8629bbdb64ba6fb7bdca71eb8908c2bb372f160a6c7e03e4cd9dd34bea7d8e"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -176,6 +176,8 @@ const ALL_THEME_CHOICES = [{
 }];
 const THEME_CHOICES = ALL_THEME_CHOICES.filter(item => item.enabled !== false);
 const DAY_THEME_CHOICES = THEME_CHOICES.filter(item => item.day);
+/* 运行模式切换（稳健 / 激进）暂时灰度下线，置 ENABLE_RUN_MODE_SWITCH = true 即可重新开放选项。 */
+const ENABLE_RUN_MODE_SWITCH = false;
 const useSystemDark = () => {
   const [dark, setDark] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   useEffect(() => {
@@ -323,7 +325,7 @@ const SettingsPage = ({
     checked: settings.auto_update !== false,
     disabled: disabled("auto_update"),
     onChange: value => onSetting("auto_update", value)
-  })), /*#__PURE__*/React.createElement(SettingRow, {
+  })), ENABLE_RUN_MODE_SWITCH && /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u6A21\u5F0F",
     desc: "\u7A33\u5065\u6A21\u5F0F\u63A8\u8350\u65E5\u5E38\u6302\u673A\uFF1B\u6FC0\u8FDB\u6A21\u5F0F\u68C0\u6D4B\u66F4\u9891\u7E41\uFF08\u6309\u8D26\u53F7\u72EC\u7ACB\u4FDD\u5B58\uFF09"
   }, /*#__PURE__*/React.createElement(Choice, {

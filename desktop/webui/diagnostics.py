@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import sys
 import tempfile
 import threading
 import time
@@ -257,15 +258,10 @@ class _DiagnosticSession:
         self.check("auto update switch defaults to on", eval_js(
             "document.querySelector('[role=\"switch\"][aria-label=\"自动更新\"]')?.getAttribute('aria-checked') === 'true'"))
         self.check("native select removed", eval_js("!document.querySelector('select')"))
-        self.click(".choice-button")
-        self.wait("Boolean(document.querySelector('.choice-menu'))")
-        self.click('.choice-option[data-value="aggressive"]')
-        self.wait("document.querySelector('.choice-label')?.textContent === '激进'")
-        self.wait("!document.querySelector('.choice-menu')")
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline and json.loads(settings_path.read_text(encoding="utf-8"))["run_mode"] != "aggressive":
-            time.sleep(0.05)
-        self.check("run mode uses themed menu", json.loads(settings_path.read_text(encoding="utf-8"))["run_mode"] == "aggressive")
+        self.check(
+            "run mode switch feature-gated",
+            eval_js("!document.querySelector('.choice-button[aria-label=\"运行模式\"]')"),
+        )
         original_theme = eval_js("document.documentElement.dataset.theme || 'system'")
         self.click('.theme-option[data-theme="mist"]')
         self.wait("document.documentElement.dataset.theme === 'mist'")
@@ -430,7 +426,8 @@ def run(output, screenshot=None):
 
     output = Path(output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="livesupport-webui-", ignore_cleanup_errors=True) as directory:
+    td_kwargs = {"ignore_cleanup_errors": True} if sys.version_info >= (3, 10) else {}
+    with tempfile.TemporaryDirectory(prefix="livesupport-webui-", **td_kwargs) as directory:
         root = Path(directory)
         store, first_id, second_id, first_root = _seed_diagnostic_store(root)
         worker = Mock(pid=os.getpid())

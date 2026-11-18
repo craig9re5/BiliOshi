@@ -107,6 +107,8 @@ const ALL_THEME_CHOICES = [
 ];
 const THEME_CHOICES = ALL_THEME_CHOICES.filter((item) => item.enabled !== false);
 const DAY_THEME_CHOICES = THEME_CHOICES.filter((item) => item.day);
+/* 运行模式切换（稳健 / 激进）暂时灰度下线，置 ENABLE_RUN_MODE_SWITCH = true 即可重新开放选项。 */
+const ENABLE_RUN_MODE_SWITCH = false;
 
 const useSystemDark = () => {
   const [dark, setDark] = useState(() =>
@@ -219,11 +221,13 @@ const SettingsPage = ({
           <Switch label="自动更新" checked={settings.auto_update !== false} disabled={disabled("auto_update")}
             onChange={(value) => onSetting("auto_update", value)} />
         </SettingRow>
-        <SettingRow name="运行模式" desc="稳健模式推荐日常挂机；激进模式检测更频繁（按账号独立保存）">
-          <Choice label="运行模式" value={runMode} disabled={disabled("run_mode")}
-            options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
-            onChange={(value) => onSetting("run_mode", value)} />
-        </SettingRow>
+        {ENABLE_RUN_MODE_SWITCH && (
+          <SettingRow name="运行模式" desc="稳健模式推荐日常挂机；激进模式检测更频繁（按账号独立保存）">
+            <Choice label="运行模式" value={runMode} disabled={disabled("run_mode")}
+              options={[{ value: "stable", label: "稳健" }, { value: "aggressive", label: "激进" }]}
+              onChange={(value) => onSetting("run_mode", value)} />
+          </SettingRow>
+        )}
       </section>
       <section className="group card">
         <header className="group-head">日志与诊断反馈</header>

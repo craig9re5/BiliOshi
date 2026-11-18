@@ -63,32 +63,35 @@ def build_system(self, container, config, p):
         lambda r: ToggleSwitch(r, variable=self.var_autostart, px=p),
         px=p,
     )
-    create_divider(card_sys, px=p)
+    self.var_run_mode = tk.StringVar(value=config.get("run_mode", "stable"))
+    # 运行模式切换暂时灰度下线，保留 var_run_mode 以兼容保存契约；置 True 可恢复显示。
+    enable_run_mode_switch = False
+    if enable_run_mode_switch:
+        create_divider(card_sys, px=p)
 
-    def make_mode_box(r):
-        mode_labels = {"stable": "稳健", "aggressive": "激进"}
-        self.var_run_mode = tk.StringVar(value=config.get("run_mode", "stable"))
-        selection = tk.StringVar(value=mode_labels[self.var_run_mode.get()])
-        box = ttk.Combobox(
-            r,
-            textvariable=selection,
-            values=tuple(mode_labels.values()),
-            state="readonly",
-            width=8,
-            font=(FONT_FAMILY, 9),
+        def make_mode_box(r):
+            mode_labels = {"stable": "稳健", "aggressive": "激进"}
+            selection = tk.StringVar(value=mode_labels[self.var_run_mode.get()])
+            box = ttk.Combobox(
+                r,
+                textvariable=selection,
+                values=tuple(mode_labels.values()),
+                state="readonly",
+                width=8,
+                font=(FONT_FAMILY, 9),
+            )
+            box.bind("<<ComboboxSelected>>", lambda _: self.var_run_mode.set(
+                next(mode for mode, label in mode_labels.items() if label == selection.get())
+            ))
+            return box
+
+        create_setting_row(
+            card_sys,
+            "运行模式",
+            "开播检查间隔由模式决定\n稳健 5 分钟，激进 1 分钟；保存后立即生效",
+            make_mode_box,
+            px=p,
         )
-        box.bind("<<ComboboxSelected>>", lambda _: self.var_run_mode.set(
-            next(mode for mode, label in mode_labels.items() if label == selection.get())
-        ))
-        return box
-
-    create_setting_row(
-        card_sys,
-        "运行模式",
-        "开播检查间隔由模式决定\n稳健 5 分钟，激进 1 分钟；保存后立即生效",
-        make_mode_box,
-        px=p,
-    )
 
 
 def build_auth(self, container, cookies, p, focus_auth):

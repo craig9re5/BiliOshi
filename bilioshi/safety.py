@@ -170,7 +170,7 @@ def describe_hold(hold, members=None):
                 else "此状态属于平台短时限流保护，通常无需去 B 站做额外操作。"
             ),
             "等待下方倒计时结束后，程序会自动恢复正常任务。",
-            "如频繁触发限流，建议在「设置 → 运行模式」中切回「稳健」模式。",
+            "如频繁触发限流，可适当减少同时开启自动弹幕与点赞的房间或账号数量。",
         ]
         action_url = "https://live.bilibili.com/"
         action_label = "打开 B 站直播"

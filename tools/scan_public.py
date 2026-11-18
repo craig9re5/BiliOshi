@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PATTERNS = {
     "github token": re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}\b"),
     "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    "release signing seed": re.compile(
+        r"(?:BILIOSHI_SIGNING_KEY|signing_seed)[\"']?\s*[:=]\s*[\"']?[0-9a-fA-F]{64}\b"
+    ),
     "session literal": re.compile(
         r"(?:SESSDATA|bili_jct|csrf(?:_token)?|refresh_token|access_token|pushplus_token|qrcode_key|"
         r"DedeUserID__ckMd5|buvid[34]|sid)[\"']?\s*[:=]\s*[\"']?"

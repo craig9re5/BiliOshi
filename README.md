@@ -89,6 +89,7 @@
 | **直播间自动点赞** | 默认关闭；复用扫码登录建立的账号与设备会话，经 WBI 签名分批上报并在心跳空档延迟复核任务进度，单日每房间最多执行 15 批 |
 | **视频与动态互动（CLI）** | 支持按指定月份或最近天数分页拉取并校验分页完整性；视频默认仅点赞（`--coin` 投币、`--fav` 收藏需显式开启），动态按日期点赞，拉取残缺直接返回失败码 |
 | **常驻守护与睡眠恢复** | 独立 `--supervisor` 守护进程监控主程序健康度，意外退出按退避拉起，主动退出同步停驻；系统睡眠唤醒自动赋予心跳宽限期，避免误报断连 |
+| **签名校验与空闲静默更新** | 基于 GitHub Releases 静态清单（`ETag` 条件轮询）后台下载新版，经 Ed25519 离线公钥验签、SHA-256 校验与隔离 `--diagnostic` 预检后，在无直播挂机时静默原子替换安装，异常自动回滚 |
 | **日志轮转与脱敏诊断** | 主程序与各账号日志独立分目录轮转留存；支持从设置页、托盘菜单或 `--export-diagnostic` 一键生成剥离凭证且默认匿名化身份的 `.zip` 诊断包 |
 
 > [!IMPORTANT]
@@ -297,9 +298,12 @@ python tray_app.py --web-diagnostic build/webui-native-check.json
 
 # 6. 打包单文件 Windows 桌面程序（生成 dist/onefile/BiliOshi.exe 与 build-info.json）
 powershell -ExecutionPolicy Bypass -File .\build_desktop.ps1 -Mode onefile
+
+# 7. 维护者生成/轮换发布签名密钥（将生成的私钥种子填入仓库 Actions Secret: BILIOSHI_SIGNING_KEY）
+python tools/release_update.py --generate-keypair --update-public --save-private build/release-signing-key.txt
 ```
 
-主分支推送自动触发跨平台（Ubuntu / Windows，Python 3.9–3.13）离线契约 CI；仓库内的 `.github/workflows/daily.yml` 仅支持手动触发（`workflow_dispatch`），需在自有 Fork 中自行配置 Secrets。
+主分支推送自动触发跨平台（Ubuntu / Windows，Python 3.13）离线契约 CI；推送与 `APP_VERSION` 一致的 `v*` 标签会自动构建单文件 `BiliOshi.exe`、生成 Ed25519 签名的 `latest.json` 并发布 GitHub Release 供客户端静默更新。仓库内的 `.github/workflows/daily.yml` 仅支持手动触发（`workflow_dispatch`），需在自有 Fork 中自行配置 Secrets。
 
 ## 许可证
 

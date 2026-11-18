@@ -1,8 +1,11 @@
-name: Desktop build
+name: Desktop build & release
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: windows-latest
@@ -10,9 +13,19 @@ jobs:
       BILIOSHI_APP_DATA: ${{ github.workspace }}/build/desktop-ci-data
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
+      - name: Verify release tag matches APP_VERSION
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $expected = python -c "from bilioshi.runtime import APP_VERSION; print('v' + APP_VERSION)"
+          if ($LASTEXITCODE -ne 0 -or $env:GITHUB_REF_NAME -cne $expected.Trim()) {
+            throw "Tag $($env:GITHUB_REF_NAME) does not match APP_VERSION ($expected)"
+          }
       - run: python -m pip install -r requirements-desktop.txt
       - run: python tools/offline_test.py
       - run: python tools/desktop_smoke.py
@@ -32,3 +45,24 @@ jobs:
         with:
           name: BiliOshi-Windows
           path: dist/onefile/
+      - name: Package & publish signed GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          BILIOSHI_SIGNING_KEY: ${{ secrets.BILIOSHI_SIGNING_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          New-Item -ItemType Directory -Path dist/release -Force | Out-Null
+          Compress-Archive -Path 'dist/onefile/*' -DestinationPath 'dist/release/BiliOshi-Windows-x64.zip' -Force
+          Copy-Item -LiteralPath 'dist/onefile/BiliOshi.exe','dist/onefile/build-info.json' -Destination dist/release
+          $tagNotes = (git tag -l --format='%(contents)' $env:GITHUB_REF_NAME | Out-String).Trim()
+          python tools/release_update.py --manifest --exe dist/release/BiliOshi.exe --output dist/release/latest.json --repo $env:GITHUB_REPOSITORY --tag $env:GITHUB_REF_NAME --notes $tagNotes
+          if ($LASTEXITCODE -ne 0) { throw 'Signing latest.json manifest failed' }
+          gh release create $env:GITHUB_REF_NAME `
+            dist/release/BiliOshi.exe `
+            dist/release/BiliOshi-Windows-x64.zip `
+            dist/release/latest.json `
+            dist/release/build-info.json `
+            --title "BiliOshi $($env:GITHUB_REF_NAME)" `
+            --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw 'Creating GitHub Release failed' }

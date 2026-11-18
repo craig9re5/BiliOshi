@@ -6,7 +6,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\BiliOshi'
-$dataDir = Join-Path $env:LOCALAPPDATA 'LiveSupport'
+$legacyDataDir = Join-Path $env:LOCALAPPDATA 'LiveSupport'
+$dataDir = if (Test-Path -LiteralPath $legacyDataDir -PathType Container) { $legacyDataDir } else { Join-Path $env:LOCALAPPDATA 'BiliOshi' }
 $installedExe = Join-Path $installDir 'BiliOshi.exe'
 $sourceExe = (Resolve-Path -LiteralPath $ExePath).Path
 $env:BILIOSHI_APP_DATA = $dataDir

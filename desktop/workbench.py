@@ -34,7 +34,7 @@ class Workbench:
         shell.pack(fill="both", expand=True)
         self._build_sidebar(shell)
         tk.Frame(shell, bg="#e6e6e1", width=1).pack(side="left", fill="y")
-        self.body = tk.Frame(shell, bg=BG, padx=p(14), pady=p(14))
+        self.body = tk.Frame(shell, bg=BG, padx=p(14), pady=p(12))
         self.body.pack(side="left", fill="both", expand=True)
         header = tk.Frame(self.body, bg=BG)
         header.pack(fill="x", pady=(0,p(10)))
@@ -229,7 +229,7 @@ class Workbench:
 
     def _build_toolbar(self):
         ui, p = self.ui, self.ui.px
-        self.toolbar = tk.Frame(self.body, bg="#f5f5f2", padx=p(10), pady=p(6))
+        self.toolbar = tk.Frame(self.body, bg="#f5f5f2", padx=p(10), pady=p(5))
         self.toolbar.pack(fill="x", pady=(0,p(10)))
         ui.safety_button = ModernButton(self.toolbar, text="处理异常", command=ui.on_recovery_action,
                                        px=p, state="disabled")

@@ -214,13 +214,15 @@ class WebUiTests(unittest.TestCase):
         fake_key = Mock()
         fake_key.__enter__ = Mock(return_value=fake_key)
         fake_key.__exit__ = Mock(return_value=False)
+        fake_winreg = SimpleNamespace(
+            HKEY_CURRENT_USER=object(),
+            OpenKey=Mock(return_value=fake_key),
+            QueryValueEx=Mock(return_value=(0, 4)),
+        )
         with patch("desktop.webui.window.sys.platform", "win32"), \
-             patch("winreg.OpenKey", return_value=fake_key), \
-             patch("winreg.QueryValueEx", return_value=(0, 4)):
+             patch.dict("sys.modules", {"winreg": fake_winreg}):
             self.assertEqual(_initial_background_color(), "#141716")
-        with patch("desktop.webui.window.sys.platform", "win32"), \
-             patch("winreg.OpenKey", return_value=fake_key), \
-             patch("winreg.QueryValueEx", return_value=(1, 4)):
+            fake_winreg.QueryValueEx.return_value = (1, 4)
             self.assertEqual(_initial_background_color(), "#fcfcfb")
 
     def test_dark_and_system_theme_assets(self):

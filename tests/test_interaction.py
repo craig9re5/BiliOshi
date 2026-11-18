@@ -155,6 +155,10 @@ class InteractionTests(unittest.TestCase):
 
     def test_tray_menu_exposes_core_actions_and_conditional_safety_item(self):
         import queue
+        try:
+            import pystray  # noqa: F401
+        except ImportError:
+            self.skipTest("pystray not installed")
         from desktop.interaction import build_tray_menu
 
         commands = queue.Queue()

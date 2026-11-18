@@ -9,7 +9,7 @@ description = "BiliOshi desktop and CLI for configurable Bilibili live rooms"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
-authors = [{name = "XiaoYiWeio and BiliOshi contributors"}]
+authors = [{name = "BiliOshi contributors"}]
 dependencies = []
 
 [project.optional-dependencies]
@@ -23,13 +23,6 @@ bilioshi-videos = "bilioshi.entrypoints:videos"
 bilioshi-dynamics = "bilioshi.entrypoints:dynamics"
 bilioshi-summary = "bilioshi.daily_summary:main"
 bilioshi-mobile-summary = "bilioshi.notifications.__main__:main"
-# Legacy aliases from the previous package name.
-asoul-heartbeat = "bilioshi.entrypoints:heartbeat"
-asoul-checkin = "bilioshi.entrypoints:checkin"
-asoul-videos = "bilioshi.entrypoints:videos"
-asoul-dynamics = "bilioshi.entrypoints:dynamics"
-asoul-summary = "bilioshi.daily_summary:main"
-asoul-mobile-summary = "bilioshi.notifications.__main__:main"
 
 [project.urls]
 Repository = "https://github.com/craig9re5/BiliOshi"

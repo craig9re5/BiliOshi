@@ -19,16 +19,16 @@
     <a href="#命令行工具">命令行工具</a> ·
     <a href="#架构与安全">架构与安全</a> ·
     <a href="#常见问题">常见问题</a> ·
-    <a href="#文档地图">文档地图</a>
+    <a href="#开发与构建">开发与构建</a>
   </p>
 </div>
 
 <br />
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/overview-dark.png" />
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/overview-light.png" />
-  <img alt="ビリ推し 直播总览工作台（随 GitHub 深浅色模式自动切换）" src="docs/images/overview-light.png" width="100%" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/overview-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="assets/screenshots/overview-light.png" />
+  <img alt="ビリ推し 直播总览工作台（随 GitHub 深浅色模式自动切换）" src="assets/screenshots/overview-light.png" width="100%" />
 </picture>
 
 <p align="center">
@@ -67,9 +67,9 @@
 ## 界面一览
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/growth-dark.png" />
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/growth-light.png" />
-  <img alt="ビリ推し 粉丝牌成长记录（随 GitHub 深浅色模式自动切换）" src="docs/images/growth-light.png" width="100%" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/growth-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="assets/screenshots/growth-light.png" />
+  <img alt="ビリ推し 粉丝牌成长记录（随 GitHub 深浅色模式自动切换）" src="assets/screenshots/growth-light.png" width="100%" />
 </picture>
 
 <p align="center">
@@ -138,8 +138,6 @@ python tray_app.py --show
 | `--export-diagnostic` | 离线打包脱敏且默认匿名化身份的诊断压缩包至数据目录 `exports/` |
 | `--log-level DEBUG` | 临时将当前进程及子进程日志级别设为 `DEBUG`（亦可通过环境变量 `BILIOSHI_LOG_LEVEL=DEBUG` 设置） |
 
-更完整的连接异常处理、看播停滞核验与守护交接说明请参阅 [DESKTOP.md](DESKTOP.md)。
-
 </details>
 
 ## 命令行工具
@@ -171,7 +169,7 @@ python scripts/daily_summary.py --hours 24
 python scripts/heartbeat.py --safety-status
 ```
 
-可选将核心包安装为全局或虚拟环境命令（保留旧版 `asoul-*` 命令作为兼容别名）：
+可选将核心包安装为全局或虚拟环境命令：
 
 ```powershell
 # macOS / Linux 如需保存加密凭证，请改用：python -m pip install ".[secure-store]"
@@ -301,27 +299,10 @@ python tray_app.py --web-diagnostic build/webui-native-check.json
 powershell -ExecutionPolicy Bypass -File .\build_desktop.ps1 -Mode onefile
 ```
 
-主分支推送自动触发跨平台（Ubuntu / Windows，Python 3.9–3.13）离线契约 CI；仓库内的 `.github/workflows/daily.yml` 仅支持手动触发（`workflow_dispatch`），需在自有 Fork 中自行配置 Secrets。发版与二进制校验流程见 [docs/RELEASING.md](docs/RELEASING.md)。
+主分支推送自动触发跨平台（Ubuntu / Windows，Python 3.9–3.13）离线契约 CI；仓库内的 `.github/workflows/daily.yml` 仅支持手动触发（`workflow_dispatch`），需在自有 Fork 中自行配置 Secrets。
 
-## 文档地图
+## 许可证
 
-| 文档 | 内容概览 |
-| --- | --- |
-| [DESKTOP.md](DESKTOP.md) | Windows 桌面工作台交互细节、单房间重连、看播停滞自愈、安装脚本与健康恢复规则 |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 分层架构、模块状态所有权、跨进程文件锁、错误分类与兼容性契约 |
-| [docs/MULTI_ACCOUNT.md](docs/MULTI_ACCOUNT.md) | 多账号数据隔离模型、免扫码切换状态机、旧版单账号迁移与回滚方案 |
-| [docs/GROWTH.md](docs/GROWTH.md) | 粉丝牌亲密度 UTC+8 自然日采样口径、`growth.json` 结构与覆盖率展示规则 |
-| [docs/OPERATING_MODES.md](docs/OPERATING_MODES.md) | 稳健 / 激进双档位调度间隔对照表与 `--supervisor` 常驻守护进程机制 |
-| [docs/ACCOUNT_SAFETY.md](docs/ACCOUNT_SAFETY.md) | 频控冷却、验证熔断、写请求未知结果停写、每日尝试预算与 DPAPI / Keychain 密封细节 |
-| [docs/LIVE_LIKES.md](docs/LIVE_LIKES.md) | 直播点赞 WBI 签名上报调用链、续批节流策略与账期延迟核验说明 |
-| [docs/QR_LOGIN.md](docs/QR_LOGIN.md) | B 站 App 扫码登录流程、官方设备会话字段白名单与原子替换机制 |
-| [docs/WEB_UI.md](docs/WEB_UI.md) | WebView2 + React 本地桥接契约、离线静态资源校验与原生窗口诊断 |
-| [docs/LOGS.md](docs/LOGS.md) | 主程序与账号日志分工、自动轮转清理、全局敏感词脱敏与一键诊断包结构 |
-| [docs/BRAND.md](docs/BRAND.md) | ビリ推し（BiliOshi）品牌定位、命名边界、色彩令牌与图标设计规范 |
-| [docs/RELEASING.md](docs/RELEASING.md) · [CHANGELOG.md](CHANGELOG.md) | 源码与单文件 EXE 发布验收清单及历次版本演进记录 |
+BiliOshi 基于 [MIT License](LICENSE) 开源；桌面端打包所含第三方开源组件的许可说明见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
 
-## 致谢与许可证
-
-本项目为独立维护基线，早期实现源自 [XiaoYiWeio/asoul-support](https://github.com/XiaoYiWeio/asoul-support)，保留原始作者署名与 MIT 许可归属；桌面端打包所含第三方开源组件许可清单见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
-
-BiliOshi 基于 [MIT License](LICENSE) 开源，与哔哩哔哩（Bilibili）官方及其关联方无任何隶属或背书关系。
+本项目与哔哩哔哩（Bilibili）官方及其关联方无任何隶属或背书关系。

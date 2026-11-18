@@ -90,7 +90,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
-        "--input", type=Path, help="Local sanitized JSON, see docs/FAN_LIGHT_RESEARCH.md"
+        "--input", type=Path, help="Local sanitized JSON"
     )
     source.add_argument("--demo", action="store_true", help="Use synthetic room, account and gifts")
     args = parser.parse_args(argv)

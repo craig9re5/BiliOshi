@@ -27,9 +27,7 @@ jobs:
       - name: Add release documents
         shell: pwsh
         run: |
-          Copy-Item -LiteralPath README.md,DESKTOP.md,Install-Desktop.ps1,LICENSE,THIRD_PARTY_LICENSES.md -Destination dist/onefile
-          New-Item -ItemType Directory -Path dist/onefile/docs -Force | Out-Null
-          Copy-Item -LiteralPath docs/QR_LOGIN.md,docs/LIVE_LIKES.md,docs/ACCOUNT_SAFETY.md,docs/OPERATING_MODES.md,docs/LOGS.md,docs/MOBILE_DAILY_SUMMARY.md,docs/WEB_UI.md,docs/MULTI_ACCOUNT.md,docs/GROWTH.md -Destination dist/onefile/docs
+          Copy-Item -LiteralPath README.md,Install-Desktop.ps1,LICENSE,THIRD_PARTY_LICENSES.md -Destination dist/onefile
       - uses: actions/upload-artifact@v4
         with:
           name: BiliOshi-Windows

@@ -153,12 +153,23 @@ class WatchProgressMonitor:
             self.verified = {}
         if parse_watch_task(club) is not None:
             # Only a validated read can supply fresh task rows to the desktop.
-            self.verified = {"day": self.tracker.day, "verified_at": time.time(),
-                             "tasks": [{key: task.get(key) for key in
-                                        ("jump_type", "title", "sub_title", "is_done")}
-                                       for task in club.get("task_info", []) if isinstance(task, dict)],
-                             "intimacy": club.get("intimacy", 0),
-                             "next_intimacy": club.get("next_intimacy", 0)}
+            verified = {
+                "day": self.tracker.day,
+                "verified_at": time.time(),
+                "tasks": [
+                    {key: task.get(key) for key in ("jump_type", "title", "sub_title", "is_done")}
+                    for task in club.get("task_info", [])
+                    if isinstance(task, dict)
+                ],
+                "intimacy": club.get("intimacy", 0),
+                "next_intimacy": club.get("next_intimacy", 0),
+                "is_lighted": bool(club.get("is_lighted", False)),
+                "reach_free_intimacy_limit": bool(club.get("reach_free_intimacy_limit", False)),
+            }
+            free_intimacy = club.get("free_intimacy")
+            if isinstance(free_intimacy, int) and not isinstance(free_intimacy, bool):
+                verified["free_intimacy"] = free_intimacy
+            self.verified = verified
         self.result.update(self.verified)
         self._publish()
 
@@ -197,7 +208,7 @@ class WatchProgressMonitor:
                                "error": type(exc).__name__, "detail": redact(str(exc))[:180]})
             return
         if (not live or live.get("live_status") != 1
-                or safety.status(self.credentials[0])["blocked"]):
+                or safety.blocks_watch(safety.status(self.credentials[0]))):
             return
         self.reconnects += 1
         episode = self._episode()

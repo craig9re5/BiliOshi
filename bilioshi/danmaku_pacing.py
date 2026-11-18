@@ -2,6 +2,7 @@
 
 import errno
 import os
+import random
 import time
 from pathlib import Path
 from typing import Callable, TypeVar
@@ -49,6 +50,7 @@ def send_paced(
     *,
     lock_path: Path = None,
     min_interval: float = MIN_SEND_INTERVAL,
+    jitter_ratio: float = 0.0,
     lock_timeout: float = LOCK_WAIT_TIMEOUT,
 ) -> _Result:
     """Serialize sends and reserve a minimum interval between attempts.
@@ -76,7 +78,12 @@ def send_paced(
             except ValueError:
                 last_sent = 0.0
             elapsed = max(0.0, time.time() - last_sent)
-            wait = max(0.0, min_interval - elapsed)
+            effective_interval = (
+                min_interval * (1.0 + random.uniform(0.0, jitter_ratio))
+                if jitter_ratio > 0 and last_sent > 0
+                else min_interval
+            )
+            wait = max(0.0, effective_interval - elapsed)
             if wait > 0:
                 task_wait(wait)
             check_window()

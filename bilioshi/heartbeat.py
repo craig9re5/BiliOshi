@@ -10,7 +10,6 @@ import os
 import random
 import re
 import string
-import subprocess
 import sys
 import time
 import urllib.request
@@ -39,38 +38,14 @@ from .runtime import (
 from .context import CURRENT, runtime_path
 from .http import get_json, post_form, post_empty, request_json
 from .redaction import redact
-from .session_headers import session_headers
-
-_DISCORD_TARGET = os.environ.get("ASOUL_DISCORD_TARGET")
+from .session_headers import DEFAULT_UA, session_headers
 
 
 def _notify(msg: str):
-    """发送 Discord 通知"""
+    """转发运行上下文通知"""
     context = CURRENT.get()
-    if context is not None:
-        if context.notify is not None:
-            context.notify(msg)
-        return
-    if not _DISCORD_TARGET:
-        return
-    try:
-        subprocess.run(
-            [
-                "openclaw",
-                "message",
-                "send",
-                "--channel",
-                "discord",
-                "--target",
-                _DISCORD_TARGET,
-                "--message",
-                msg,
-            ],
-            timeout=15,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        _log({"type": "notification_error", "error": type(exc).__name__})
+    if context is not None and context.notify is not None:
+        context.notify(msg)
 
 
 _LOG_DIR = data_dir() / "logs"
@@ -88,7 +63,7 @@ def _runtime_path(name):
     return runtime_path(name, globals()[name])
 
 
-_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+_UA = DEFAULT_UA
 _COOKIE_PATHS = [cookie_path()]
 
 
@@ -133,11 +108,35 @@ def _send_danmaku(room_id: int, msg: str, sessdata: str, bili_jct: str) -> bool:
     }
     headers = _make_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room_id}")
     try:
-        resp = send_paced(lambda: _post_form(url, data, headers),
-                          min_interval=current_profile().danmaku_send_seconds * safety.pace_multiplier(sessdata))
+        resp = send_paced(
+            lambda: _post_form(url, data, headers),
+            min_interval=current_profile().danmaku_send_seconds * safety.pace_multiplier(sessdata),
+            jitter_ratio=0.2,
+        )
     except (OSError, TimeoutError) as exc:
         resp = {"code": -1, "message": type(exc).__name__}
     if resp and resp.get("code") == 0:
+        shield_marker = str(resp.get("msg") or resp.get("message") or "").strip()
+        marker_lower = shield_marker.lower()
+        if marker_lower in {"fire", "max limit"} or "频繁" in marker_lower:
+            safety.block_room_capability(
+                sessdata,
+                room_id,
+                "danmaku",
+                "该直播间触发弹幕防刷限制（服务端静默拦截），已暂停本房自动弹幕，不影响看播与其他主播",
+                code=0,
+                seconds=1800,
+                raw_message=f"code=0 msg={shield_marker[:80]}",
+            )
+            print(f"    ⚠️  弹幕被服务端防刷拦截：[0:{shield_marker[:40]}]", file=sys.stderr)
+            _log({"type": "danmaku_shielded", "room_id": room_id, "marker": shield_marker[:80]})
+            return False
+        if marker_lower in {"f", "k"} or "屏蔽" in marker_lower:
+            safety.record_danmaku_shield(sessdata, room_id, shield_marker[:40])
+            print(f"    ⚠️  弹幕被屏蔽词或静默规则拦截：[0:{shield_marker[:40]}]", file=sys.stderr)
+            _log({"type": "danmaku_shielded", "room_id": room_id, "marker": shield_marker[:80]})
+            return False
+        safety.reset_danmaku_shield(sessdata, room_id)
         return True
     code = (resp or {}).get("code")
     message = str((resp or {}).get("message", "无响应"))[:120]
@@ -320,7 +319,15 @@ def enter_room(room_id: int, sessdata: str, bili_jct: str) -> bool:
     url = "https://api.live.bilibili.com/xlive/web-room/v1/index/roomEntryAction"
     headers = _make_headers(sessdata, bili_jct, f"https://live.bilibili.com/{room_id}")
     data = {"room_id": str(room_id), "platform": "pc", "csrf": bili_jct, "csrf_token": bili_jct}
-    resp = _post_form(url, data, headers)
+    try:
+        resp = send_paced(
+            lambda: _post_form(url, data, headers),
+            lock_path=_runtime_path("_LOCK_DIR") / "room-entry.lock",
+            min_interval=1.5,
+            jitter_ratio=0.4,
+        )
+    except (OSError, TimeoutError):
+        resp = _post_form(url, data, headers)
     if resp is not None and resp.get("code") == 0:
         return True
     logging.warning(
@@ -334,7 +341,7 @@ def enter_room(room_id: int, sessdata: str, bili_jct: str) -> bool:
 
 _X25KN_E_URL = "https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/E"
 _X25KN_X_URL = "https://live-trace.bilibili.com/xlive/data-interface/v1/x25Kn/X"
-_X25KN_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+_X25KN_UA = DEFAULT_UA
 _X25KN_HMAC_FUNCS = ["md5", "sha1", "sha256", "sha224", "sha512", "sha384"]
 
 

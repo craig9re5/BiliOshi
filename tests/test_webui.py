@@ -452,6 +452,74 @@ class WebUiTests(unittest.TestCase):
         self.assertTrue(res["ok"])
         self.assertEqual(self.api.snapshot()["rows"][0]["task_error"], "")
 
+    def test_dismiss_watch_warning_partial_redo_and_operation_expiry(self):
+        from bilioshi.runtime import read_json, task_day
+
+        self.confirmed_room()
+        proc = Mock()
+        proc.poll.return_value = None
+        proc.pid = 777
+        self.engine.workers[7] = proc
+        now = time.time()
+        write_json(
+            self.root / "state/7.json",
+            {
+                "room": 7,
+                "pid": 777,
+                "started": now - 120,
+                "last_heartbeat": now - 5,
+                "watch_progress": {
+                    "day": task_day(),
+                    "status": "limited",
+                    "checked_at": now - 5,
+                    "verified_at": now - 5,
+                    "warning_since": now - 60,
+                    "warning": "储蓄亲密度已达上限，看播可能无法继续获得亲密度，请在 B 站核对。",
+                    "progress": {"current": 4, "limit": 10},
+                    "tasks": [],
+                },
+            },
+        )
+        self.assertIn("储蓄亲密度已达上限", self.api.snapshot()["rows"][0]["watch_warning"])
+        dismissed = self.api.dismiss_watch_warning(7)
+        self.assertTrue(dismissed["ok"])
+        self.assertEqual(self.api.snapshot()["rows"][0]["watch_warning"], "")
+
+        # A brand-new episode warning still notifies after dismissing the earlier episode.
+        write_json(
+            self.root / "state/7.json",
+            {
+                **read_json(self.root / "state/7.json"),
+                "watch_progress": {
+                    "day": task_day(),
+                    "status": "stalled",
+                    "checked_at": now,
+                    "verified_at": now,
+                    "warning_since": now + 10,
+                    "warning": "看播进度长时间未增长",
+                    "progress": {"current": 4, "limit": 10},
+                    "tasks": [],
+                },
+            },
+        )
+        self.assertEqual(self.api.snapshot()["rows"][0]["watch_warning"], "看播进度长时间未增长")
+
+        # Partial redo still triggers check_now so completed sub-tasks refresh immediately.
+        self.engine.check_now = Mock()
+        self.engine.application.redo = Mock(return_value={
+            "success": False,
+            "day": task_day(),
+            "like": {"ok": True},
+            "danmaku": {"done": False, "error": "发言过于频繁"},
+        })
+        partial = self.api.redo(7)
+        self.assertFalse(partial["ok"])
+        self.engine.check_now.assert_called_once()
+
+        # Settled room operation messages expire cleanly instead of lingering forever.
+        self.api._room_operations[7]["finished"] = time.time() - 30
+        self.assertEqual(self.api.snapshot()["rows"][0]["operation"], {})
+
 
 if __name__ == "__main__":
     unittest.main()

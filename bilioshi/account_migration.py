@@ -229,114 +229,107 @@ def _write_marker(store, account_id):
     )
 
 
-def ensure_account_store(root, *, validator=None):
-    """Migrate the legacy root once; return a store or a legacy-mode marker."""
-    root = Path(root)
-    store = AccountStore(root)
-    validator = validator or validate_credentials_readonly
-
-    if store.path.exists():
-        store.load()  # Corrupt primary/backup raises; never scan directories.
-        if not store.marker_path.exists():
+def _recover_missing_registry(store):
+    """Recover the account registry from backup when primary registry is absent."""
+    backup = store._read_file(store.backup_path)
+    if backup is not None:
+        try:
+            state = store._clean_state(backup)
+        except Exception:
+            state = None
+        if state is not None:
+            store.save(state)
             _write_marker(store, store.active_id)
-        return MigrationResult(store=store, migrated=False, legacy_mode=False)
+            return MigrationResult(
+                store=store,
+                migrated=False,
+                legacy_mode=False,
+                reason="已从备份恢复账号注册表",
+            )
+    return MigrationResult(
+        store=store,
+        migrated=False,
+        legacy_mode=True,
+        reason="账号注册表丢失且没有可用备份，请从备份恢复",
+    )
 
-    # A missing registry after migration must not replay stale legacy data over
-    # live account roots. Recover the last valid backup when one exists.
-    if store.marker_path.exists() or store.backup_path.exists():
-        backup = store._read_file(store.backup_path)
-        if backup is not None:
-            try:
-                state = store._clean_state(backup)
-            except Exception:
-                state = None
-            if state is not None:
-                store.save(state)
-                _write_marker(store, store.active_id)
-                return MigrationResult(
-                    store=store, migrated=False, legacy_mode=False,
-                    reason="已从备份恢复账号注册表",
-                )
-        return MigrationResult(
-            store=store, migrated=False, legacy_mode=True,
-            reason="账号注册表丢失且没有可用备份，请从备份恢复",
-        )
 
-    credentials_path = root / "credentials.json"
-    if not credentials_path.exists():
-        return _create_empty_registry(store, root)
-
-    # Back up the sealed bytes before unsealing or re-sealing anything. A
-    # legacy plaintext file is upgraded by read_json first, so the backup never
-    # contains a new plaintext copy.
+def _read_legacy_credentials(root, store, credentials_path):
+    """Upgrade, back up, and unseal legacy root credentials before migration."""
     try:
         raw = json.loads(credentials_path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
-        return MigrationResult(
-            store=store, migrated=False, legacy_mode=True,
-            reason="旧凭证文件无法读取",
+        return None, MigrationResult(
+            store=store, migrated=False, legacy_mode=True, reason="旧凭证文件无法读取"
         )
     if raw and not is_envelope(raw):
         try:
             read_json(credentials_path, {})
         except (OSError, ValueError, RuntimeError):
-            return MigrationResult(
-                store=store, migrated=False, legacy_mode=True,
+            return None, MigrationResult(
+                store=store,
+                migrated=False,
+                legacy_mode=True,
                 reason="旧凭证无法转换为受保护格式",
             )
     try:
         _backup_credentials(root, credentials_path)
     except OSError:
-        return MigrationResult(
-            store=store, migrated=False, legacy_mode=True,
-            reason="无法备份旧凭证",
+        return None, MigrationResult(
+            store=store, migrated=False, legacy_mode=True, reason="无法备份旧凭证"
         )
-
     try:
         credentials = read_json(credentials_path, {})
     except (OSError, ValueError, RuntimeError):
-        return MigrationResult(
-            store=store, migrated=False, legacy_mode=True,
-            reason="旧凭证无法解密",
+        return None, MigrationResult(
+            store=store, migrated=False, legacy_mode=True, reason="旧凭证无法解密"
         )
     if not isinstance(credentials, dict):
-        return MigrationResult(
-            store=store, migrated=False, legacy_mode=True,
-            reason="旧凭证格式无效",
+        return None, MigrationResult(
+            store=store, migrated=False, legacy_mode=True, reason="旧凭证格式无效"
         )
-    sessdata = credentials.get("SESSDATA")
-    bili_jct = credentials.get("bili_jct")
-    if not sessdata or not bili_jct:
+    if not credentials.get("SESSDATA") or not credentials.get("bili_jct"):
         # The legacy session was explicitly logged out; the account list is
         # simply empty and the old root remains available for rollback.
-        return _create_empty_registry(store, root)
+        return None, _create_empty_registry(store, root)
+    return credentials, None
 
+
+def _resolve_legacy_identity(credentials, root, store, validator):
+    """Determine UID and profile metadata from cache or a readonly validator."""
     uid = _cached_uid(credentials, root)
     profile = _cached_profile(root)
-    if not uid:
-        try:
-            valid, message, remote = validator(sessdata, bili_jct)
-        except (OSError, ValueError, RuntimeError):
-            valid, message, remote = False, "认证接口请求失败", {}
-        if not valid or not isinstance(remote, dict) or not remote.get("uid"):
-            return MigrationResult(
-                store=store, migrated=False, legacy_mode=True,
-                reason=f"无法确认旧账号 UID：{message}",
-            )
-        uid = int(remote["uid"])
-        profile = {
-            "name": remote.get("name") or profile.get("name", ""),
-            "face": remote.get("face") or profile.get("face", ""),
-        }
+    if uid:
+        return uid, profile, None
+    sessdata = credentials.get("SESSDATA")
+    bili_jct = credentials.get("bili_jct")
+    try:
+        valid, message, remote = validator(sessdata, bili_jct)
+    except (OSError, ValueError, RuntimeError):
+        valid, message, remote = False, "认证接口请求失败", {}
+    if not valid or not isinstance(remote, dict) or not remote.get("uid"):
+        return None, None, MigrationResult(
+            store=store,
+            migrated=False,
+            legacy_mode=True,
+            reason=f"无法确认旧账号 UID：{message}",
+        )
+    uid = int(remote["uid"])
+    profile = {
+        "name": remote.get("name") or profile.get("name", ""),
+        "face": remote.get("face") or profile.get("face", ""),
+    }
+    return uid, profile, None
 
+
+def _migrate_account_data(root, store, uid, profile, sessdata, bili_jct):
+    """Copy legacy account files into the per-account store and update the registry."""
     account_id = _account_id(uid)
     name = profile.get("name") or f"账号 {uid}"
     face = profile.get("face", "")
     account_root = store.ensure_root(account_id, uid)
 
-    members = _safe_members(root / "members.json")
-    write_json(account_root / "members.json", members)
-
+    write_json(account_root / "members.json", _safe_members(root / "members.json"))
     settings = _safe_settings(root / "settings.json")
     # autostart is a Windows/application concern; it must not become a
     # per-account toggle. Other task switches and paused belong to the account.
@@ -358,11 +351,9 @@ def ensure_account_store(root, *, validator=None):
         saved = {}
     if saved.get("SESSDATA") != sessdata or saved.get("bili_jct") != bili_jct:
         return MigrationResult(
-            store=store, migrated=False, legacy_mode=True,
-            reason="新账号凭证回读失败",
+            store=store, migrated=False, legacy_mode=True, reason="新账号凭证回读失败"
         )
-    token = store.credential_token(account_id)
-    _copy_avatar_profile(root, account_root, uid, token)
+    _copy_avatar_profile(root, account_root, uid, store.credential_token(account_id))
 
     # Registry last: every row must point at an existing, readable account.
     store.upsert(uid, name, face)
@@ -371,4 +362,46 @@ def ensure_account_store(root, *, validator=None):
     _write_marker(store, account_id)
     return MigrationResult(
         store=store, migrated=True, legacy_mode=False, account_id=account_id
+    )
+
+
+def ensure_account_store(root, *, validator=None):
+    """Migrate the legacy root once; return a store or a legacy-mode marker."""
+    root = Path(root)
+    store = AccountStore(root)
+    validator = validator or validate_credentials_readonly
+
+    if store.path.exists():
+        store.load()  # Corrupt primary/backup raises; never scan directories.
+        if not store.marker_path.exists():
+            _write_marker(store, store.active_id)
+        return MigrationResult(store=store, migrated=False, legacy_mode=False)
+
+    # A missing registry after migration must not replay stale legacy data over
+    # live account roots. Recover the last valid backup when one exists.
+    if store.marker_path.exists() or store.backup_path.exists():
+        return _recover_missing_registry(store)
+
+    credentials_path = root / "credentials.json"
+    if not credentials_path.exists():
+        return _create_empty_registry(store, root)
+
+    # Back up the sealed bytes before unsealing or re-sealing anything. A
+    # legacy plaintext file is upgraded by read_json first, so the backup never
+    # contains a new plaintext copy.
+    credentials, error = _read_legacy_credentials(root, store, credentials_path)
+    if error is not None:
+        return error
+
+    uid, profile, error = _resolve_legacy_identity(credentials, root, store, validator)
+    if error is not None:
+        return error
+
+    return _migrate_account_data(
+        root,
+        store,
+        uid,
+        profile,
+        credentials["SESSDATA"],
+        credentials["bili_jct"],
     )

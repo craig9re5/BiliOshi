@@ -25,6 +25,139 @@ from .widgets import *
 from .dialogs import AddMemberDialog, SyncMedalsDialog
 
 
+def _ingest_command_files(ui):
+    """Consume pending JSON command requests under commands_root/commands."""
+    commands_root = ui.__dict__.get("commands_root") if hasattr(ui, "__dict__") else None
+    if not isinstance(commands_root, (str, os.PathLike)):
+        commands_root = ui.engine.root
+    for path in (Path(commands_root) / "commands").glob("*.json"):
+        try:
+            request = read_json(path, {})
+            if not isinstance(request, dict):
+                raise ValueError("Command must be an object")
+            age = time.time() - request.get("created", 0)
+            if 0 <= age < 60:
+                from desktop.supervisor import command_for_request
+
+                command = command_for_request(request)
+                if command:
+                    ui.commands.put(command)
+        except (OSError, ValueError, TypeError):
+            logging.warning("Ignoring unreadable desktop command")
+        finally:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                logging.warning("Cannot remove processed desktop command")
+
+
+def _dispatch_tuple_command(ui, cmd):
+    """Handle one background result tuple queued for the UI; return True to exit loop."""
+    action = cmd[0]
+    if action == "notify":
+        _, name, title = cmd
+        try:
+            ui.tray.notify(f"【{name}】开播了：{title}", title="ビリ推し · 开播提醒")
+        except Exception:
+            pass
+    elif action == "task_done":
+        _, name, res = cmd
+        ui.task_notice = (format_task_result(name, res), time.time() + 20)
+        ui.commands.put("check")
+    elif action == "reconnect_done":
+        _, name, ok, message = cmd
+        ui.reconnect_pending = False
+        ui.task_notice = (f"【{name}】{message}", time.time() + 20)
+    elif action == "room_action_done":
+        _, room, name, kind, message = cmd
+        ui.room_actions[room].update(pending=False, message=message)
+        if kind == "reconnect":
+            ui.reconnect_pending = any(
+                state.get("pending") and state.get("kind") == "reconnect"
+                for state in ui.room_actions.values()
+            )
+        ui.task_notice = (f"【{name}】{message}", time.time() + 20)
+        if kind != "reconnect":
+            ui.commands.put("check")
+    elif action == "control_done":
+        _, key, ok, message = cmd
+        ui.control_actions.discard(key)
+        ui.control_messages.pop(key, None)
+        ui.task_notice = (message, time.time() + 20)
+        if key == "exit":
+            if ok:
+                ui.closed = True
+                ui.tray.stop()
+                ui.root.destroy()
+                return True
+            ui.closing = False
+        ui.tray.update_menu()
+    elif action == "wear_done":
+        _, name, res = cmd
+        if res == "ok":
+            ui.task_notice = (f"已佩戴【{name}】粉丝牌！", time.time() + 20)
+        elif res == "no_medal":
+            ui.task_notice = (f"未拥有【{name}】的粉丝勋章，无法佩戴", time.time() + 20)
+        else:
+            ui.task_notice = (f"佩戴【{name}】粉丝牌失败，请稍后重试", time.time() + 20)
+        ui.commands.put("check")
+    return False
+
+
+def _dispatch_string_command(ui, cmd):
+    """Handle one synchronous UI or engine control command."""
+    if ui.closing and cmd not in {"exit", "supervisor_exit", "show", "logs"}:
+        return
+    if cmd in {"exit", "supervisor_exit"}:
+        if cmd == "exit":
+            from desktop.supervisor import request_stop
+
+            commands_root = ui.__dict__.get("commands_root") if hasattr(ui, "__dict__") else None
+            request_stop(
+                Path(commands_root)
+                if isinstance(commands_root, (str, os.PathLike))
+                else ui.engine.root
+            )
+        ui.closing = True
+        for panel in ui.workbench.settings_pages.values():
+            panel.deactivate()
+
+        def exit_cleanly():
+            ui.engine.close()
+            ui.engine.dispatcher.wait_for_io()
+
+        ui._submit_control("exit", exit_cleanly, "正在退出，等待已提交操作结束…")
+        return
+    if cmd == "show":
+        ui.show()
+    elif cmd == "refresh":
+        ui.watch_notice_day = None
+        ui.watch_notices = set()
+        ui.safety_notices = {}
+        ui.ui_error = ""
+    elif cmd in {"toggle", "pause", "resume"}:
+        paused = not ui.engine.paused if cmd == "toggle" else cmd == "pause"
+        ui._submit_control(
+            "pause",
+            lambda value=paused: ui.engine.set_paused(value),
+            "正在暂停挂机…" if paused else "正在恢复挂机…",
+        )
+    elif cmd == "check":
+        ui._submit_control("check", ui.engine.check_now, "正在请求检查…")
+    elif cmd == "add_member":
+        ui.open_add_member()
+    elif cmd == "sync_medals":
+        ui.open_sync_medals()
+    elif cmd == "settings":
+        ui.open_settings()
+    elif cmd == "login":
+        ui.open_settings(focus_auth=True, scan=True)
+    elif cmd == "logs":
+        os.startfile(str(ui.engine.root / "logs"))
+    elif cmd == "safety":
+        ui.on_safety_resume()
+
+
 class TrayUI:
 
     def __init__(self, engine, show=False, *, commands_root=None):
@@ -314,122 +447,14 @@ class TrayUI:
                 self.tray.stop()
 
     def _read_commands(self):
-        commands_root = self.__dict__.get("commands_root") if hasattr(self, "__dict__") else None
-        if not isinstance(commands_root, (str, os.PathLike)):
-            commands_root = self.engine.root
-        for path in (Path(commands_root) / "commands").glob("*.json"):
-            try:
-                request = read_json(path, {})
-                if not isinstance(request, dict):
-                    raise ValueError("Command must be an object")
-                age = time.time() - request.get("created", 0)
-                if 0 <= age < 60:
-                    from desktop.supervisor import command_for_request
-
-                    command = command_for_request(request)
-                    if command:
-                        self.commands.put(command)
-            except (OSError, ValueError, TypeError):
-                logging.warning("Ignoring unreadable desktop command")
-            finally:
-                try:
-                    path.unlink(missing_ok=True)
-                except OSError:
-                    logging.warning("Cannot remove processed desktop command")
+        _ingest_command_files(self)
         while not self.commands.empty():
             cmd = self.commands.get_nowait()
             if isinstance(cmd, tuple):
-                action = cmd[0]
-                if action == "notify":
-                    _, name, title = cmd
-                    try:
-                        self.tray.notify(
-                            f"【{name}】开播了：{title}", title="ビリ推し · 开播提醒"
-                        )
-                    except Exception:
-                        pass
-                elif action == "task_done":
-                    _, name, res = cmd
-                    self.task_notice = (format_task_result(name, res), time.time() + 20)
-                    self.commands.put("check")
-                elif action == "reconnect_done":
-                    _, name, ok, message = cmd
-                    self.reconnect_pending = False
-                    self.task_notice = (f"【{name}】{message}", time.time() + 20)
-                elif action == "room_action_done":
-                    _, room, name, kind, message = cmd
-                    self.room_actions[room].update(pending=False, message=message)
-                    if kind == "reconnect":
-                        self.reconnect_pending = any(state.get("pending") and state.get("kind") == "reconnect"
-                                                     for state in self.room_actions.values())
-                    self.task_notice = (f"【{name}】{message}", time.time() + 20)
-                    if kind != "reconnect":
-                        self.commands.put("check")
-                elif action == "control_done":
-                    _, key, ok, message = cmd
-                    self.control_actions.discard(key)
-                    self.control_messages.pop(key, None)
-                    self.task_notice = (message, time.time() + 20)
-                    if key == "exit":
-                        if ok:
-                            self.closed = True
-                            self.tray.stop()
-                            self.root.destroy()
-                            return
-                        self.closing = False
-                    self.tray.update_menu()
-                elif action == "wear_done":
-                    _, name, res = cmd
-                    if res == "ok":
-                        self.task_notice = (f"已佩戴【{name}】粉丝牌！", time.time() + 20)
-                    elif res == "no_medal":
-                        self.task_notice = (f"未拥有【{name}】的粉丝勋章，无法佩戴", time.time() + 20)
-                    else:
-                        self.task_notice = (f"佩戴【{name}】粉丝牌失败，请稍后重试", time.time() + 20)
-                    self.commands.put("check")
+                if _dispatch_tuple_command(self, cmd):
+                    return
                 continue
-            if self.closing and cmd not in {"exit", "supervisor_exit", "show", "logs"}:
-                continue
-            if cmd in {"exit", "supervisor_exit"}:
-                if cmd == "exit":
-                    from desktop.supervisor import request_stop
-
-                    commands_root = self.__dict__.get("commands_root") if hasattr(self, "__dict__") else None
-                    request_stop(Path(commands_root) if isinstance(commands_root, (str, os.PathLike))
-                                else self.engine.root)
-                self.closing = True
-                for panel in self.workbench.settings_pages.values():
-                    panel.deactivate()
-                def exit_cleanly():
-                    self.engine.close()
-                    self.engine.dispatcher.wait_for_io()
-                self._submit_control("exit", exit_cleanly, "正在退出，等待已提交操作结束…")
-                continue
-            if cmd == "show":
-                self.show()
-            elif cmd == "refresh":
-                self.watch_notice_day = None
-                self.watch_notices = set()
-                self.safety_notices = {}
-                self.ui_error = ""
-            elif cmd in {"toggle", "pause", "resume"}:
-                paused = not self.engine.paused if cmd == "toggle" else cmd == "pause"
-                self._submit_control("pause", lambda value=paused: self.engine.set_paused(value),
-                                     "正在暂停挂机…" if paused else "正在恢复挂机…")
-            elif cmd == "check":
-                self._submit_control("check", self.engine.check_now, "正在请求检查…")
-            elif cmd == "add_member":
-                self.open_add_member()
-            elif cmd == "sync_medals":
-                self.open_sync_medals()
-            elif cmd == "settings":
-                self.open_settings()
-            elif cmd == "login":
-                self.open_settings(focus_auth=True, scan=True)
-            elif cmd == "logs":
-                os.startfile(str(self.engine.root / "logs"))
-            elif cmd == "safety":
-                self.on_safety_resume()
+            _dispatch_string_command(self, cmd)
 
     def on_safety_resume(self):
         from bilioshi.safety import describe_hold

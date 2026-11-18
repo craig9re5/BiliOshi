@@ -32,7 +32,13 @@ def send_danmaku_batch(
     random.shuffle(available)
     sent_ok = 0
     attempted = 0
-    limit = max_attempts if max_attempts is not None else count + min(count, 3)
+    in_probation = safety.probation_until(sessdata) > 0
+    target_count = min(count, 1) if in_probation and count > 0 else count
+    limit = (
+        min(max_attempts, 1)
+        if in_probation and max_attempts is not None
+        else (1 if in_probation and count > 0 else (max_attempts if max_attempts is not None else count + min(count, 3)))
+    )
     pace_mult = safety.pace_multiplier(sessdata)
     effective_delay = delay * pace_mult if delay > 0 and pace_mult > 1.0 else delay
     with task_window(deadline):
@@ -41,7 +47,7 @@ def send_danmaku_batch(
                 if (
                     safety.status(sessdata)["blocked"]
                     or safety.room_capability_blocked(sessdata, room_id, "danmaku")
-                    or sent_ok >= count
+                    or sent_ok >= target_count
                 ):
                     break
                 check_window()
@@ -55,7 +61,7 @@ def send_danmaku_batch(
                     sessdata, room_id, "danmaku"
                 ):
                     break
-                if effective_delay > 0 and sent_ok < count and (i + 1 < limit):
+                if effective_delay > 0 and sent_ok < target_count and (i + 1 < limit):
                     wait(effective_delay)
         except TaskDeferred:
             pass

@@ -1,5 +1,5 @@
-from desktop.health import check_progress, recovery_delay, number
-from desktop.snapshot import project_snapshot
+from desktop.health import check_progress, heartbeat_timeout, number, recovery_delay
+from desktop.snapshot import current_watch_warning_signature, project_snapshot
 from bilioshi.application import AppContext
 import logging
 import hashlib
@@ -13,8 +13,9 @@ import uuid
 from pathlib import Path
 from desktop.storage import load_config, read_json, write_json, read_status
 from desktop.windows import Job
-from bilioshi.runtime import update_json, append_event, task_day
-from bilioshi.safety import format_task_errors
+from bilioshi import runtime as _runtime
+from bilioshi.runtime import file_stat_signature, update_json, append_event, task_day
+from bilioshi.safety import blocks_watch, format_task_errors
 from bilioshi.growth import record_samples
 from bilioshi.operating_mode import profile_for
 try:
@@ -25,6 +26,8 @@ except ImportError:
 # The GUI reads Engine.snapshot() directly; status.json only serves other processes,
 # and read_status accepts 15 seconds of age. Publishing every tick was pure disk churn.
 STATUS_PUBLISH_SECONDS = 5.0
+_DEFAULT_LOAD_CONFIG = load_config
+_DEFAULT_READ_JSON = read_json
 
 
 def command(*args):
@@ -66,6 +69,7 @@ class Engine:
         self.probe_started = 0
         self.next_check = 0
         self.last_check = 0
+        self.manual_check_at = 0
         self.error = ""
         self.account = ""
         self.account_checked_at = 0
@@ -80,8 +84,14 @@ class Engine:
         self.tasks = status.get("tasks", {})
         self.known_live = set()
         self.notify_callback = None
+        self._config_files_sig = None
+        self._cred_cache_key = None
+        self._cred_sig_value = ""
+        self._room_state_cache = {}
         try:
             self.config, self.members = load_config(root)
+            if load_config is _DEFAULT_LOAD_CONFIG:
+                self._config_files_sig = self._config_signature()
         except ValueError as exc:
             self.config, self.members = ({"check_minutes": 30}, [])
             self.error = f"配置错误：{exc}"
@@ -121,23 +131,51 @@ class Engine:
             self.account_checked_at = time.time()
             logging.info("Account confirmed via QR login user=%s", self.account)
 
+    def _config_signature(self):
+        return (
+            file_stat_signature(self.root / "settings.json"),
+            file_stat_signature(self.root / "members.json"),
+        )
+
     def _credentials_signature(self):
         path = self.root / "credentials.json"
-        if not path.exists():
+        if read_json is _DEFAULT_READ_JSON:
+            sig = file_stat_signature(path)
+            if sig is None:
+                self._cred_cache_key = None
+                self._cred_sig_value = ""
+                return ""
+            key = (sig, id(_runtime.unseal))
+            if self._cred_cache_key == key:
+                return self._cred_sig_value
+        elif not path.exists():
             return ""
         try:
             value = json.dumps(read_json(path, {}), sort_keys=True).encode("utf-8")
         except (RuntimeError, ValueError):
             value = path.read_bytes()
-        return hashlib.sha256(value).hexdigest()
+        digest = hashlib.sha256(value).hexdigest()
+        if read_json is _DEFAULT_READ_JSON:
+            new_sig = file_stat_signature(path)
+            self._cred_cache_key = (new_sig, id(_runtime.unseal)) if new_sig is not None else None
+            self._cred_sig_value = digest
+        return digest
 
     def reload_settings(self):
         """Apply settings before another worker can continue with an old policy."""
         with self.lock:
+            files_sig = self._config_signature() if load_config is _DEFAULT_LOAD_CONFIG else None
+            config_cached = files_sig is not None and files_sig == self._config_files_sig
             try:
-                config, members = load_config(self.root)
+                if config_cached:
+                    config, members = self.config, self.members
+                else:
+                    config, members = load_config(self.root)
+                    if load_config is _DEFAULT_LOAD_CONFIG:
+                        self._config_files_sig = self._config_signature()
                 signature = self._credentials_signature()
             except (OSError, ValueError):
+                self._config_files_sig = None
                 self.stop_children("invalid_config")
                 raise
             policy_changed = any(
@@ -261,6 +299,7 @@ class Engine:
         with self.lock:
             self.next_check = 0
             self.force_probe = True
+            self.manual_check_at = time.time()
 
     def suspend(self, reason="account_suspended"):
         """Stop this account's IO but keep its Engine, thread and Job alive."""
@@ -326,7 +365,7 @@ class Engine:
             if not any(member["room"] == room for member in self.members):
                 return False, "该直播间已不在关注列表中。"
             self.safety = self.application.safety_status()
-            if self.safety.get("blocked"):
+            if blocks_watch(self.safety):
                 return False, "账号保护暂停中，请先处理账号异常。"
             if self.paused:
                 return False, "挂机已暂停，请先点击恢复挂机。"
@@ -396,6 +435,7 @@ class Engine:
 
         try:
             update_json(path, change, {})
+            self._room_state_cache.pop(room, None)
             return True
         except (OSError, ValueError):
             logging.warning("Cannot update room task result room=%s", room)
@@ -433,6 +473,7 @@ class Engine:
 
             try:
                 update_json(path, change, {})
+                self._room_state_cache.pop(room, None)
             except (OSError, ValueError):
                 logging.warning("Cannot save room task result room=%s", room)
 
@@ -455,6 +496,31 @@ class Engine:
             self._update_room_task_result(room, clear_error)
             self.persist()
             return True, "已清除该直播间的任务提示。"
+
+    def dismiss_watch_warning(self, room):
+        with self.lock:
+            member = next((m for m in self.members if m["room"] == room), None)
+            if member is None:
+                return False, "该直播间已不在关注列表中。"
+            state = self._read_room_state(room)
+            signature = current_watch_warning_signature(self, member, state, time.time())
+            if not signature:
+                return True, "当前没有待确认的收益提醒。"
+            path = self.root / "state" / f"{room}.json"
+
+            def save_dismissal(current):
+                base = dict(current) if isinstance(current, dict) else {"room": room}
+                base["watch_warning_dismissed"] = signature
+                return base
+
+            try:
+                update_json(path, save_dismissal, {})
+            except (OSError, ValueError):
+                logging.warning("Cannot save watch warning dismissal room=%s", room)
+                return False, "无法保存收益提醒确认状态，请稍后重试。"
+            self._room_state_cache.pop(room, None)
+            self.persist()
+            return True, "已确认并清除该直播间的收益提醒。"
 
     def clear_room_block(self, room, capability=None):
         with self.lock:
@@ -496,16 +562,36 @@ class Engine:
             self.notifications.join(timeout=5)
 
     def _read_room_state(self, room):
+        path = self.root / "state" / f"{room}.json"
+        if read_json is _DEFAULT_READ_JSON:
+            sig = file_stat_signature(path)
+            if sig is None:
+                self._room_state_cache.pop(room, None)
+                self.state_errors.pop(room, None)
+                return {}
+            cached = self._room_state_cache.get(room)
+            if cached is not None and cached[0] == sig:
+                value = dict(cached[1])
+                self.state_errors.pop(room, None)
+                health = self.worker_health.get(room)
+                if health and value.get("pid") != health["pid"]:
+                    return {"state_error": "等待当前进程发布状态", "started": self.started_at}
+                return value
         try:
-            value = read_json(self.root / "state" / f"{room}.json", {})
+            value = read_json(path, {})
             if not isinstance(value, dict):
                 raise ValueError("Room state must be an object")
         except (OSError, ValueError) as exc:
+            self._room_state_cache.pop(room, None)
             error = type(exc).__name__
             if self.state_errors.get(room) != error:
                 logging.warning("Room state unreadable room=%s error=%s", room, error)
             self.state_errors[room] = error
             return {"state_error": "房间状态无法读取，等待重新发布"}
+        if read_json is _DEFAULT_READ_JSON:
+            sig = file_stat_signature(path)
+            if sig is not None:
+                self._room_state_cache[room] = (sig, dict(value))
         self.state_errors.pop(room, None)
         health = self.worker_health.get(room)
         if health and value.get("pid") != health["pid"]:
@@ -590,6 +676,19 @@ class Engine:
                 self.next_check = min(self.next_check, now + 300)
                 continue
             state = self._read_room_state(room)
+            request = self.manual_reconnects.get(room)
+            if request and request.get("state") == "starting":
+                heartbeat_healthy = bool(
+                    state.get("last_heartbeat")
+                    and now - number(state.get("last_heartbeat"), number(state.get("started"), now))
+                    <= heartbeat_timeout(state)
+                )
+                if heartbeat_healthy:
+                    request.setdefault("settled_at", now)
+                    if now - request["settled_at"] >= 15:
+                        request.update(state="done", message="", skip_actions=False)
+                else:
+                    request.pop("settled_at", None)
             record = self.worker_health.setdefault(room, {
                 "pid": proc.pid, "started": clock, "progress": clock,
             })
@@ -623,6 +722,27 @@ class Engine:
             if room not in self.workers and self.probe is None:
                 self.next_check = min(self.next_check, now + max(0, retry["until"] - clock))
 
+    def _probe_due_safety_hold(self, now, grace):
+        next_probe = self.safety.get("next_probe_at") or 0
+        if (
+            not self.paused
+            and not grace
+            and self.safety.get("kind") in ("uncertain", "review")
+            and not self.safety.get("until")
+            and next_probe
+            and now >= next_probe
+        ):
+            result = self.application.probe_safety(auto=True)
+            self.safety = result.get("hold") or self.application.safety_status()
+            if not self.safety.get("blocked"):
+                self._was_safety_blocked = False
+                self.error = ""
+                self.next_check = 0
+                self._clear_safety_task_results()
+                self.persist()
+                return True
+        return False
+
     def tick(self):
         if self.suspended:
             return
@@ -632,49 +752,36 @@ class Engine:
         self.room_blocks = self.application.room_safety_blocks()
         if self.safety["blocked"]:
             self._was_safety_blocked = True
-            if self.safety.get("kind") in ("auth", "credentials"):
-                self.account = ""
-                self.account_checked_at = 0
-            # IO guards block new writes immediately; let a bounded read finish.
             grace = (
                 self.safety.get("kind") == "uncertain" and now - self.safety.get("since", 0) < 20
             )
-            if (self.workers or self.probe) and not grace:
-                self.stop_children("account_safety")
-            next_probe = self.safety.get("next_probe_at") or 0
-            if (
-                not self.paused
-                and not grace
-                and self.safety.get("kind") in ("uncertain", "review")
-                and not self.safety.get("until")
-                and next_probe
-                and now >= next_probe
-            ):
-                result = self.application.probe_safety(auto=True)
-                self.safety = result.get("hold") or self.application.safety_status()
-                if not self.safety.get("blocked"):
-                    self._was_safety_blocked = False
-                    self.error = ""
-                    self.next_check = 0
-                    self._clear_safety_task_results()
-                    self.persist()
+            if blocks_watch(self.safety):
+                if self.safety.get("kind") in ("auth", "credentials"):
+                    self.account = ""
+                    self.account_checked_at = 0
+                # IO guards block new writes immediately; let a bounded read finish.
+                if (self.workers or self.probe) and not grace:
+                    self.stop_children("account_safety")
+                if self._probe_due_safety_hold(now, grace):
                     self._watch_workers(now)
                     return
-            self.error = self.safety["reason"]
-            candidates = [
-                t
-                for t in (
-                    self.safety.get("until"),
-                    self.safety.get("next_probe_at"),
-                    (self.safety.get("since", 0) + 20) if grace else None,
-                    now + 300,
-                )
-                if t
-            ]
-            self.next_check = min(candidates)
-            self.force_probe = False
-            return
-        if getattr(self, "_was_safety_blocked", False):
+                self.error = self.safety["reason"]
+                candidates = [
+                    t
+                    for t in (
+                        self.safety.get("until"),
+                        self.safety.get("next_probe_at"),
+                        (self.safety.get("since", 0) + 20) if grace else None,
+                        now + 300,
+                    )
+                    if t
+                ]
+                self.next_check = min(candidates)
+                self.force_probe = False
+                return
+            self._probe_due_safety_hold(now, grace)
+            self.error = ""
+        elif getattr(self, "_was_safety_blocked", False):
             self._was_safety_blocked = False
             self.error = ""
             self.next_check = 0
@@ -719,28 +826,24 @@ class Engine:
                 self.cycle()
             self.stopping.wait(1)
 
-    def _apply_probe(self, result, now):
-        if self.suspended:
-            return
-        message = result.get("error") or result.get("warning", "")
-        if message and message != self.error:
-            logging.warning("Status check reported: %s", message)
-        self.error = message
-        if "statuses" not in result:
-            for request in self.manual_reconnects.values():
-                if request["state"] == "checking":
-                    request.update(state="failed", message="重连检查失败，请检查网络后再试。")
-            for retry in self.worker_retries.values():
-                retry["until"] = max(retry["until"], time.monotonic() + 300)
-            self.error = self.error or "检查进程未返回结果，请查看日志。"
-            self.status_errors = {str(m["room"]): self.error for m in self.members}
-            if result.get("auth_invalid"):
-                logging.warning("Bilibili credentials were rejected; signing out")
-                self.account = ""
-                self.account_checked_at = 0
-                self.stop_children("auth_invalid")
-            self.next_check = now + 300
-            return
+    def _apply_probe_failure(self, result, now):
+        """Record a failed or auth-rejected probe without losing member error visibility."""
+        for request in self.manual_reconnects.values():
+            if request["state"] == "checking":
+                request.update(state="failed", message="重连检查失败，请检查网络后再试。")
+        for retry in self.worker_retries.values():
+            retry["until"] = max(retry["until"], time.monotonic() + 300)
+        self.error = self.error or "检查进程未返回结果，请查看日志。"
+        self.status_errors = {str(m["room"]): self.error for m in self.members}
+        if result.get("auth_invalid"):
+            logging.warning("Bilibili credentials were rejected; signing out")
+            self.account = ""
+            self.account_checked_at = 0
+            self.stop_children("auth_invalid")
+        self.next_check = now + 300
+
+    def _record_probe_statuses(self, result, now):
+        """Apply live statuses, fan medals, growth samples, and task counters from probe."""
         self.account = result.get("account", "")
         self.account_checked_at = now
         observed = result.get("observed", now)
@@ -773,65 +876,95 @@ class Engine:
         if "tasks" in result and isinstance(result["tasks"], dict):
             self.tasks.update(result["tasks"])
         self.task_errors = result.get("task_errors", {})
+        return observed, received
+
+    def _reconcile_live_member(self, member, status, observed):
+        """Update manual reconnect / live transition / worker spawn state for one member."""
+        room = member["room"]
+        key = str(room)
+        request = self.manual_reconnects.get(room, {})
+        manual = request.get("state") == "checking"
+        if manual and observed < request["requested_at"]:
+            self.next_check = 0
+            return
+        valid_status = bool(status and status.get("live_status") in (0, 1, 2))
+        if manual and not valid_status:
+            request.update(state="failed", message="直播状态无法确认，请检查网络后重试。")
+        live_status = status.get("live_status") if status else None
+        if live_status == 1 and request and request.get("state") in ("offline", "done"):
+            if time.time() >= request.get("cooldown_until", 0):
+                self.manual_reconnects.pop(room, None)
+                request = {}
+            elif request.get("state") == "offline":
+                request.update(state="done", message="", skip_actions=False)
+        if live_status in (0, 2):
+            if request:
+                request.update(state="offline", message="房间已下播，无需重连。", skip_actions=False)
+            self.worker_retries.pop(room, None)
+        elif not valid_status:
+            retry = self.worker_retries.get(room)
+            if retry:
+                retry["until"] = max(retry["until"], time.monotonic() + 300)
+        if live_status == 1:
+            if room not in self.known_live:
+                self.known_live.add(room)
+                logging.info("Room went live room=%s name=%s", room, member["name"])
+                if self.config.get("notify_on_live", True) and callable(self.notify_callback):
+                    try:
+                        self.notify_callback(member["name"], status.get("title", ""))
+                    except Exception:
+                        logging.exception("Desktop notification failed")
+        elif live_status in (0, 2):
+            if room in self.known_live:
+                logging.info("Room went offline room=%s name=%s", room, member["name"])
+            self.known_live.discard(room)
+        if (
+            self.suspended
+            or self.paused
+            or blocks_watch(self.safety)
+            or live_status != 1
+            or room in self.workers
+            or time.monotonic() < self.worker_retries.get(room, {}).get("until", 0)
+        ):
+            return
+        args = ["--worker", key]
+        skip_actions = request.get("skip_actions", False)
+        if skip_actions:
+            args.append("--watch-only")
+        try:
+            proc = self.spawn(*args)
+        except OSError:
+            if request:
+                request.update(state="failed", message="无法启动看播连接，请检查程序安装后重试。")
+            self.worker_retries[room] = {"attempt": 1, "until": time.monotonic() + 60}
+            logging.exception("Cannot start room worker room=%s", room)
+            return
+        self.workers[room] = proc
+        logging.info(
+            "Room worker started room=%s name=%s pid=%s watch_only=%s",
+            room,
+            member["name"],
+            proc.pid,
+            skip_actions,
+        )
+        self.worker_health[room] = {
+            "pid": proc.pid,
+            "started": time.monotonic(),
+            "progress": time.monotonic(),
+        }
+        if skip_actions:
+            request.update(state="starting", message="已启动新连接，等待成功心跳。")
+
+    def _apply_probe(self, result, now):
+        if self.suspended:
+            return
+        message = result.get("error") or result.get("warning", "")
+        if message and message != self.error:
+            logging.warning("Status check reported: %s", message)
+        self.error = message
+        if "statuses" not in result:
+            self._apply_probe_failure(result, now)
+            return
+        observed, received = self._record_probe_statuses(result, now)
         for member in self.members:
-            key = str(member["room"])
-            status = received.get(key)
-            request = self.manual_reconnects.get(member["room"], {})
-            manual = request.get("state") == "checking"
-            if manual and observed < request["requested_at"]:
-                self.next_check = 0
-                continue
-            if manual and (not status or status.get("live_status") not in (0, 1, 2)):
-                request.update(state="failed", message="直播状态无法确认，请检查网络后重试。")
-            if status and status.get("live_status") in (0, 2):
-                if request:
-                    request.update(state="offline", message="房间已下播，无需重连。", skip_actions=False)
-                self.worker_retries.pop(member["room"], None)
-            elif not status or status.get("live_status") not in (0, 1, 2):
-                retry = self.worker_retries.get(member["room"])
-                if retry:
-                    retry["until"] = max(retry["until"], time.monotonic() + 300)
-            if status and status.get("live_status") == 1:
-                if member["room"] not in self.known_live:
-                    self.known_live.add(member["room"])
-                    logging.info("Room went live room=%s name=%s", member["room"], member["name"])
-                    if self.config.get("notify_on_live", True) and callable(self.notify_callback):
-                        try:
-                            self.notify_callback(member["name"], status.get("title", ""))
-                        except Exception:
-                            logging.exception("Desktop notification failed")
-            elif status and status.get("live_status") in (0, 2):
-                if member["room"] in self.known_live:
-                    logging.info("Room went offline room=%s name=%s", member["room"], member["name"])
-                self.known_live.discard(member["room"])
-            if (
-                not self.suspended
-                and not self.paused
-                and not self.safety.get("blocked")
-                and status
-                and (status.get("live_status") == 1)
-                and (member["room"] not in self.workers)
-                and time.monotonic() >= self.worker_retries.get(member["room"], {}).get("until", 0)
-            ):
-                args = ["--worker", key]
-                skip_actions = request.get("skip_actions", False)
-                if skip_actions:
-                    args.append("--watch-only")
-                try:
-                    proc = self.spawn(*args)
-                except OSError:
-                    if request:
-                        request.update(state="failed", message="无法启动看播连接，请检查程序安装后重试。")
-                    self.worker_retries[member["room"]] = {"attempt": 1, "until": time.monotonic() + 60}
-                    logging.exception("Cannot start room worker room=%s", member["room"])
-                    continue
-                self.workers[member["room"]] = proc
-                logging.info(
-                    "Room worker started room=%s name=%s pid=%s watch_only=%s",
-                    member["room"], member["name"], proc.pid, skip_actions,
-                )
-                self.worker_health[member["room"]] = {
-                    "pid": proc.pid, "started": time.monotonic(), "progress": time.monotonic(),
-                }
-                if skip_actions:
-                    request.update(state="starting", message="已启动新连接，等待成功心跳。")
+            self._reconcile_live_member(member, received.get(str(member["room"])), observed)

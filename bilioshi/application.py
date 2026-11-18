@@ -1,17 +1,22 @@
 """Shared application entry for CLI adapters, desktop workers and manual actions."""
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import threading
 import time
 import urllib.parse
 from . import heartbeat as live
 from . import http
+from . import runtime as _runtime
 from .check_auth import check_login_profile
 from .context import RuntimeContext, use_context
-from .runtime import data_dir, read_json, task_day, update_json
+from .runtime import data_dir, file_stat_signature, read_json, task_day, update_json
 from .members import load_members, validate_members
 from .session_headers import session_headers
 from .launch import watch_arguments
 from . import safety
+
+_DEFAULT_READ_JSON = read_json
 
 
 class AppContext:
@@ -20,13 +25,38 @@ class AppContext:
         self.root = Path(root) if root is not None else data_dir()
         self.runtime = RuntimeContext(self.root, observer, notify)
         self.gateway = gateway
+        self._cred_lock = threading.Lock()
+        self._cred_cache_key = None
+        self._cred_cache_value = None
+
+    def _read_credentials(self):
+        path = self.root / "credentials.json"
+        if read_json is not _DEFAULT_READ_JSON:
+            return read_json(path, {})
+        sig = file_stat_signature(path)
+        if sig is None:
+            with self._cred_lock:
+                self._cred_cache_key = None
+                self._cred_cache_value = None
+            return {}
+        key = (sig, id(_runtime.unseal))
+        with self._cred_lock:
+            if self._cred_cache_key == key and self._cred_cache_value is not None:
+                return dict(self._cred_cache_value)
+        saved = read_json(path, {})
+        new_sig = file_stat_signature(path)
+        if new_sig is not None and isinstance(saved, dict):
+            with self._cred_lock:
+                self._cred_cache_key = (new_sig, id(_runtime.unseal))
+                self._cred_cache_value = dict(saved)
+        return dict(saved) if isinstance(saved, dict) else saved
 
     def call(self, method, *args, **kwargs):
         with use_context(self.runtime):
             return getattr(self.gateway, method)(*args, **kwargs)
 
     def credentials(self):
-        saved = read_json(self.root / "credentials.json", {})
+        saved = self._read_credentials()
         if not saved.get("SESSDATA") or not saved.get("bili_jct"):
             raise ValueError("尚未配置登录凭证，请打开登录设置")
         return (saved["SESSDATA"], saved["bili_jct"])
@@ -38,7 +68,7 @@ class AppContext:
         return self.call("redo_member_tasks", room, uid, *self.credentials(), task_type)
 
     def resolve(self, query):
-        saved = read_json(self.root / "credentials.json", {})
+        saved = self._read_credentials()
         return self.call(
             "resolve_anchor_info", query, saved.get("SESSDATA", ""), saved.get("bili_jct", "")
         )
@@ -68,22 +98,26 @@ class AppContext:
 
     def safety_status(self):
         try:
-            saved = read_json(self.root / "credentials.json", {})
+            saved = self._read_credentials()
         except RuntimeError:
             return {
                 "blocked": True,
                 "kind": "credentials",
                 "reason": "凭证无法解密，请重新扫码登录",
             }
-        hold = safety.status(saved.get("SESSDATA"), self.root)
-        mult = safety.pace_multiplier(saved.get("SESSDATA"), self.root)
+        sessdata = saved.get("SESSDATA")
+        hold = safety.status(sessdata, self.root)
+        mult = safety.pace_multiplier(sessdata, self.root)
         if mult > 1.0:
             hold["pace_multiplier"] = mult
+        prob = safety.probation_until(sessdata, self.root)
+        if prob > 0:
+            hold["probation_until"] = prob
         return hold
 
     def room_safety_blocks(self):
         try:
-            saved = read_json(self.root / "credentials.json", {})
+            saved = self._read_credentials()
         except RuntimeError:
             return {}
         return safety.room_blocks(saved.get("SESSDATA"), self.root)
@@ -343,20 +377,38 @@ class AppContext:
         )
         return result
 
+    def _query_one_task(self, member, credentials):
+        club = self.call("get_fans_club_task_info", member["room"], member["uid"], *credentials)
+        key = str(member["room"])
+        if not club:
+            return key, None, "任务进度查询失败"
+        entry = {
+            "tasks": club.get("task_info", []),
+            "intimacy": club.get("intimacy", 0),
+            "next_intimacy": club.get("next_intimacy", 0),
+            "task_light_days": club.get("task_light_days", 0),
+            "is_lighted": club.get("is_lighted", False),
+            "reach_free_intimacy_limit": bool(club.get("reach_free_intimacy_limit", False)),
+            "updated": time.time(),
+            "day": task_day(),
+        }
+        free_intimacy = club.get("free_intimacy")
+        if isinstance(free_intimacy, int) and not isinstance(free_intimacy, bool):
+            entry["free_intimacy"] = free_intimacy
+        return key, entry, None
+
     def _query_tasks(self, members, credentials):
         tasks, errors = ({}, {})
-        for member in members:
-            club = self.call("get_fans_club_task_info", member["room"], member["uid"], *credentials)
-            if not club:
-                errors[str(member["room"])] = "任务进度查询失败"
-                continue
-            tasks[str(member["room"])] = {
-                "tasks": club.get("task_info", []),
-                "intimacy": club.get("intimacy", 0),
-                "next_intimacy": club.get("next_intimacy", 0),
-                "task_light_days": club.get("task_light_days", 0),
-                "is_lighted": club.get("is_lighted", False),
-                "updated": time.time(),
-                "day": task_day(),
-            }
+        if len(members) <= 1:
+            results = [self._query_one_task(member, credentials) for member in members]
+        else:
+            with ThreadPoolExecutor(max_workers=min(4, len(members))) as pool:
+                results = list(
+                    pool.map(lambda member: self._query_one_task(member, credentials), members)
+                )
+        for key, task_entry, error in results:
+            if error:
+                errors[key] = error
+            else:
+                tasks[key] = task_entry
         return (tasks, errors)

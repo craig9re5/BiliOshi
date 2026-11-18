@@ -4,6 +4,7 @@ import logging
 import os
 import time
 from bilioshi.application import AppContext
+from bilioshi.runtime import update_json
 from desktop.storage import load_config, write_json
 from desktop.windows import Mutex, instance_name
 
@@ -34,8 +35,12 @@ def probe(root, output):
 
 class RoomStateRecorder:
 
+    _DISK_OWNED_FIELDS = ("watch_warning_dismissed",)
+    _DISK_TASK_FIELDS = ("task_result", "task_updated")
+
     def __init__(self, path, member, *, watch_only=False):
         self.path = path
+        self._write_task_result = False
         self.state = {
             "room": member["room"],
             "name": member["name"],
@@ -49,7 +54,29 @@ class RoomStateRecorder:
 
     def save(self):
         self.state["updated"] = time.time()
-        write_json(self.path, self.state)
+        payload = dict(self.state)
+        write_task = self._write_task_result
+
+        def merge(current):
+            disk = current if isinstance(current, dict) else {}
+            merged = dict(payload)
+            for key in self._DISK_OWNED_FIELDS:
+                if key in disk:
+                    merged[key] = disk[key]
+                else:
+                    merged.pop(key, None)
+            if not write_task:
+                for key in self._DISK_TASK_FIELDS:
+                    if key in disk:
+                        merged[key] = disk[key]
+                    else:
+                        merged.pop(key, None)
+            return merged
+
+        saved = update_json(self.path, merge, {})
+        self._write_task_result = False
+        if isinstance(saved, dict):
+            self.state = saved
 
     def __call__(self, event):
         kind = event.get("type")
@@ -81,6 +108,7 @@ class RoomStateRecorder:
             self.state.update(phase="本轮结束", result=event)
         elif kind == "task_check":
             self.state.update(task_result=event, task_updated=time.time())
+            self._write_task_result = True
         elif kind == "watch_progress":
             self.state["watch_progress"] = event
         self.save()
@@ -91,7 +119,7 @@ class RoomStateRecorder:
 
         saved = read_json(self.path.parent.parent / "credentials.json", {})
         hold = safety.status(saved.get("SESSDATA"), self.path.parent.parent)
-        if hold.get("blocked"):
+        if safety.blocks_watch(hold):
             self.state.update(phase="账号保护暂停", error=hold["reason"], safety=hold)
             self.save()
             return

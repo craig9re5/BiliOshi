@@ -63,7 +63,7 @@ function colorFor(room) {
 
 function toRoom(row, snap) {
   const paused = Boolean(snap.paused);
-  const protectedAccount = Boolean(snap.safety?.blocked);
+  const protectedAccount = Boolean(snap.safety?.blocked && snap.safety?.scope !== "interaction");
   // A viewed account that is not running shows its last known state; it must
   // never look like a live connection.
   const inactive = Boolean(row.inactive || snap.inactive);

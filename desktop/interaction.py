@@ -22,9 +22,15 @@ def action_reason(snap, row, action, pending=False, now=None):
     if hold.get("blocked"):
         if hold.get("kind") in ("auth", "credentials"):
             return "登录已失效，请点击上方“重新扫码登录”。"
-        if hold.get("until"):
+        if hold.get("scope") == "interaction":
+            if action != "reconnect":
+                if hold.get("until"):
+                    return "互动保护冷却中（看播正常继续），到时自动恢复。"
+                return "互动操作保护暂停（看播正常继续），请先点击上方“解除异常暂停”。"
+        elif hold.get("until"):
             return "账号冷却中，到时自动恢复；可打开直播间核对。"
-        return "账号保护暂停，请先点击上方“解除异常暂停”。"
+        else:
+            return "账号保护暂停，请先点击上方“解除异常暂停”。"
     if snap.get("global_paused"):
         return "全部挂机已暂停，请先点击“恢复全部挂机”。"
     if snap.get("paused"):

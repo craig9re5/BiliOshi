@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"8ca72409037dabe5f56e8bd8b28d3bfc624b99b5783dc474ee54c80282c4c74f","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"bridge.jsx","source_sha256":"68137105e04036b26fd1ec48c65553de9de9750670a927152425c989b5865d55"} */
+/* BiliOshi JSX {"code_sha256":"ea90c4a62dd9dcfc25ab8835cd7cb8945578c21aa78404c9992ea8022099a7b1","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"bridge.jsx","source_sha256":"8e82453051d21871009c4ef19755a45868bfbdffda65630cc5f4f9359a6dbcd7"} */
 (function () {
 "use strict";
 /* Transport and presentation adapters. Business decisions stay in Python. */
@@ -65,7 +65,7 @@ function colorFor(room) {
 }
 function toRoom(row, snap) {
   const paused = Boolean(snap.paused);
-  const protectedAccount = Boolean(snap.safety?.blocked);
+  const protectedAccount = Boolean(snap.safety?.blocked && snap.safety?.scope !== "interaction");
   // A viewed account that is not running shows its last known state; it must
   // never look like a live connection.
   const inactive = Boolean(row.inactive || snap.inactive);

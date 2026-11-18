@@ -117,7 +117,7 @@ def main():
                 assert "核对观看收益" in ui.footer.get()
                 assert ui.workbench.detail_warning.winfo_manager() == "pack"
                 assert "未增长" in ui.workbench.detail_warning.cget("text")
-                assert ui.tree.items["2"]["phase"].cget("fg") == "#a65c00"
+                assert ui.tree.items["2"]["phase"].cget("fg") == "#8a5a12"
                 ui.tray.notify.assert_called_once()
                 recorder({"type": "watch_progress", "day": task_day(), "checked_at": time.time(),
                           "status": "tracking", "warning": ""})
@@ -136,7 +136,7 @@ def main():
                 connection_children = ui.workbench.connection_card.pack_slaves()
                 assert ui.workbench.detail_phase.master.master == ui.workbench.connection_card
                 assert connection_children.index(ui.workbench.detail_heartbeat) < connection_children.index(ui.workbench.detail_warning)
-                assert ui.tree.items["2"]["phase"].cget("fg") == "#a65c00"
+                assert ui.tree.items["2"]["phase"].cget("fg") == "#8a5a12"
                 ui.tray.notify.assert_called_once()
                 with patch.object(engine, "reconnect_room", return_value=(False, "模拟网络失败，请重试。")) as reconnect, \
                      patch.object(engine.dispatcher, "submit_control", side_effect=lambda callback: callback() or Mock()):
@@ -230,7 +230,8 @@ def main():
                 automation.canvas.yview_moveto(1.0)
                 ui.root.update()
 
-                assert ui.workbench.nav_buttons["automation"].cget("bg") == "#2b4443"
+                assert ui.workbench.nav_buttons["automation"].cget("bg") == "#ffffff"
+                assert ui.workbench.nav_buttons["monitor"].cget("bg") != "#ffffff"
                 assert ui.workbench.activity_button.winfo_rooty() > ui.workbench.nav_buttons["account"].winfo_rooty()
                 from desktop.widgets import ToggleSwitch
                 def switches(widget):

@@ -301,56 +301,45 @@ def _member_rows(members):
     return rows
 
 
-def load_history(root, account_id="", days=7, *, members=None, now=None):
-    """Return the public growth payload for one account and window.
+def _growth_error_payload(error, today, day_list, account_id):
+    """Build an unavailable growth payload when time or storage fails validation."""
+    return {
+        "schema": 1,
+        "available": False,
+        "error": error,
+        "today": today,
+        "days": day_list,
+        "rooms": [],
+        "coverage": {},
+        "account_id": account_id or "",
+        "generated_at": time.time(),
+    }
 
-    ``members`` is the account's current members list; current rooms always get
-    a row even when they have no samples. Historical rooms are appended after
-    them. Cells are aligned with ``days`` and never turn a missing value into 0.
-    """
-    if type(days) is not int or isinstance(days, bool) or not 1 <= days <= RETENTION_DAYS:
-        raise ValueError(f"days 必须是 1 到 {RETENTION_DAYS} 之间的整数")
-    today = _today(now)
-    if not today:
-        return {
-            "schema": 1, "available": False, "error": "当前时间无效",
-            "today": "", "days": [], "rooms": [], "coverage": {},
-            "account_id": account_id or "", "generated_at": time.time(),
-        }
-    try:
-        start = date.fromisoformat(today) - timedelta(days=days - 1)
-    except ValueError:
-        start = date.fromisoformat(today)
-    day_list = [(start + timedelta(days=offset)).isoformat() for offset in range(days)]
+
+def _read_growth_store(root, account_id, today, day_list):
+    """Load and validate the persisted growth payload for an account."""
     try:
         raw = read_json(growth_path(root), None)
     except FileNotFoundError:
         raw = None
     except (OSError, ValueError, TypeError):
-        return {
-            "schema": 1, "available": False,
-            "error": "成长记录无法读取，历史数据未改动",
-            "today": today, "days": day_list, "rooms": [], "coverage": {},
-            "account_id": account_id or "", "generated_at": time.time(),
-        }
+        return None, _growth_error_payload(
+            "成长记录无法读取，历史数据未改动", today, day_list, account_id
+        )
     if raw is None:
-        data = _empty(account_id)
-        error = ""
-    else:
-        error = _validate(raw, account_id)
-        data = raw if not error else None
+        return _empty(account_id), None
+    error = _validate(raw, account_id)
     if error:
-        return {
-            "schema": 1, "available": False, "error": error,
-            "today": today, "days": day_list, "rooms": [], "coverage": {},
-            "account_id": account_id or "", "generated_at": time.time(),
-        }
+        return None, _growth_error_payload(error, today, day_list, account_id)
+    return raw, None
 
+
+def _collect_growth_rows(members, days_map, day_list):
+    """Merge current members with historical room metadata over the window."""
     rows = _member_rows(members)
     by_room = {row["room"]: row for row in rows}
-    days = data.get("days", {}) if isinstance(data, dict) else {}
     for day in day_list:
-        entry = days.get(day) if isinstance(days, dict) else None
+        entry = days_map.get(day) if isinstance(days_map, dict) else None
         rooms = entry.get("rooms", {}) if isinstance(entry, dict) else {}
         if not isinstance(rooms, dict):
             continue
@@ -361,8 +350,12 @@ def load_history(root, account_id="", days=7, *, members=None, now=None):
             row = by_room.get(room)
             if row is None:
                 row = {
-                    "room": room, "uid": cell.get("uid", 0), "name": "",
-                    "tracked": False, "medal_name": "", "level": 0,
+                    "room": room,
+                    "uid": cell.get("uid", 0),
+                    "name": "",
+                    "tracked": False,
+                    "medal_name": "",
+                    "level": 0,
                 }
                 rows.append(row)
                 by_room[room] = row
@@ -377,12 +370,16 @@ def load_history(root, account_id="", days=7, *, members=None, now=None):
                         row[field] = value
                 elif isinstance(value, str) and value.strip():
                     row[field] = value
+    return rows
 
+
+def _compute_growth_coverage(days_map, day_list, rows, today):
+    """Summarize daily sample counts, timestamps, and completeness flags."""
     current_rooms = [row for row in rows if row["tracked"]]
     recordable = len(current_rooms)
     coverage = {}
     for day in day_list:
-        entry = days.get(day) if isinstance(days, dict) else None
+        entry = days_map.get(day) if isinstance(days_map, dict) else None
         rooms = entry.get("rooms", {}) if isinstance(entry, dict) else {}
         recorded = 0
         first_at = last_at = None
@@ -413,14 +410,18 @@ def load_history(root, account_id="", days=7, *, members=None, now=None):
             "rooms_recordable": recordable,
             "partial": partial,
         }
+    return coverage
 
+
+def _format_growth_rooms(rows, days_map, day_list):
+    """Align each room's recorded intimacy cells and totals to day_list."""
     result_rooms = []
     for row in rows:
         cells = []
         recorded_days = 0
         recorded_total = 0
         for day in day_list:
-            entry = days.get(day) if isinstance(days, dict) else None
+            entry = days_map.get(day) if isinstance(days_map, dict) else None
             rooms = entry.get("rooms", {}) if isinstance(entry, dict) else {}
             cell = rooms.get(str(row["room"])) if isinstance(rooms, dict) else None
             if isinstance(cell, dict) and _is_int(cell.get("max")):
@@ -428,7 +429,9 @@ def load_history(root, account_id="", days=7, *, members=None, now=None):
                 recorded_days += 1
                 recorded_total += value
                 cells.append({
-                    "day": day, "recorded": True, "value": value,
+                    "day": day,
+                    "recorded": True,
+                    "value": value,
                     "samples": cell.get("samples", 0) if _is_int(cell.get("samples"), 0) else 0,
                     "last_at": cell.get("last_at") if _is_time(cell.get("last_at")) else None,
                 })
@@ -440,7 +443,34 @@ def load_history(root, account_id="", days=7, *, members=None, now=None):
             "recorded_total": recorded_total,
             "cells": cells,
         })
+    return result_rooms
 
+
+def load_history(root, account_id="", days=7, *, members=None, now=None):
+    """Return the public growth payload for one account and window.
+
+    ``members`` is the account's current members list; current rooms always get
+    a row even when they have no samples. Historical rooms are appended after
+    them. Cells are aligned with ``days`` and never turn a missing value into 0.
+    """
+    if type(days) is not int or isinstance(days, bool) or not 1 <= days <= RETENTION_DAYS:
+        raise ValueError(f"days 必须是 1 到 {RETENTION_DAYS} 之间的整数")
+    today = _today(now)
+    if not today:
+        return _growth_error_payload("当前时间无效", "", [], account_id)
+    try:
+        start = date.fromisoformat(today) - timedelta(days=days - 1)
+    except ValueError:
+        start = date.fromisoformat(today)
+    day_list = [(start + timedelta(days=offset)).isoformat() for offset in range(days)]
+    data, error_payload = _read_growth_store(root, account_id, today, day_list)
+    if error_payload is not None:
+        return error_payload
+
+    days_map = data.get("days", {}) if isinstance(data, dict) else {}
+    rows = _collect_growth_rows(members, days_map, day_list)
+    coverage = _compute_growth_coverage(days_map, day_list, rows, today)
+    result_rooms = _format_growth_rooms(rows, days_map, day_list)
     return {
         "schema": 1,
         "available": True,

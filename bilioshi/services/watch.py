@@ -22,41 +22,47 @@ def intimacy_change(before, after, start_day, end_day, *, _gateway):
     return result
 
 
-def watch_room(
+def _watch_error(name: str, room_id: int, error: str, *, stopped_reason: str = "") -> Dict:
+    """Build a standardized failure payload for watch setup."""
+    payload = {
+        "name": name,
+        "room": room_id,
+        "success": False,
+        "error": error,
+        "beats_ok": 0,
+        "beats_total": 0,
+        "minutes": 0,
+    }
+    if stopped_reason:
+        payload["stopped_reason"] = stopped_reason
+    return payload
+
+
+def _setup_watch_chain(
     member: Dict,
     sessdata: str,
     bili_jct: str,
-    duration_min: int = WATCH_MINUTES,
-    interval: int = HEARTBEAT_INTERVAL,
-    until_offline: bool = False,
-    title: str = "",
-    send_danmaku: bool = True,
-    send_live_likes: bool = False,
-    medal_info: Optional[Dict] = None,
-    auto_revive: bool = True,
-    auto_intimacy: bool = True,
-    *,
+    interval: int,
+    send_danmaku: bool,
+    send_live_likes: bool,
+    auto_revive: bool,
+    auto_intimacy: bool,
     _gateway,
-) -> Dict:
-    """对一个直播间进行 X25Kn 心跳挂机。until_offline=True 时持续到下播为止。"""
+):
+    """Enter the room, build task/progress trackers, and initialize the X25Kn chain."""
     room_id = member["room"]
     up_id = member["uid"]
     name = member["name"]
-    entered = _gateway.enter_room(room_id, sessdata, bili_jct)
-    if not entered:
-        return {
-            "name": name,
-            "room": room_id,
-            "success": False,
-            "error": "进入直播间失败",
-            "beats_ok": 0,
-            "beats_total": 0,
-            "minutes": 0,
-        }
+    if not _gateway.enter_room(room_id, sessdata, bili_jct):
+        return None, _watch_error(name, room_id, "进入直播间失败")
     room_info = _gateway._get_room_info(room_id, sessdata, bili_jct)
     area_id = room_info.get("area_id", 0) if room_info else 0
     parent_area_id = room_info.get("parent_area_id", 0) if room_info else 0
     buvid = _gateway._ensure_live_buvid(sessdata, bili_jct)
+    if not buvid:
+        return None, _watch_error(
+            name, room_id, "无法取得服务器设备会话，本轮停止连接", stopped_reason="session"
+        )
     task_runner = _gateway.DailyTaskRunner(
         room_id,
         up_id,
@@ -66,36 +72,18 @@ def watch_room(
         auto_intimacy=send_danmaku and auto_intimacy,
         auto_like=send_live_likes,
     )
-    if not buvid:
-        return {
-            "name": name,
-            "room": room_id,
-            "success": False,
-            "error": "无法取得服务器设备会话，本轮停止连接",
-            "beats_ok": 0,
-            "beats_total": 0,
-            "minutes": 0,
-            "stopped_reason": "session",
-        }
     uuid_str = str(uuid.uuid4())
     root = _gateway._runtime_path("_TASK_STATE_DIR").parent.parent
     credit_clock = CreditClock(root, safety.identity(sessdata, root))
-    progress_monitor = WatchProgressMonitor(room_id, up_id, name, sessdata, bili_jct, _gateway,
-                                            clock=credit_clock)
+    progress_monitor = WatchProgressMonitor(
+        room_id, up_id, name, sessdata, bili_jct, _gateway, clock=credit_clock
+    )
     progress_monitor.check(force=True)
     e_data = _gateway.x25kn_enter_room(
         room_id, parent_area_id, area_id, up_id, buvid, uuid_str, sessdata, bili_jct
     )
     if not e_data:
-        return {
-            "name": name,
-            "room": room_id,
-            "success": False,
-            "error": "X25Kn E 失败",
-            "beats_ok": 0,
-            "beats_total": 0,
-            "minutes": 0,
-        }
+        return None, _watch_error(name, room_id, "X25Kn E 失败")
     chain = HeartbeatChain(
         room_id,
         parent_area_id,
@@ -113,38 +101,56 @@ def watch_room(
         f"    📱 X25Kn 心跳已就绪（服务端间隔 {chain.heartbeat_interval}s，看播涨亲密度）",
         file=sys.stderr,
     )
-    if until_offline:
-        return _watch_until_offline(
-            chain,
-            task_runner,
-            name,
-            room_id,
-            title,
-            interval,
-            duration_min,
-            send_danmaku,
-            send_live_likes,
-            sessdata,
-            bili_jct,
-            _gateway,
-            progress_monitor=progress_monitor,
-        )
-    else:
-        return _watch_duration(
-            chain,
-            task_runner,
-            name,
-            room_id,
-            title,
-            interval,
-            duration_min,
-            send_danmaku,
-            send_live_likes,
-            sessdata,
-            bili_jct,
-            _gateway,
-            progress_monitor=progress_monitor,
-        )
+    return (chain, task_runner, progress_monitor), None
+
+
+def watch_room(
+    member: Dict,
+    sessdata: str,
+    bili_jct: str,
+    duration_min: int = WATCH_MINUTES,
+    interval: int = HEARTBEAT_INTERVAL,
+    until_offline: bool = False,
+    title: str = "",
+    send_danmaku: bool = True,
+    send_live_likes: bool = False,
+    medal_info: Optional[Dict] = None,
+    auto_revive: bool = True,
+    auto_intimacy: bool = True,
+    *,
+    _gateway,
+) -> Dict:
+    """对一个直播间进行 X25Kn 心跳挂机。until_offline=True 时持续到下播为止。"""
+    setup, error_result = _setup_watch_chain(
+        member,
+        sessdata,
+        bili_jct,
+        interval,
+        send_danmaku,
+        send_live_likes,
+        auto_revive,
+        auto_intimacy,
+        _gateway,
+    )
+    if error_result is not None:
+        return error_result
+    chain, task_runner, progress_monitor = setup
+    runner = _watch_until_offline if until_offline else _watch_duration
+    return runner(
+        chain,
+        task_runner,
+        member["name"],
+        member["room"],
+        title,
+        interval,
+        duration_min,
+        send_danmaku,
+        send_live_likes,
+        sessdata,
+        bili_jct,
+        _gateway,
+        progress_monitor=progress_monitor,
+    )
 
 
 def _watch_until_offline(
@@ -433,7 +439,7 @@ class HeartbeatChain:
                 }
             )
         else:
-            if not safety.status(self.sessdata)["blocked"]:
+            if not safety.blocks_watch(safety.status(self.sessdata)):
                 self.restart()
         return result
 

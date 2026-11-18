@@ -17,6 +17,15 @@ EVENT_CONTEXT = ContextVar("activity_context", default={})
 APP_VERSION = "2026.10.18.3"
 
 
+def file_stat_signature(path):
+    """Cheap cache key combining nanosecond mtime, size and NTFS/POSIX inode."""
+    try:
+        stat = Path(path).stat()
+        return (stat.st_mtime_ns, stat.st_size, getattr(stat, "st_ino", 0))
+    except OSError:
+        return None
+
+
 def data_dir():
     context = CURRENT.get()
     if context is not None:

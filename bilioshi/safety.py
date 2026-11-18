@@ -2,9 +2,11 @@
 
 import time
 import json
+import threading
 from urllib.parse import urlsplit, parse_qs
 from .runtime import (
     data_dir,
+    file_stat_signature,
     read_json,
     write_json,
     update_json,
@@ -13,12 +15,47 @@ from .runtime import (
     task_day,
     append_event,
 )
+
+_DEFAULT_READ_JSON = read_json
+_READ_CACHE = {}
+_READ_CACHE_LOCK = threading.Lock()
+
+
+def _read_cached_json(path, default=None):
+    """Read immutable snapshots from safety state with stat-keyed caching."""
+    if read_json is not _DEFAULT_READ_JSON:
+        return read_json(path, default)
+    sig = file_stat_signature(path)
+    key = str(path)
+    if sig is None:
+        with _READ_CACHE_LOCK:
+            _READ_CACHE.pop(key, None)
+        return default
+    with _READ_CACHE_LOCK:
+        cached = _READ_CACHE.get(key)
+        if cached is not None and cached[0] == sig:
+            return cached[1]
+    value = read_json(path, default)
+    new_sig = file_stat_signature(path)
+    if new_sig is not None and isinstance(value, dict):
+        with _READ_CACHE_LOCK:
+            if len(_READ_CACHE) >= 128:
+                _READ_CACHE.clear()
+            _READ_CACHE[key] = (new_sig, value)
+    return value
 from .policies import DANMAKU_SESSION_ATTEMPT_LIMIT, LIVE_LIKE_BATCHES
 from .redaction import redact
 
 RATE_COOLDOWN = 300
+EDGE_LIMIT_COOLDOWN = 180
 NETWORK_COOLDOWN = 60
 ROOM_CAPABILITY_COOLDOWN = 43200
+PROBATION_SECONDS = {
+    "review": 300,
+    "uncertain": 90,
+}
+INTERACTION_OPS = ("danmaku", "like")
+INTERACTION_SCOPED_KINDS = ("rate", "uncertain", "edge_limit")
 ACCOUNT_BAN_WORDS = ("封禁", "封号", "冻结", "注销")
 AUTO_PROBE_DELAYS = {
     "uncertain": (60, 180, 300),
@@ -32,6 +69,7 @@ KIND_LABELS = {
     "review": "安全验证 / 风控拦截",
     "permission": "权限或禁言限制",
     "rate": "请求频率限制",
+    "edge_limit": "边缘网关限流",
     "uncertain": "操作结果待核验",
     "auth": "登录凭证失效",
     "credentials": "本机凭证异常",
@@ -47,7 +85,37 @@ HEARTBEAT_PATHS = {
     "/xlive/data-interface/v1/x25Kn/E",
     "/xlive/data-interface/v1/x25Kn/X",
 }
+ROOM_ENTRY_PATHS = {"/xlive/web-room/v1/index/roomEntryAction"}
 READ_POST_PATHS = {"/room/v1/Room/get_status_info_by_uids"}
+
+
+def _infer_scope(kind, operation=None, scope=None):
+    if scope in ("account", "interaction"):
+        return scope
+    op_kind = (operation or {}).get("kind") if isinstance(operation, dict) else ""
+    if kind in INTERACTION_SCOPED_KINDS and op_kind in INTERACTION_OPS:
+        return "interaction"
+    return "account"
+
+
+def is_interaction_only(hold):
+    return bool(isinstance(hold, dict) and hold.get("blocked") and hold.get("scope") == "interaction")
+
+
+def is_watch_operation(op, *, mutation=True):
+    if not mutation:
+        return True
+    if not isinstance(op, dict):
+        return False
+    return op.get("kind") == "heartbeat" or op.get("path") in ROOM_ENTRY_PATHS
+
+
+def blocks_watch(hold):
+    return bool(
+        isinstance(hold, dict)
+        and hold.get("blocked")
+        and hold.get("scope", "account") != "interaction"
+    )
 
 
 def _next_probe_delay(kind, auto_attempts, auto_recovered_today):
@@ -75,12 +143,14 @@ def describe_hold(hold, members=None):
             room_name = str(matched.get("name") or "")
     room_desc = f"「{room_name}」（房间 {room_id}）" if room_name and room_id else (f"房间 {room_id}" if room_id else "")
     op_label = OPERATION_LABELS.get(op_kind, "账号请求" if op else "")
+    scope = hold.get("scope") or _infer_scope(kind, op)
+    interaction_only = scope == "interaction"
 
     if kind == "review":
         steps = [
             f"打开{room_desc or '任意已关注的 B 站直播间'}，确认网页端登录正常且能正常加载直播画面。",
             "在直播间尝试手动发送 1 条弹幕或点赞，观察是否弹出滑块/安全验证并完成验证。",
-            "若近期切换过网络/代理或同时挂机多个直播间，建议等待 15 分钟冷却后再点下方「检测是否已恢复」。",
+            "若近期切换过网络/代理或同时挂机多个直播间，建议等待 15 分钟冷却后再点下方「检测并自动恢复」。",
         ]
         action_url = f"https://live.bilibili.com/{room_id}" if room_id else "https://live.bilibili.com/"
         action_label = "打开触发直播间" if room_id else "打开 B 站直播"
@@ -88,23 +158,30 @@ def describe_hold(hold, members=None):
         steps = [
             f"打开{room_desc or '对应 B 站直播间'}，检查当前账号是否被房管禁言、未满足发言等级或仅允许粉丝发言。",
             "前往 B 站账号安全中心确认账号未处于受限/封禁状态。",
-            "若只是单个直播间被禁言，建议在设置中关闭自动弹幕或暂时移除该主播，再点击「确认并恢复」。",
+            "若只是单个直播间被禁言，建议在设置中关闭自动弹幕或暂时移除该主播，再点击「确认已处理并恢复」。",
         ]
         action_url = f"https://live.bilibili.com/{room_id}" if room_id else "https://account.bilibili.com/account/home"
         action_label = "打开触发直播间" if room_id else "打开账号中心"
-    elif kind == "rate":
+    elif kind in ("rate", "edge_limit"):
         steps = [
-            "此状态属于平台短时限流保护，通常无需去 B 站做额外操作。",
-            "等待下方倒计时结束后，程序会自动重新检查并恢复挂机。",
+            (
+                "此状态属于短时限流保护，已仅暂停自动弹幕与点赞，各直播间看播心跳与亲密度正常继续。"
+                if interaction_only
+                else "此状态属于平台短时限流保护，通常无需去 B 站做额外操作。"
+            ),
+            "等待下方倒计时结束后，程序会自动恢复正常任务。",
             "如频繁触发限流，建议在「设置 → 运行模式」中切回「稳健」模式。",
         ]
         action_url = "https://live.bilibili.com/"
         action_label = "打开 B 站直播"
     elif kind == "uncertain":
         steps = [
-            f"刚才在{room_desc or '直播间'}执行「{op_label or '互动操作'}」时遇到网络超时或服务端异常，为避免重复发送已暂时停机。",
+            (
+                f"刚才在{room_desc or '直播间'}执行「{op_label or '互动操作'}」时遇到网络超时或服务端异常，"
+                + ("已仅暂停重复发送互动，看播心跳正常继续。" if interaction_only else "为避免重复发送已暂时停机。")
+            ),
             "可打开直播间或粉丝团任务面板，确认今日弹幕/点赞计数是否已实际到账。",
-            "程序会在约 1 分钟后自动做只读复检并尝试恢复；你也可以直接点击下方「检测是否已恢复」。",
+            "程序会在约 1 分钟后自动做只读复检并进入低速试探恢复；也可直接点击下方「检测并自动恢复」。",
         ]
         action_url = f"https://live.bilibili.com/{room_id}" if room_id else "https://live.bilibili.com/"
         action_label = "打开触发直播间" if room_id else "打开 B 站直播"
@@ -118,13 +195,19 @@ def describe_hold(hold, members=None):
     else:
         steps = [
             "检测到连续网络请求失败，程序已进入短暂冷却以保护账号。",
-            "请确认本机网络或代理连接畅通，冷却结束后将自动恢复巡检。",
+            "请确认本机网络或分流连接畅通，冷却结束后将自动恢复巡检。",
         ]
         action_url = "https://live.bilibili.com/"
         action_label = "打开 B 站直播"
 
     return {
         "kind_label": KIND_LABELS.get(kind, "账号保护暂停"),
+        "scope": scope,
+        "scope_label": (
+            "仅暂停弹幕/点赞互动 · 看播心跳正常继续"
+            if interaction_only
+            else "全账号暂停（含看播连接与互动）"
+        ),
         "operation_label": op_label,
         "room_id": room_id,
         "room_name": room_name,
@@ -132,7 +215,7 @@ def describe_hold(hold, members=None):
         "action_url": action_url,
         "action_label": action_label,
         "steps": steps,
-        "can_probe": kind in ("review", "permission", "uncertain", "rate", "network"),
+        "can_probe": kind in ("review", "permission", "uncertain", "rate", "edge_limit", "network"),
         "can_auto_recover": kind in AUTO_PROBE_DELAYS,
     }
 
@@ -144,7 +227,7 @@ def _root(root=None):
 def identity(sessdata, root=None):
     root = _root(root)
     fingerprint = session_fingerprint(sessdata)
-    return read_json(root / "state/account-bindings.json", {}).get(fingerprint, fingerprint)
+    return _read_cached_json(root / "state/account-bindings.json", {}).get(fingerprint, fingerprint)
 
 
 def _path(key, root=None):
@@ -154,7 +237,7 @@ def _path(key, root=None):
 def status(sessdata, root=None):
     if not sessdata:
         return {"blocked": False}
-    value = read_json(_path(identity(sessdata, root), root), {})
+    value = _read_cached_json(_path(identity(sessdata, root), root), {})
     hold = value.get("hold") or {}
     if hold.get("until") and time.time() >= hold["until"]:
         return {"blocked": False}
@@ -204,7 +287,13 @@ def format_task_errors(result, *, separator="；", skip_kinds=(), suppress_safet
         return text
 
     seen = []
-    candidates = [_entry_text(result, allow_top_safety=True)]
+    skipped_texts = {
+        _entry_text(result.get(key), allow_top_safety=False)
+        for key in skip
+        if key in ("danmaku", "like")
+    } - {""}
+    top_text = _entry_text(result, allow_top_safety=True)
+    candidates = [] if top_text in skipped_texts else [top_text]
     for key in ("danmaku", "like"):
         if key not in skip:
             candidates.append(_entry_text(result.get(key), allow_top_safety=False))
@@ -312,16 +401,53 @@ def classify(response):
         for word in ("禁言", "权限不足", "封禁", "黑名单", "等级不足", "仅粉丝")
     ):
         return "permission", "收到权限或禁言限制，请先在平台确认账号状态", None
+    if (
+        response.get("error_kind") == "http"
+        and code == 412
+        and response.get("bili_code") not in (-352, -412)
+        and not any(word in message for word in ("验证码", "安全验证", "风控"))
+    ):
+        return "edge_limit", "触发边缘网关短时限流（HTTP 412），已进入短暂冷却", EDGE_LIMIT_COOLDOWN
     if code in (412, -412, -352) or any(word in message for word in ("验证码", "安全验证", "风控")):
         return "review", "收到验证或异常拒绝，请在平台检查后手动恢复", None
     return None
 
 
+def probation_until(sessdata, root=None):
+    """Return active post-recovery trial window expiry timestamp, or 0.0."""
+    if not sessdata:
+        return 0.0
+    value = _read_cached_json(_path(identity(sessdata, root), root), {})
+    until = float(value.get("probation_until") or 0.0)
+    return until if until > time.time() else 0.0
+
+
+def _clear_probation(sessdata, op=None, root=None):
+    if probation_until(sessdata, root) <= 0:
+        return
+    cleared = [False]
+
+    def change(current):
+        if float(current.get("probation_until") or 0.0) > time.time():
+            current["probation_until"] = 0
+            cleared[0] = True
+        return current
+
+    update_json(_path(identity(sessdata, root), root), change, {})
+    if cleared[0]:
+        append_event(
+            _root(root) / "logs/activity.jsonl",
+            {"type": "safety_probation_passed", "operation": op or {}},
+        )
+
+
 def pace_multiplier(sessdata, root=None):
-    """Slow down same-day write cadence after recent rate or review triggers."""
+    """Slow down same-day write cadence after recent rate/review triggers or during probation."""
     if not sessdata:
         return 1.0
-    value = read_json(_path(identity(sessdata, root), root), {})
+    if probation_until(sessdata, root) > 0:
+        return 3.0
+    value = _read_cached_json(_path(identity(sessdata, root), root), {})
     hits = int((value.get("counts") or {}).get(f"{task_day()}:risk_hits", 0) or 0)
     if hits >= 2:
         return 3.0
@@ -398,7 +524,7 @@ def block_room_capability(
 def room_blocks(sessdata, root=None):
     if not sessdata:
         return {}
-    value = read_json(_path(identity(sessdata, root), root), {})
+    value = _read_cached_json(_path(identity(sessdata, root), root), {})
     return _prune_room_blocks(value.get("room_blocks"), time.time(), task_day())
 
 
@@ -433,6 +559,62 @@ def clear_room_block(sessdata, room, op_kind=None, root=None):
     return bool(removed)
 
 
+def record_danmaku_shield(sessdata, room, marker, *, threshold=3, seconds=3600, root=None):
+    """Track consecutive silent danmaku shields (code=0, msg=f/k) and isolate room after threshold."""
+    if not sessdata or not room:
+        return {}
+    room_str = str(room).strip()
+    today = task_day()
+    streak_key = f"{today}:{room_str}:shield_streak"
+    hit_threshold = [False]
+
+    def change(current):
+        counts = {
+            name: n
+            for name, n in (current.get("counts") or {}).items()
+            if name.startswith(today + ":")
+        }
+        streak = int(counts.get(streak_key, 0) or 0) + 1
+        counts[streak_key] = streak
+        current["counts"] = counts
+        if streak >= threshold:
+            hit_threshold[0] = True
+        return current
+
+    update_json(_path(identity(sessdata, root), root), change, {})
+    if hit_threshold[0]:
+        return block_room_capability(
+            sessdata,
+            room_str,
+            "danmaku",
+            "该直播间连续触发弹幕静默屏蔽，已暂停本房自动弹幕，不影响看播与其他主播",
+            code=0,
+            seconds=seconds,
+            raw_message=f"code=0 msg={marker}",
+            root=root,
+        )
+    return {}
+
+
+def reset_danmaku_shield(sessdata, room, *, root=None):
+    """Clear a room's silent-shield streak once a danmaku is cleanly accepted."""
+    if not sessdata or not room:
+        return
+    room_str = str(room).strip()
+    streak_key = f"{task_day()}:{room_str}:shield_streak"
+    value = _read_cached_json(_path(identity(sessdata, root), root), {})
+    if not (value.get("counts") or {}).get(streak_key):
+        return
+
+    def change(current):
+        counts = dict(current.get("counts") or {})
+        counts.pop(streak_key, None)
+        current["counts"] = counts
+        return current
+
+    update_json(_path(identity(sessdata, root), root), change, {})
+
+
 def hold_account(
     sessdata,
     kind,
@@ -442,11 +624,13 @@ def hold_account(
     seconds=None,
     operation=None,
     raw_message="",
+    scope=None,
     root=None,
 ):
     now = time.time()
     clean_raw = redact(str(raw_message or "")).strip()[:160]
     today = task_day()
+    target_scope = _infer_scope(kind, operation, scope)
     changed = []
 
     def change(current):
@@ -458,23 +642,30 @@ def hold_account(
             bool(previous)
             and previous.get("kind") == kind
             and previous.get("code") == code
+            and previous.get("scope", "account") == target_scope
             and not previous.get("until")
         )
         if same_active:
             return current
-        if not permanent or kind in ("review", "permission"):
+        escalates = (
+            not permanent
+            or (previous.get("scope") == "interaction" and target_scope == "account")
+            or kind in ("auth", "credentials", "review", "permission")
+        )
+        if escalates:
             counts = {
                 name: n
                 for name, n in (current.get("counts") or {}).items()
                 if name.startswith(today + ":")
             }
-            if kind in ("rate", "review"):
+            if kind in ("rate", "review", "edge_limit"):
                 counts[f"{today}:risk_hits"] = int(counts.get(f"{today}:risk_hits", 0) or 0) + 1
                 current["counts"] = counts
             recovered_today = int(counts.get(f"{today}:auto_recover:{kind}", 0) or 0)
             probe_delay = None if seconds else _next_probe_delay(kind, 0, recovered_today)
             hold = {
                 "kind": kind,
+                "scope": target_scope,
                 "reason": reason,
                 "code": code,
                 "since": now,
@@ -503,6 +694,7 @@ def hold_account(
             {
                 "type": "safety_hold",
                 "kind": kind,
+                "scope": hold["scope"],
                 "code": code,
                 "until": hold["until"],
                 "next_probe_at": hold.get("next_probe_at"),
@@ -545,7 +737,7 @@ def reserve(sessdata, op):
     if not key.startswith("uid-"):
         return blocked_response({"reason": "无法认证账号身份，本次跳过操作", "kind": "auth"})
     hold = status(sessdata)
-    if hold["blocked"]:
+    if hold["blocked"] and not (is_interaction_only(hold) and is_watch_operation(op, mutation=True)):
         return blocked_response(hold)
     if op["kind"] not in ("danmaku", "like"):
         return None
@@ -605,9 +797,15 @@ def observe(sessdata, url, response, *, mutation=False, op=None):
                 raw_message=raw_msg,
             )
         else:
+            op_info = op or operation(url, None, "POST")
+            uncertain_msg = (
+                "操作结果未知，已停止重复发送；看播连接正常继续，请核对服务端进度"
+                if op_info.get("kind") in INTERACTION_OPS
+                else "操作结果未知，已停止重复发送；请核对服务端进度"
+            )
             hold_account(
-                sessdata, "uncertain", "操作结果未知，已停止重复发送；请核对服务端进度",
-                code=response.get("code", -1), operation=op,
+                sessdata, "uncertain", uncertain_msg,
+                code=response.get("code", -1), operation=op_info,
                 raw_message=raw_msg,
             )
     elif decision:
@@ -629,10 +827,20 @@ def observe(sessdata, url, response, *, mutation=False, op=None):
                 raw_message=raw_msg,
             )
             return
-        if kind == "rate" and response.get("retry_after"):
+        if kind == "rate" and op_info.get("kind") in INTERACTION_OPS:
+            reason = "收到频率限制，互动操作已冷却（看播连接正常继续）"
+        elif kind == "edge_limit" and op_info.get("kind") in INTERACTION_OPS:
+            reason = "触发边缘网关短时限流（HTTP 412），互动已冷却（看播连接正常继续）"
+        if kind in ("rate", "edge_limit") and response.get("retry_after"):
             delay = max(delay, response["retry_after"])
         hold_account(sessdata, kind, reason, code=response.get("code"), seconds=delay,
                      operation=op_info, raw_message=raw_msg)
+    elif mutation and response.get("code") == 0:
+        op_info = op or operation(url, None, "POST")
+        if op_info.get("kind") in INTERACTION_OPS:
+            shield_marker = str(response.get("msg") or response.get("message") or "").strip().lower()
+            if shield_marker not in {"f", "k", "fire", "max limit"}:
+                _clear_probation(sessdata, op_info)
 
 
 def record_probe(sessdata, checks, *, passed, summary="", auto=False, root=None):
@@ -693,6 +901,9 @@ def auto_resume(sessdata, checks, *, summary="", root=None):
             return current
         counts[key] = counts.get(key, 0) + 1
         current["counts"] = counts
+        probation_secs = PROBATION_SECONDS.get(current_hold["kind"], 0)
+        if probation_secs > 0:
+            current["probation_until"] = time.time() + probation_secs
         current["hold"] = {}
         cleared.append(current_hold)
         return current
@@ -707,11 +918,12 @@ def auto_resume(sessdata, checks, *, summary="", root=None):
             "kind": kind,
             "code": hold.get("code"),
             "operation": hold.get("operation", {}),
+            "probation_seconds": PROBATION_SECONDS.get(kind, 0),
             "summary": redact(str(summary or ""))[:200],
             "checks": list(checks or []),
         },
     )
-    return True, "只读复检通过，保护暂停已自动解除；当天预算保留"
+    return True, "只读复检通过，保护暂停已自动解除；进入低速试探观察期，当天预算保留"
 
 
 def resume(sessdata, *, confirmed=False, root=None):
@@ -723,7 +935,11 @@ def resume(sessdata, *, confirmed=False, root=None):
         return False, "冷却期间不提前恢复，请等待冷却结束"
     if hold["blocked"] and not confirmed:
         return False, "请先在平台处理异常或核对任务结果，再确认恢复"
-    update_json(_path(identity(sessdata, root), root), lambda v: {**v, "hold": {}}, {})
+    update_json(
+        _path(identity(sessdata, root), root),
+        lambda v: {**v, "hold": {}, "probation_until": 0},
+        {},
+    )
     if hold["blocked"]:
         append_event(_root(root) / "logs/activity.jsonl",
                      {"type": "safety_resumed", "kind": hold.get("kind"),

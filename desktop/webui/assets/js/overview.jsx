@@ -119,7 +119,7 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, che
   );
 };
 
-const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, onClearRoomBlock, onDismissTaskError, dimmed }) => {
+const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, onClearRoomBlock, onDismissTaskError, onDismissWatchWarning, dimmed }) => {
   const classes = `detail card${dimmed ? " detail-dim" : ""}`;
   if (!room) return (
     <aside className={classes} aria-label="直播间详情" aria-hidden={dimmed || undefined}>
@@ -211,20 +211,20 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
           </>}
         </div>
         {(room.connection_warning || room.watch_warning || room.task_error) && (() => {
-          const canDismissTask = Boolean(
-            onDismissTaskError
-            && !room.connection_warning
-            && !room.watch_warning
-            && room.task_error
-            && !room.protectedAccount
-          );
+          const dismissHandler = room.connection_warning || room.protectedAccount
+            ? null
+            : room.watch_warning
+              ? onDismissWatchWarning
+              : room.task_error
+                ? onDismissTaskError
+                : null;
           return (
-            <div className={`notice${canDismissTask ? " notice-action" : ""}`} role="status">
+            <div className={`notice${dismissHandler ? " notice-action" : ""}`} role="status">
               <Icon name="alert" size={14} />
               <span className="notice-body">{room.connection_warning || room.watch_warning || room.task_error}</span>
-              {canDismissTask && (
+              {dismissHandler && (
                 <button type="button" className="btn sm" disabled={pending}
-                  onClick={() => onDismissTaskError(room.room)}>
+                  onClick={() => dismissHandler(room.room)}>
                   知道了
                 </button>
               )}
@@ -319,7 +319,7 @@ const OverviewActions = ({ paused, globalPaused, signedIn = true, onTogglePause,
 const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, menuRoom, menuMode,
   busyRoom, controlBusy, error, recovery, onRecovery, interval, lastCheck, checking, images,
-  signedIn, closing, bridgeConnected, onBatchRemove, onClearRoomBlock, onDismissTaskError }) => {
+  signedIn, closing, bridgeConnected, onBatchRemove, onClearRoomBlock, onDismissTaskError, onDismissWatchWarning }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
   const [roomQuery, setRoomQuery] = React.useState("");
@@ -501,7 +501,8 @@ const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
         </div>
       </section>
       <DetailPanel room={selected} image={images[selected?.uid]} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen}
-        onClearRoomBlock={onClearRoomBlock} onDismissTaskError={onDismissTaskError} dimmed={managing}
+        onClearRoomBlock={onClearRoomBlock} onDismissTaskError={onDismissTaskError}
+        onDismissWatchWarning={onDismissWatchWarning} dimmed={managing}
         moreOpen={Boolean(selected && menuMode === "overflow" && menuRoom === selected.room)}
         onMore={(event) => {
           if (!selected) return;

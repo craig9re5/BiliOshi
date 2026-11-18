@@ -3,7 +3,12 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from .runtime import data_dir, read_json
+import threading
+from .runtime import data_dir, file_stat_signature, read_json
+
+_DEFAULT_READ_JSON = read_json
+_PROFILE_CACHE = {}
+_PROFILE_CACHE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -33,12 +38,28 @@ def profile_for(mode):
 def current_profile():
     mode = _OVERRIDE.get()
     if mode is None:
+        path = data_dir() / "settings.json"
+        if read_json is _DEFAULT_READ_JSON:
+            sig = file_stat_signature(path)
+            if sig is None:
+                return PROFILES["stable"]
+            key = str(path)
+            with _PROFILE_CACHE_LOCK:
+                cached = _PROFILE_CACHE.get(key)
+                if cached is not None and cached[0] == sig:
+                    return cached[1]
         try:
-            settings = read_json(data_dir() / "settings.json", {})
+            settings = read_json(path, {})
             mode = settings.get("run_mode", "stable") if isinstance(settings, dict) else "stable"
-            return profile_for(mode)
+            profile = profile_for(mode)
         except (OSError, ValueError):
-            return PROFILES["stable"]
+            profile = PROFILES["stable"]
+        if read_json is _DEFAULT_READ_JSON:
+            with _PROFILE_CACHE_LOCK:
+                if len(_PROFILE_CACHE) >= 64:
+                    _PROFILE_CACHE.clear()
+                _PROFILE_CACHE[str(path)] = (file_stat_signature(path), profile)
+        return profile
     return profile_for(mode)
 
 

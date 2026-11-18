@@ -702,8 +702,8 @@ function App() {
     if (result?.ok) await refresh();
   };
 
-  const dismissTaskError = async (room) => {
-    const result = await invoke("dismiss_task_error", [room]);
+  const dismissRoomNotice = async (method, room) => {
+    const result = await invoke(method, [room]);
     if (result?.ok) await refresh();
   };
 
@@ -879,7 +879,9 @@ function App() {
           error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
           interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
           images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected}
-          onBatchRemove={batchRemove} onClearRoomBlock={clearRoomBlock} onDismissTaskError={dismissTaskError} />}
+          onBatchRemove={batchRemove} onClearRoomBlock={clearRoomBlock}
+          onDismissTaskError={(room) => dismissRoomNotice("dismiss_task_error", room)}
+          onDismissWatchWarning={(room) => dismissRoomNotice("dismiss_watch_warning", room)} />}
         {page === "growth" && <window.GrowthPage viewId={activeId} images={images} onNeedAvatar={fetchAvatar}
           onOpenAccount={() => setPage("account")} onOpenMonitor={() => setPage("monitor")} />}
         {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}

@@ -28,7 +28,7 @@ from bilioshi.growth import CHINA_TZ, load_history
 from bilioshi.members import load_account_members, load_members
 from bilioshi.operating_mode import PROFILES, profile_for
 from bilioshi.redaction import redact, redact_paths
-from bilioshi.runtime import read_json, update_json
+from bilioshi.runtime import file_stat_signature, read_json, update_json
 from bilioshi.safety import describe_hold, format_task_errors
 from bilioshi.secret_store import is_envelope
 from desktop.interaction import action_reason, recovery_route
@@ -53,6 +53,7 @@ _PENDING_MESSAGES = {
     "account_safety_check": "正在检测账号风控与会话状态",
     "clear_room_block": "正在解除该直播间互动限制",
     "dismiss_task_error": "正在清除任务提醒",
+    "dismiss_watch_warning": "正在清除收益提醒",
     "add": "正在添加主播", "import": "正在导入粉丝牌主播",
     "export_diagnostic": "正在导出脱敏诊断包",
 }
@@ -60,7 +61,8 @@ _PENDING_MESSAGES = {
 # must stay read-only rather than silently mutating the running account.
 _ACTIVE_VIEW_ONLY = {
     "add", "import", "resolve", "medals", "check", "pause",
-    "safety", "safety_check", "remove", "clear_room_block", "dismiss_task_error",
+    "safety", "safety_check", "remove", "clear_room_block",
+    "dismiss_task_error", "dismiss_watch_warning",
 }
 
 
@@ -90,11 +92,7 @@ def _positive_id(value):
 
 
 def _signature(path):
-    try:
-        stat = path.stat()
-        return stat.st_mtime_ns, stat.st_size
-    except FileNotFoundError:
-        return None
+    return file_stat_signature(path)
 
 
 def _png_uri(image):
@@ -207,6 +205,18 @@ class Api:
         }
 
     # Snapshot construction never waits for the Engine's monitor/control lock.
+    def _copy_state_locked(self):
+        """Return active control/room operation state after expiring settled messages."""
+        with self._state:
+            now = time.time()
+            expired = [
+                k for k, op in self._room_operations.items()
+                if not op.get("pending") and op.get("finished") and now - op["finished"] > 20
+            ]
+            for k in expired:
+                self._room_operations.pop(k, None)
+            return copy.deepcopy(self._controls), copy.deepcopy(self._room_operations), self._ui_error
+
     def snapshot(self):
         self._sync_active()
         if self._host is not None:
@@ -233,10 +243,7 @@ class Api:
                 "paused": bool(self._engine.paused), "safety": {"blocked": False},
                 "rows": [], "checking": False, "error": "",
             }
-        with self._state:
-            controls = copy.deepcopy(self._controls)
-            rooms = copy.deepcopy(self._room_operations)
-            ui_error = self._ui_error
+        controls, rooms, ui_error = self._copy_state_locked()
         if failed:
             ui_error = "界面刷新失败，正在自动重试。"
         snap.update(engine_busy=busy, closing=self._closing.is_set(), ui_error=ui_error)
@@ -318,10 +325,7 @@ class Api:
         with self._cache_lock:
             snap = (copy.deepcopy(self._last_snapshot)
                     if self._last_snapshot is not None else self._empty_snapshot())
-        with self._state:
-            controls = copy.deepcopy(self._controls)
-            rooms = copy.deepcopy(self._room_operations)
-            ui_error = self._ui_error
+        controls, rooms, ui_error = self._copy_state_locked()
         if failed:
             ui_error = "界面刷新失败，正在自动重试。"
         snap.update(
@@ -680,7 +684,8 @@ class Api:
             # Engine and task services own the actual shared-data locks.
             control = kind in {
                 "pause", "check", "settings", "safety", "safety_check",
-                "account_safety", "account_safety_check", "clear_room_block", "dismiss_task_error",
+                "account_safety", "account_safety_check", "clear_room_block",
+                "dismiss_task_error", "dismiss_watch_warning",
                 "reconnect", "remove", "logout",
             }
             lock = self._control_mutations if control else self._mutations
@@ -702,8 +707,12 @@ class Api:
             result = {"ok": False, "error": "操作未成功，请重试或查看日志。"}
         finally:
             with self._state:
-                states[key].update(pending=False, ok=bool(result.get("ok")),
-                                   message=result.get("message") or result.get("error", ""))
+                states[key].update(
+                    pending=False,
+                    ok=bool(result.get("ok")),
+                    finished=time.time(),
+                    message=result.get("message") or result.get("error", ""),
+                )
                 # Reads need no persistent operation history, and avatar queries
                 # must not grow controls without bound.
                 if not mutating:
@@ -969,16 +978,23 @@ class Api:
             ok = False
         return {"ok": bool(ok), **({} if ok else {"error": "无法打开 B 站页面，请检查默认浏览器。"})}
 
-    def dismiss_task_error(self, room):
-        target_room = _positive_id(room)
-        if target_room is None:
+    def _dismiss_room_notice(self, room, kind, engine_method):
+        try:
+            target_room = _positive_id(room)
+        except ValueError:
             return {"ok": False, "error": "直播间号必须是正整数。"}
 
         def clear():
-            ok, message = self._engine.dismiss_task_error(target_room)
+            ok, message = getattr(self._engine, engine_method)(target_room)
             return {"ok": bool(ok), "message" if ok else "error": message}
 
-        return self._run("dismiss_task_error", clear)
+        return self._run(kind, clear)
+
+    def dismiss_task_error(self, room):
+        return self._dismiss_room_notice(room, "dismiss_task_error", "dismiss_task_error")
+
+    def dismiss_watch_warning(self, room):
+        return self._dismiss_room_notice(room, "dismiss_watch_warning", "dismiss_watch_warning")
 
     def redo(self, room, task_type="all"):
         if task_type not in ("all", "danmaku", "like"):
@@ -992,7 +1008,7 @@ class Api:
             ok = bool(result.get("success"))
             detail = format_task_errors(result) or "任务进度尚未确认完成"
             message = f"【{row.get('name', room)}】" + ("所选任务已确认完成" if ok else "任务未完成：" + detail)
-            if ok:
+            if ok or any(key in result for key in ("danmaku", "like")):
                 self._engine.check_now()
             return {"ok": ok, "message" if ok else "error": message}
 

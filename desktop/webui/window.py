@@ -6,6 +6,7 @@ has installed its handlers.
 """
 
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 import logging
 import math
@@ -21,6 +22,7 @@ from desktop.storage import read_json
 ASSETS = Path(__file__).resolve().parent / "assets"
 INDEX = ASSETS / "index.html"
 PUSH_INTERVAL = 0.75
+SNAPSHOT_KEEPALIVE_SECONDS = 15.0
 
 
 def _initial_background_color() -> str:
@@ -78,6 +80,9 @@ class WebHost:
         self._last_tray_color = None
         self._last_safety_blocked = False
         self._last_zoomed = False
+        self._snapshot_requested = threading.Event()
+        self._last_push_digest = None
+        self._last_pushed_at = 0.0
 
     def run(self, show=True, login=False):
         import webview
@@ -366,7 +371,42 @@ class WebHost:
             self._wake.set()
 
     def push_now(self):
+        self._snapshot_requested.set()
         self._wake.set()
+
+    @staticmethod
+    def _snapshot_digest(snapshot):
+        stable = {k: v for k, v in snapshot.items() if k != "updated"}
+        return hashlib.sha256(
+            json.dumps(stable, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+
+    def _push_snapshot(self, snapshot, *, force=False, now=None):
+        moment = time.monotonic() if now is None else now
+        digest = self._snapshot_digest(snapshot)
+        if (
+            not force
+            and digest == self._last_push_digest
+            and moment - self._last_pushed_at < SNAPSHOT_KEEPALIVE_SECONDS
+        ):
+            return False
+        pushed = self._eval(
+            "(function(){if(!window.LS || typeof window.LS.onSnapshot !== 'function') "
+            "return false; window.LS.onSnapshot(" + _js(snapshot) + "); return true;})()"
+        )
+        if pushed:
+            self._last_push_digest = digest
+            self._last_pushed_at = moment
+            self._update_tray(snapshot)
+            self._notify_watch_warnings(snapshot)
+            self._notify_safety_events(snapshot)
+            self._notify_room_blocks(snapshot)
+            return True
+        self._last_push_digest = None
+        self._ready.clear()
+        return False
 
     def _pump(self):
         next_snapshot = 0.0
@@ -379,20 +419,16 @@ class WebHost:
                 if self._ready.is_set():
                     self._drain()
                     now = time.monotonic()
-                    if now >= next_snapshot:
+                    forced = self._snapshot_requested.is_set()
+                    if forced:
+                        self._snapshot_requested.clear()
+                    if forced or now >= next_snapshot:
                         snapshot = self._api.snapshot()
-                        pushed = self._eval("(function(){if(!window.LS || typeof window.LS.onSnapshot !== 'function') "
-                                            "return false; window.LS.onSnapshot(" + _js(snapshot) + "); return true;})()")
-                        if pushed:
-                            self._update_tray(snapshot)
-                            self._notify_watch_warnings(snapshot)
-                            self._notify_safety_events(snapshot)
-                            self._notify_room_blocks(snapshot)
-                        else:
-                            self._ready.clear()
+                        self._push_snapshot(snapshot, force=forced, now=now)
                         next_snapshot = now + PUSH_INTERVAL
             except Exception:
                 logging.exception("Web push failed")
+                self._last_push_digest = None
                 self._ready.clear()
                 self._api._set_ui_error("界面刷新失败，正在自动重试；可重试界面或查看日志。")
             self._wake.wait(timeout=0.2)
@@ -594,7 +630,11 @@ class WebHost:
         if snap.get("global_paused"):
             title = "全部暂停"
         elif safety.get("blocked"):
-            title = "冷却中" if safety.get("until") else "保护暂停"
+            if safety.get("scope") == "interaction":
+                prefix = "互动冷却中" if safety.get("until") else "互动待核验"
+                title = f"{prefix} · {active} 房挂机" if active else prefix
+            else:
+                title = "冷却中" if safety.get("until") else "保护暂停"
         elif warnings:
             title = "需要处理"
         elif snap.get("paused"):
@@ -662,10 +702,15 @@ class WebHost:
         self._notified_safety_holds[account_id] = key
         acct = snap.get("account") or ""
         prefix = f"【{acct}】" if acct else ""
+        interaction_only = safety.get("scope") == "interaction"
         title = (
-            "ビリ推し · 风控保护暂停"
-            if kind in ("review", "permission")
-            else "ビリ推し · 账号异常提醒"
+            "ビリ推し · 互动保护冷却（看播继续）"
+            if interaction_only
+            else (
+                "ビリ推し · 风控保护暂停"
+                if kind in ("review", "permission")
+                else "ビリ推し · 账号异常提醒"
+            )
         )
         msg = f"{prefix}{safety.get('reason', '触发账号保护暂停')}"
         if safety.get("next_probe_at"):
@@ -673,7 +718,7 @@ class WebHost:
         elif safety.get("until"):
             msg += f"（预计 {time.strftime('%H:%M:%S', time.localtime(safety['until']))} 恢复）"
         self._notify(msg, title)
-        self.emit("toast", {"message": msg, "tone": "error"})
+        self.emit("toast", {"message": msg, "tone": "warn" if interaction_only else "error"})
 
     def _notify_room_blocks(self, snap):
         account_id = snap.get("active_account_id") or ""

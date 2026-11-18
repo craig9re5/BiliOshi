@@ -521,6 +521,12 @@ const SafetyModal = ({
       </div>
 
       <div className="safety-meta-grid">
+        {info.scope_label && (
+          <div className="safety-meta-item">
+            <span>保护范围</span>
+            <strong>{info.scope_label}</strong>
+          </div>
+        )}
         {locationParts.length > 0 && (
           <div className="safety-meta-item">
             <span>触发位置</span>
@@ -545,7 +551,10 @@ const SafetyModal = ({
         {info.pace_multiplier > 1 && (
           <div className="safety-meta-item">
             <span>今日防风控降频</span>
-            <strong>已自动放慢至 {info.pace_multiplier}× 互动发送间隔</strong>
+            <strong>
+              已自动放慢至 {info.pace_multiplier}× 互动发送间隔
+              {info.probation_until > nowSec ? `（观察期剩余 ${formatCountdown(info.probation_until, nowSec).replace("后", "")}）` : ""}
+            </strong>
           </div>
         )}
         {!cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && (

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"f91989cc7535fcd4519f9c5c198d52e790b77873cd71a5316473eda606f78ac7","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"258ff629e9ae1eb4081235cb0d1a798adedce12938cb6179988378f26642723c"} */
+/* BiliOshi JSX {"code_sha256":"33decd2103b9982541634dccfc2b50bcb8d2055abce3e9dad128e9dbfaf22a19","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"e7642f5a06495044bc543adb7e560842cdffd82eb509f8b2232de4573134a6a1"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -158,6 +158,7 @@ const DetailPanel = ({
   moreOpen,
   onClearRoomBlock,
   onDismissTaskError,
+  onDismissWatchWarning,
   dimmed
 }) => {
   const classes = `detail card${dimmed ? " detail-dim" : ""}`;
@@ -300,20 +301,20 @@ const DetailPanel = ({
   }, /*#__PURE__*/React.createElement("span", null, "\u7B49\u7EA7\u7ECF\u9A8C\uFF08", Math.round(progress), "%\uFF09"), /*#__PURE__*/React.createElement("span", {
     className: "tnum"
   }, numberLabel(room.intimacy), " / ", numberLabel(room.next_intimacy))))), (room.connection_warning || room.watch_warning || room.task_error) && (() => {
-    const canDismissTask = Boolean(onDismissTaskError && !room.connection_warning && !room.watch_warning && room.task_error && !room.protectedAccount);
+    const dismissHandler = room.connection_warning || room.protectedAccount ? null : room.watch_warning ? onDismissWatchWarning : room.task_error ? onDismissTaskError : null;
     return /*#__PURE__*/React.createElement("div", {
-      className: `notice${canDismissTask ? " notice-action" : ""}`,
+      className: `notice${dismissHandler ? " notice-action" : ""}`,
       role: "status"
     }, /*#__PURE__*/React.createElement(Icon, {
       name: "alert",
       size: 14
     }), /*#__PURE__*/React.createElement("span", {
       className: "notice-body"
-    }, room.connection_warning || room.watch_warning || room.task_error), canDismissTask && /*#__PURE__*/React.createElement("button", {
+    }, room.connection_warning || room.watch_warning || room.task_error), dismissHandler && /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "btn sm",
       disabled: pending,
-      onClick: () => onDismissTaskError(room.room)
+      onClick: () => dismissHandler(room.room)
     }, "\u77E5\u9053\u4E86"));
   })(), note && /*#__PURE__*/React.createElement("div", {
     className: "notice neutral"
@@ -462,7 +463,8 @@ const Overview = ({
   bridgeConnected,
   onBatchRemove,
   onClearRoomBlock,
-  onDismissTaskError
+  onDismissTaskError,
+  onDismissWatchWarning
 }) => {
   const [managing, setManaging] = React.useState(false);
   const [selectedBatch, setSelectedBatch] = React.useState(new Set());
@@ -708,6 +710,7 @@ const Overview = ({
     onOpen: onOpen,
     onClearRoomBlock: onClearRoomBlock,
     onDismissTaskError: onDismissTaskError,
+    onDismissWatchWarning: onDismissWatchWarning,
     dimmed: managing,
     moreOpen: Boolean(selected && menuMode === "overflow" && menuRoom === selected.room),
     onMore: event => {

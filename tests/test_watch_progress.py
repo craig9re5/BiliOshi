@@ -598,3 +598,153 @@ class DesktopRewardWarningTests(unittest.TestCase):
         self.engine.paused = False
         self.engine.workers.clear()
         self.assertFalse(self.engine.snapshot()["rows"][0]["watch_warning"])
+
+    def test_fresh_probe_clears_limited_unavailable_and_manual_expired_warnings(self):
+        from bilioshi.application import AppContext
+
+        app = AppContext(self.root)
+        app.call = Mock(return_value={
+            "task_info": club(4)["task_info"],
+            "intimacy": 132,
+            "next_intimacy": 163,
+            "is_lighted": True,
+            "reach_free_intimacy_limit": False,
+            "free_intimacy": 0,
+        })
+        key, probed, err = app._query_one_task({"room": 1, "uid": 10}, ("s", "c"))
+        self.assertEqual((key, err), ("1", None))
+        self.assertFalse(probed["reach_free_intimacy_limit"])
+        self.assertEqual(probed["free_intimacy"], 0)
+
+        limited_warning = "储蓄亲密度已达上限，看播可能无法继续获得亲密度，请在 B 站核对。"
+        self.recorder({
+            **self.event,
+            "status": "limited",
+            "warning": limited_warning,
+            "progress": {"current": 4, "limit": 10},
+            "tasks": club(4)["task_info"],
+            "is_lighted": False,
+            "reach_free_intimacy_limit": True,
+        })
+        self.assertEqual(self.engine.snapshot()["rows"][0]["watch_warning"], limited_warning)
+
+        # Fresh probe showing reach_free_intimacy_limit=False clears warning immediately.
+        self.engine.tasks["1"] = {
+            **probed,
+            "tasks": club(4)["task_info"],
+            "updated": self.now + 2,
+        }
+        self.assertEqual(self.engine.snapshot()["rows"][0]["watch_warning"], "")
+
+        # Even before reach_free_intimacy_limit flips, medal lighting after limited clears warning.
+        self.engine.tasks["1"] = {
+            "day": task_day(),
+            "updated": self.now + 2,
+            "tasks": club(4)["task_info"],
+            "is_lighted": True,
+            "reach_free_intimacy_limit": True,
+        }
+        self.assertEqual(self.engine.snapshot()["rows"][0]["watch_warning"], "")
+
+        # Unavailable warning clears once fresh probe reads valid watch tasks.
+        self.recorder({
+            **self.event,
+            "status": "unavailable",
+            "warning": "暂时无法核验今日看播进度",
+            "checked_at": self.now,
+            "verified_at": self.now,
+        })
+        self.engine.tasks["1"] = {
+            "day": task_day(),
+            "updated": self.now + 2,
+            "tasks": club(4)["task_info"],
+        }
+        self.assertEqual(self.engine.snapshot()["rows"][0]["watch_warning"], "")
+
+        # Expired worker watch check warns until an explicit check_now probe completes.
+        old_checked = time.time() - 5000
+        self.recorder({
+            **self.event,
+            "status": "tracking",
+            "warning": "",
+            "progress": {"current": 4, "limit": 10},
+            "tasks": club(4)["task_info"],
+            "checked_at": old_checked,
+            "verified_at": old_checked,
+        })
+        self.engine.tasks["1"] = {
+            "day": task_day(),
+            "updated": time.time() - 10,
+            "tasks": club(4)["task_info"],
+        }
+        self.assertIn("看播进度核验已过期", self.engine.snapshot()["rows"][0]["watch_warning"])
+        self.engine.check_now()
+        self.engine.tasks["1"]["updated"] = time.time() + 1
+        self.assertEqual(self.engine.snapshot()["rows"][0]["watch_warning"], "")
+
+    def test_worker_save_preserves_dismissals_and_probe_retires_completed_task_error(self):
+        self.engine.record_task_result(1, {
+            "day": task_day(),
+            "success": False,
+            "error": "弹幕未确认完成",
+            "danmaku": {"done": False, "error": "弹幕未确认完成"},
+        })
+        self.assertEqual(self.engine.snapshot()["rows"][0]["task_error"], "弹幕未确认完成")
+        self.assertTrue(self.engine.dismiss_task_error(1)[0])
+        self.assertTrue(self.engine.dismiss_watch_warning(1)[0])
+
+        # Subsequent worker heartbeat must not resurrect dismissed task_error or watch_warning.
+        self.recorder({"type": "x25kn_x_success", "interval": 60})
+        snap = self.engine.snapshot()
+        self.assertEqual(snap["rows"][0]["task_error"], "")
+        self.assertEqual(snap["rows"][0]["watch_warning"], "")
+
+        # A newer worker task failure overwrites old dismissal cleanly.
+        self.recorder({
+            "type": "task_check",
+            "day": task_day(),
+            "success": False,
+            "error": "新任务失败",
+            "danmaku": {"done": False, "error": "新任务失败"},
+        })
+        self.assertEqual(self.engine.snapshot()["rows"][0]["task_error"], "新任务失败")
+
+        # Fresh probe confirming sendDanmu done and badge lit clears stale task_error automatically.
+        self.engine.tasks["1"] = {
+            "day": task_day(),
+            "updated": time.time() + 5,
+            "is_lighted": True,
+            "tasks": [{"jump_type": "sendDanmu", "is_done": True}, *club(0)["task_info"]],
+        }
+        self.assertEqual(self.engine.snapshot()["rows"][0]["task_error"], "")
+
+    def test_manual_reconnect_message_settles_and_clears(self):
+        import os
+
+        self.engine.workers[1].pid = os.getpid()
+        now = time.time()
+        self.engine.manual_reconnects[1] = {
+            "state": "starting",
+            "requested_at": now - 20,
+            "cooldown_until": now + 40,
+            "skip_actions": True,
+            "message": "已启动新连接，等待成功心跳。",
+        }
+        self.engine._watch_workers(now)
+        row = self.engine.snapshot()["rows"][0]
+        self.assertEqual(row["reconnect_message"], "重连成功，已收到服务端心跳。")
+        self.engine._watch_workers(now + 16)
+        self.assertEqual(self.engine.manual_reconnects[1]["state"], "done")
+        self.assertFalse(self.engine.manual_reconnects[1]["skip_actions"])
+        self.assertEqual(self.engine.snapshot()["rows"][0]["reconnect_message"], "")
+
+        # Stale offline reconnect state clears once the room goes live again.
+        self.engine.manual_reconnects[1] = {
+            "state": "offline",
+            "requested_at": now - 100,
+            "cooldown_until": now - 40,
+            "skip_actions": False,
+            "message": "房间已下播，无需重连。",
+        }
+        self.engine._reconcile_live_member({"room": 1, "name": "test"}, {"live_status": 1}, now)
+        self.assertNotIn(1, self.engine.manual_reconnects)

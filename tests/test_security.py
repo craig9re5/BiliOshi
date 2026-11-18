@@ -745,3 +745,164 @@ class SafetyAutoRecoveryTests(unittest.TestCase):
             self.assertTrue(ok)
             snap = engine.snapshot()
             self.assertEqual(snap["rows"][0]["task_error"], "")
+
+    def test_interaction_scoped_holds_keep_watch_heartbeats_alive_while_blocking_writes(self):
+        from desktop.interaction import action_reason
+        from desktop.storage import initialize
+
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"BILIOSHI_APP_DATA": folder}):
+            root = Path(folder)
+            with use_context(RuntimeContext(root)):
+                initialize(root, [{"room": 1, "uid": 1001, "name": "主播A"}])
+                save_login(SESSION, CSRF, root / "credentials.json")
+                safety.bind_account(SESSION, 123, root=root)
+
+                op = safety.operation(URL, b"roomid=1&msg=hi", "POST")
+                safety.observe(SESSION, URL, {"code": -509, "message": "发言过于频繁"}, mutation=True, op=op)
+                hold = safety.status(SESSION, root)
+                self.assertTrue(hold["blocked"])
+                self.assertEqual(hold["kind"], "rate")
+                self.assertEqual(hold["scope"], "interaction")
+                self.assertFalse(safety.blocks_watch(hold))
+
+                # Heartbeats and room entry remain allowed; danmaku writes stay blocked.
+                with patch.object(http, "_once", return_value={"code": 0}) as send:
+                    self.assertEqual(
+                        http.post_form(heartbeat._X25KN_X_URL, {"room_id": "1"}, HEADERS)["code"], 0
+                    )
+                    self.assertEqual(
+                        http.post_form(
+                            "https://api.live.bilibili.com/xlive/web-room/v1/index/roomEntryAction",
+                            {"room_id": "1"},
+                            HEADERS,
+                        )["code"],
+                        0,
+                    )
+                    blocked_write = http.post_form(URL, {"roomid": "1", "msg": "hi"}, HEADERS)
+                self.assertEqual(send.call_count, 2)
+                self.assertEqual(blocked_write["error_kind"], "safety")
+
+                # Engine keeps running workers alive and displays healthy watching instead of full stop.
+                engine = Engine(root, job=Mock())
+                engine.account = "测试账号"
+                engine.account_checked_at = time.time()
+                engine.statuses = {"1": {"live_status": 1}}
+                engine.status_times = {"1": time.time()}
+                proc = Mock(pid=77)
+                proc.poll.return_value = None
+                engine.workers[1] = proc
+                write_json(
+                    root / "state/1.json",
+                    {"room": 1, "pid": 77, "phase": "挂机中", "started": time.time() - 60, "last_heartbeat": time.time() - 5},
+                )
+                engine.tick()
+                proc.terminate.assert_not_called()
+                snap = engine.snapshot()
+                row = snap["rows"][0]
+                self.assertEqual(row["phase"], "挂机中")
+                self.assertTrue(row["heartbeat_healthy"])
+                self.assertEqual(action_reason(snap, row, "reconnect"), "")
+                self.assertIn("看播正常继续", action_reason(snap, row, "redo"))
+
+    def test_auth_expiry_escalates_over_permanent_holds_and_account_escalates_interaction(self):
+        with tempfile.TemporaryDirectory() as folder, use_context(RuntimeContext(Path(folder))):
+            root = Path(folder)
+            safety.bind_account(SESSION, 123, root=root)
+            for prior_kind in ("uncertain", "review", "permission"):
+                write_json(root / "state/safety/uid-123.json", {})
+                safety.hold_account(SESSION, prior_kind, "前置保护", code=-1, root=root)
+                safety.hold_account(SESSION, "auth", "登录已失效，请重新扫码登录", code=-101, root=root)
+                current = safety.status(SESSION, root)
+                self.assertEqual(current["kind"], "auth")
+                self.assertEqual(current["scope"], "account")
+
+            # Interaction-scoped uncertain hold escalates to account-scoped heartbeat network cooldown.
+            write_json(root / "state/safety/uid-123.json", {})
+            safety.hold_account(
+                SESSION, "uncertain", "弹幕未知", code=-1, operation={"room": "1", "kind": "danmaku"}, root=root
+            )
+            self.assertEqual(safety.status(SESSION, root)["scope"], "interaction")
+            safety.hold_account(
+                SESSION, "network", "心跳异常", code=-1, seconds=60, operation={"room": "1", "kind": "heartbeat"}, root=root
+            )
+            escalated = safety.status(SESSION, root)
+            self.assertEqual(escalated["kind"], "network")
+            self.assertEqual(escalated["scope"], "account")
+
+    def test_auto_resume_enters_probation_caps_trial_batch_and_clears_on_clean_write(self):
+        from bilioshi.services.danmaku import send_danmaku_batch
+
+        with tempfile.TemporaryDirectory() as folder, use_context(RuntimeContext(Path(folder))):
+            root = Path(folder)
+            safety.bind_account(SESSION, 123, root=root)
+            safety.hold_account(
+                SESSION, "review", "风控验证", code=-352, operation={"room": "1", "kind": "danmaku"}, root=root
+            )
+            ok, msg = safety.auto_resume(SESSION, [{"name": "只读", "ok": True}], root=root)
+            self.assertTrue(ok)
+            self.assertIn("观察期", msg)
+            self.assertGreater(safety.probation_until(SESSION, root), 0)
+            self.assertEqual(safety.pace_multiplier(SESSION, root), 3.0)
+
+            gateway = Mock(_DANMAKU_MSGS=["a", "b", "c"])
+            gateway._send_danmaku.return_value = True
+            sent_ok, _, attempted = send_danmaku_batch(1, 5, SESSION, CSRF, _gateway=gateway)
+            self.assertEqual((sent_ok, attempted), (1, 1))
+
+            # Clean write at HTTP boundary clears probation immediately.
+            op = safety.operation(URL, b"roomid=1&msg=a", "POST")
+            safety.observe(SESSION, URL, {"code": 0, "message": ""}, mutation=True, op=op)
+            self.assertEqual(safety.probation_until(SESSION, root), 0.0)
+
+    def test_silent_danmaku_shields_and_http_412_edge_limit_classification(self):
+        with tempfile.TemporaryDirectory() as folder, use_context(RuntimeContext(Path(folder))):
+            root = Path(folder)
+            safety.bind_account(SESSION, 123, root=root)
+
+            # Silent anti-spam code=0 msg="fire" immediately blocks room danmaku without stopping account.
+            with patch.object(heartbeat, "send_paced", side_effect=lambda fn, **kw: fn()), \
+                 patch.object(heartbeat, "_post_form", return_value={"code": 0, "msg": "fire"}):
+                self.assertFalse(heartbeat._send_danmaku(1001, "hi", SESSION, CSRF))
+            self.assertFalse(safety.status(SESSION, root)["blocked"])
+            self.assertTrue(safety.room_capability_blocked(SESSION, 1001, "danmaku", root=root))
+
+            # 3 consecutive silent keyword shields ("f" / "k") isolate room 1002; clean send resets streak.
+            with patch.object(heartbeat, "send_paced", side_effect=lambda fn, **kw: fn()):
+                with patch.object(heartbeat, "_post_form", return_value={"code": 0, "msg": "f"}):
+                    self.assertFalse(heartbeat._send_danmaku(1002, "hi", SESSION, CSRF))
+                    self.assertFalse(heartbeat._send_danmaku(1002, "hi", SESSION, CSRF))
+                self.assertFalse(safety.room_capability_blocked(SESSION, 1002, "danmaku", root=root))
+                with patch.object(heartbeat, "_post_form", return_value={"code": 0, "msg": ""}):
+                    self.assertTrue(heartbeat._send_danmaku(1002, "ok", SESSION, CSRF))
+                with patch.object(heartbeat, "_post_form", return_value={"code": 0, "msg": "k"}):
+                    for _ in range(3):
+                        self.assertFalse(heartbeat._send_danmaku(1002, "bad", SESSION, CSRF))
+                self.assertTrue(safety.room_capability_blocked(SESSION, 1002, "danmaku", root=root))
+
+            # Edge HTTP 412 gets short auto-cooldown; HTTP 412 carrying bili_code=-352 stays review.
+            self.assertEqual(
+                safety.classify({"code": 412, "http_status": 412, "message": "HTTP 412", "error_kind": "http"})[0],
+                "edge_limit",
+            )
+            self.assertEqual(
+                safety.classify({"code": 412, "bili_code": -352, "message": "HTTP 412: 风控", "error_kind": "http"})[0],
+                "review",
+            )
+
+    def test_pacing_jitter_and_proxy_bypass_openers(self):
+        from bilioshi.danmaku_pacing import send_paced
+
+        for opener in (http._AUTH_OPENER, http._PLAIN_OPENER):
+            proxy_handlers = [h for h in opener.handlers if isinstance(h, urllib.request.ProxyHandler)]
+            self.assertEqual(proxy_handlers, [])
+
+        waited = []
+        with tempfile.TemporaryDirectory() as folder:
+            lock_file = Path(folder) / "jitter.lock"
+            lock_file.write_text(f"{time.time():.6f}", encoding="ascii")
+            with patch("bilioshi.danmaku_pacing.task_wait", side_effect=waited.append), \
+                 patch("bilioshi.danmaku_pacing.random.uniform", return_value=0.15):
+                send_paced(lambda: "ok", lock_path=lock_file, min_interval=10.0, jitter_ratio=0.2)
+        self.assertEqual(len(waited), 1)
+        self.assertGreater(waited[0], 10.5)
+        self.assertLessEqual(waited[0], 11.6)

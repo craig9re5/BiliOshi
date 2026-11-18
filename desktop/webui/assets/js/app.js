@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"372f99de944450de9271115270826d9c8ece3d1897407afeffe2a07782a1f6ca","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"fd3c554b8fc7661a6777d30e5e2ba6c6b510e0e4c7a1b304643c57faab4e82e0"} */
+/* BiliOshi JSX {"code_sha256":"4d11092a146dc7dcbadbd050627afc51bb06e553f3703e2346fc92bc49c083b4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"9ac4fcf14d8aea7263944f4ef3b7a18acb20d8cf1f555f410127d340c592e484"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -977,8 +977,8 @@ function App() {
     const result = await invoke("clear_room_block", [room, capability || null], "已解除该直播间互动限制");
     if (result?.ok) await refresh();
   };
-  const dismissTaskError = async room => {
-    const result = await invoke("dismiss_task_error", [room]);
+  const dismissRoomNotice = async (method, room) => {
+    const result = await invoke(method, [room]);
     if (result?.ok) await refresh();
   };
   const switchAccount = async accountId => {
@@ -1255,7 +1255,8 @@ function App() {
     bridgeConnected: connected,
     onBatchRemove: batchRemove,
     onClearRoomBlock: clearRoomBlock,
-    onDismissTaskError: dismissTaskError
+    onDismissTaskError: room => dismissRoomNotice("dismiss_task_error", room),
+    onDismissWatchWarning: room => dismissRoomNotice("dismiss_watch_warning", room)
   }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
     viewId: activeId,
     images: images,

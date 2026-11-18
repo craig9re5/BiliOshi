@@ -14,8 +14,8 @@ from pathlib import Path
 
 from bilioshi.accounts import ALL_ACCOUNTS, AccountStore, UnknownAccount
 from bilioshi.members import load_account_members
-from bilioshi.runtime import FileLock, read_json, update_json
-from bilioshi.safety import describe_hold
+from bilioshi.runtime import FileLock, file_stat_signature, read_json, update_json
+from bilioshi.safety import blocks_watch, describe_hold
 from desktop.engine import Engine
 from desktop.storage import initialize
 from desktop.windows import Job
@@ -49,6 +49,7 @@ class AccountHost:
         self.last_health_publish = 0
         self.last_tick = 0
         self.publish_error = ""
+        self._mirror_sig = None
         self._started = False
 
     # ---------- lifecycle ----------
@@ -117,8 +118,12 @@ class AccountHost:
     def _publish_status_mirror(self, engine):
         if engine is None:
             return
+        source = engine.root / "status.json"
+        sig = (str(engine.root), file_stat_signature(source))
+        if sig == self._mirror_sig and (self.root / "status.json").exists():
+            return
         try:
-            status = read_json(engine.root / "status.json", {})
+            status = read_json(source, {})
         except (OSError, ValueError):
             return
         if not isinstance(status, dict):
@@ -132,6 +137,7 @@ class AccountHost:
             from bilioshi.runtime import write_json
 
             write_json(self.root / "status.json", status)
+            self._mirror_sig = sig
         except OSError:
             logging.warning("Cannot publish host status mirror")
 
@@ -327,7 +333,7 @@ class AccountHost:
         safety_data = (
             getattr(engine, "safety", None) if engine is not None else status.get("safety")
         ) or {"blocked": False}
-        blocked = bool(safety_data.get("blocked")) or (row["status"] == "blocked" and engine is None)
+        blocked = blocks_watch(safety_data) or (row["status"] == "blocked" and engine is None)
         running = (
             self.active_id == account_id
             and engine is not None
@@ -335,7 +341,7 @@ class AccountHost:
             and not engine.paused
             and not self.global_paused
             and row["status"] == "ok"
-            and not safety_data.get("blocked")
+            and not blocks_watch(safety_data)
         )
         paused = bool(engine.paused) if engine is not None else bool(settings.get("paused"))
         if blocked:

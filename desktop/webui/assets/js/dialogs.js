@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"9557e3342b2dcc9dac3725d6eb290c8987c30be678772ac4dcaf6141c8dd67f5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"3d94ff6b97fb040de376efc5949578b50ea0ad5b93b7b5d3d7106c0d084341b4"} */
+/* BiliOshi JSX {"code_sha256":"f5696e436e9fdef2362b96f0f65beda97f93a7252a0f00d24a8adb292bc4b9c5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"dialogs.jsx","source_sha256":"fc98764353a1e9411743fce9395711bafdba05a16119b05e44eb818ddc4b7e5f"} */
 (function () {
 "use strict";
 /* Dialogs keep focus inside the active view and restore it on close. */
@@ -741,7 +741,9 @@ const SafetyModal = ({
     className: "safety-raw-msg"
   }, "\u5E73\u53F0\u8FD4\u56DE\uFF1A", info.raw_message)), /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-grid"
-  }, locationParts.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, info.scope_label && /*#__PURE__*/React.createElement("div", {
+    className: "safety-meta-item"
+  }, /*#__PURE__*/React.createElement("span", null, "\u4FDD\u62A4\u8303\u56F4"), /*#__PURE__*/React.createElement("strong", null, info.scope_label)), locationParts.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
   }, /*#__PURE__*/React.createElement("span", null, "\u89E6\u53D1\u4F4D\u7F6E"), /*#__PURE__*/React.createElement("strong", null, locationParts.join(" · "))), cooldown && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
@@ -749,7 +751,7 @@ const SafetyModal = ({
     className: "safety-meta-item"
   }, /*#__PURE__*/React.createElement("span", null, "\u4E0B\u6B21\u81EA\u52A8\u590D\u68C0"), /*#__PURE__*/React.createElement("strong", null, absoluteTime(info.next_probe_at), "\uFF08", formatCountdown(info.next_probe_at, nowSec), "\uFF09", typeof info.auto_recover_remaining === "number" && ` · 今日自动恢复剩余 ${info.auto_recover_remaining} 次`)), info.pace_multiplier > 1 && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
-  }, /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5\u9632\u98CE\u63A7\u964D\u9891"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u81EA\u52A8\u653E\u6162\u81F3 ", info.pace_multiplier, "\xD7 \u4E92\u52A8\u53D1\u9001\u95F4\u9694")), !cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\u4ECA\u65E5\u9632\u98CE\u63A7\u964D\u9891"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u81EA\u52A8\u653E\u6162\u81F3 ", info.pace_multiplier, "\xD7 \u4E92\u52A8\u53D1\u9001\u95F4\u9694", info.probation_until > nowSec ? `（观察期剩余 ${formatCountdown(info.probation_until, nowSec).replace("后", "")}）` : "")), !cooldown && !info.next_probe_at && (info.kind === "uncertain" || info.kind === "review") && /*#__PURE__*/React.createElement("div", {
     className: "safety-meta-item"
   }, /*#__PURE__*/React.createElement("span", null, "\u81EA\u52A8\u590D\u68C0\u72B6\u6001"), /*#__PURE__*/React.createElement("strong", null, "\u5DF2\u8FBE\u672C\u8F6E\u81EA\u52A8\u590D\u68C0\u6216\u4ECA\u65E5\u6062\u590D\u4E0A\u9650\uFF0C\u8BF7\u4EBA\u5DE5\u786E\u8BA4\u540E\u6062\u590D"))), steps.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "safety-steps"

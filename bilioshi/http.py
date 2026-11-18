@@ -1,7 +1,12 @@
 """One HTTP/JSON boundary. Failures have explicit, credential-free metadata."""
 
+from collections import deque
+import http.client
 import json
 import logging
+import select
+import ssl
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,6 +19,174 @@ from .task_window import check_window, request_timeout, wait, read_cache
 from .operating_mode import current_profile
 
 NAV_URL = "https://api.bilibili.com/x/web-interface/nav"
+_POOL_IDLE_TTL = 15.0
+_POOL_MAX_PER_HOST = 4
+_DEFAULT_SSL_CONTEXT = ssl.create_default_context()
+
+
+def _socket_unusable(sock):
+    try:
+        readable, _, errored = select.select([sock], [], [sock], 0.0)
+        return bool(readable or errored)
+    except (OSError, ValueError):
+        return True
+
+
+class _ConnectionPool:
+    """Thread-safe HTTP/1.1 keep-alive connection pool keyed by origin."""
+
+    def __init__(self, *, idle_ttl=_POOL_IDLE_TTL, max_per_host=_POOL_MAX_PER_HOST):
+        self._idle_ttl = idle_ttl
+        self._max_per_host = max_per_host
+        self._lock = threading.Lock()
+        self._idle = {}
+
+    def acquire(self, key):
+        now = time.monotonic()
+        stale = []
+        chosen = None
+        with self._lock:
+            bucket = self._idle.get(key)
+            while bucket:
+                conn, returned_at = bucket.pop()
+                if now - returned_at > self._idle_ttl or conn.sock is None or _socket_unusable(conn.sock):
+                    stale.append(conn)
+                    continue
+                chosen = conn
+                break
+            if bucket is not None and not bucket:
+                self._idle.pop(key, None)
+        for conn in stale:
+            try:
+                conn.close()
+            except OSError:
+                pass
+        return chosen
+
+    def release(self, key, conn):
+        now = time.monotonic()
+        evicted = None
+        with self._lock:
+            bucket = self._idle.setdefault(key, deque())
+            while bucket and len(bucket) >= self._max_per_host:
+                old_conn, _ = bucket.popleft()
+                evicted = old_conn
+                break
+            bucket.append((conn, now))
+        if evicted is not None:
+            try:
+                evicted.close()
+            except OSError:
+                pass
+
+    def close_all(self):
+        with self._lock:
+            buckets = list(self._idle.values())
+            self._idle.clear()
+        for bucket in buckets:
+            for conn, _ in bucket:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+
+
+_POOL = _ConnectionPool()
+
+
+class _PooledOpenMixin:
+    """Reuse persistent HTTP/1.1 connections inside urllib OpenerDirector."""
+
+    def do_open(self, http_class, req, **http_conn_args):
+        host = req.host
+        if not host:
+            raise urllib.error.URLError("no host given")
+        if getattr(req, "_tunnel_host", None) or host != urllib.parse.urlsplit(req.full_url).netloc:
+            return super().do_open(http_class, req, **http_conn_args)
+
+        headers = dict(req.unredirected_hdrs)
+        headers.update({k: v for k, v in req.headers.items() if k not in headers})
+        headers = {name.title(): val for name, val in headers.items()}
+        headers["Connection"] = "keep-alive"
+
+        req_timeout = getattr(req, "timeout", None)
+        timeout = req_timeout if req_timeout is not None else 10
+        scheme = req.type or "http"
+        pool_key = (scheme, host, id(http_conn_args.get("context")))
+
+        conn = _POOL.acquire(pool_key)
+        reused = conn is not None
+        if conn is None:
+            conn = http_class(host, timeout=timeout, **http_conn_args)
+            conn.set_debuglevel(self._debuglevel)
+        else:
+            conn.timeout = timeout
+            if conn.sock is not None:
+                conn.sock.settimeout(timeout)
+
+        try:
+            try:
+                conn.request(
+                    req.get_method(),
+                    req.selector,
+                    req.data,
+                    headers,
+                    encode_chunked=req.has_header("Transfer-encoding"),
+                )
+                response = conn.getresponse()
+            except (http.client.RemoteDisconnected, ConnectionResetError, BrokenPipeError) as err:
+                conn.close()
+                # Replaying a non-idempotent POST could duplicate writes; retry fresh sockets for GET only.
+                if not (reused and req.get_method() == "GET"):
+                    raise urllib.error.URLError(err)
+                conn = http_class(host, timeout=timeout, **http_conn_args)
+                conn.set_debuglevel(self._debuglevel)
+                conn.request(
+                    req.get_method(),
+                    req.selector,
+                    req.data,
+                    headers,
+                    encode_chunked=req.has_header("Transfer-encoding"),
+                )
+                response = conn.getresponse()
+        except urllib.error.URLError:
+            conn.close()
+            raise
+        except (OSError, http.client.HTTPException) as err:
+            conn.close()
+            raise urllib.error.URLError(err)
+
+        response.url = req.get_full_url()
+        response.msg = response.reason
+        orig_close = response.close
+        released = False
+
+        def pooled_close():
+            nonlocal released
+            orig_close()
+            if released:
+                return
+            released = True
+            if (
+                response.isclosed()
+                and not response.will_close
+                and 200 <= response.status < 400
+                and conn.sock is not None
+            ):
+                _POOL.release(pool_key, conn)
+            else:
+                conn.close()
+
+        response.close = pooled_close
+        return response
+
+
+class _PooledHTTPHandler(_PooledOpenMixin, urllib.request.HTTPHandler):
+    pass
+
+
+class _PooledHTTPSHandler(_PooledOpenMixin, urllib.request.HTTPSHandler):
+    pass
 
 
 class SameOriginRedirect(urllib.request.HTTPRedirectHandler):
@@ -36,14 +209,28 @@ def _safe_url(url):
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.netloc else str(url).split("?", 1)[0]
 
 
+_AUTH_OPENER = urllib.request.build_opener(
+    urllib.request.ProxyHandler({}),
+    SameOriginRedirect(),
+    _PooledHTTPHandler(),
+    _PooledHTTPSHandler(context=_DEFAULT_SSL_CONTEXT),
+)
+_PLAIN_OPENER = urllib.request.build_opener(
+    urllib.request.ProxyHandler({}),
+    _PooledHTTPHandler(),
+    _PooledHTTPSHandler(context=_DEFAULT_SSL_CONTEXT),
+)
+
+
 def _once(url, headers=None, *, data=None, method=None, timeout=10):
     request = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
     try:
-        open_request = (
-            urllib.request.build_opener(SameOriginRedirect()).open
-            if headers and headers.get("Cookie")
-            else urllib.request.urlopen
-        )
+        if headers and headers.get("Cookie"):
+            open_request = _AUTH_OPENER.open
+        elif getattr(urllib.request.urlopen, "__module__", None) != "urllib.request":
+            open_request = urllib.request.urlopen
+        else:
+            open_request = _PLAIN_OPENER.open
         with open_request(request, timeout=timeout) as response:
             value = json.loads(response.read().decode("utf-8"))
         if not isinstance(value, dict):
@@ -67,7 +254,19 @@ def _once(url, headers=None, *, data=None, method=None, timeout=10):
             redact(str(getattr(exc, "reason", ""))),
             redact(detail[:160]),
         )
-        value = {"code": exc.code, "message": f"HTTP {exc.code}", "error_kind": "http"}
+        value = {"code": exc.code, "http_status": exc.code, "message": f"HTTP {exc.code}", "error_kind": "http"}
+        if detail.startswith("{"):
+            try:
+                parsed_err = json.loads(detail)
+            except ValueError:
+                parsed_err = None
+            if isinstance(parsed_err, dict):
+                bili_code = parsed_err.get("code")
+                if isinstance(bili_code, int) and not isinstance(bili_code, bool):
+                    value["bili_code"] = bili_code
+                bili_msg = str(parsed_err.get("message") or parsed_err.get("msg") or "").strip()
+                if bili_msg:
+                    value["message"] = f"HTTP {exc.code}: {bili_msg[:120]}"
         retry_after = exc.headers.get("Retry-After") if exc.headers else None
         if retry_after and retry_after.isdigit():
             value["retry_after"] = int(retry_after)
@@ -131,12 +330,17 @@ def request_json(
         return {"code": -1, "message": "拒绝向非预期地址发送登录会话", "error_kind": "safety"}
     effective_method = method or ("POST" if data is not None else "GET")
     mutation = effective_method != "GET" and parsed.path not in safety.READ_POST_PATHS
+    op = safety.operation(url, data, effective_method)
     if sessdata:
         hold = safety.status(sessdata)
+        watch_allowed = safety.is_interaction_only(hold) and safety.is_watch_operation(
+            op, mutation=mutation
+        )
         may_read = (hold.get("kind") == "uncertain" or safety_probe) and not mutation
         if (
             hold["blocked"]
             and not may_read
+            and not watch_allowed
             and not (auth_probe and parsed.path == "/x/web-interface/nav")
         ):
             return safety.blocked_response(hold)
@@ -152,7 +356,6 @@ def request_json(
                         "error_kind": "auth",
                     }
                 )
-    op = safety.operation(url, data, effective_method)
     cache = (
         read_cache()
         if parsed.path == "/x/web-interface/nav" and not auth_probe and not safety_probe
@@ -174,7 +377,12 @@ def request_json(
         wait(delays[attempt])
         if sessdata:
             hold = safety.status(sessdata)
-            if hold["blocked"] and hold.get("kind") != "uncertain" and not safety_probe:
+            if (
+                hold["blocked"]
+                and hold.get("kind") != "uncertain"
+                and not safety.is_interaction_only(hold)
+                and not safety_probe
+            ):
                 return safety.blocked_response(hold)
     if sessdata and not safety_probe:
         safety.observe(sessdata, url, response, mutation=mutation, op=op)

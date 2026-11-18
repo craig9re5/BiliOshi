@@ -114,9 +114,12 @@ def report_live_likes(
         return resp
 
     try:
-        resp = send_paced(send,
-                          lock_path=data_dir() / "locks" / f"like-send-{safety.identity(sessdata)}.lock",
-                          min_interval=current_profile().like_send_seconds * safety.pace_multiplier(sessdata))
+        resp = send_paced(
+            send,
+            lock_path=data_dir() / "locks" / f"like-send-{safety.identity(sessdata)}.lock",
+            min_interval=current_profile().like_send_seconds * safety.pace_multiplier(sessdata),
+            jitter_ratio=0.15,
+        )
     except TimeoutError:
         raise TaskDeferred("点赞队列繁忙，等待下次检查")
     return {"success": resp.get("code") == 0,
@@ -147,6 +150,8 @@ def like_live_room(
 
 
 def _like_live_room(room_id, anchor_uid, sessdata, bili_jct, batches, state, checkpoint, gateway):
+    if safety.probation_until(sessdata) > 0 and batches > 1:
+        batches = 1
     check_window()
     viewer_uid = gateway.get_viewer_uid(sessdata, bili_jct)
     if viewer_uid is None:

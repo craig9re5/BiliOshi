@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"51e9982b48b492d6fac984a27e46164b71e9fd789930f21ba2d4c9ca19aed89e","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"8836eff41f7e0bbff984bcd54818eb17c34b934f005dba34f792c1e95ae46fec"} */
+/* BiliOshi JSX {"code_sha256":"3334e1ff3d53dcfbd3bb76066fa6d1e948be2fa27447e33dd192f0c78a212350","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"dc446bdd32e6743fb9ffe4203709fbf24cdb568395776ade6be6163082852c36"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -56,21 +56,54 @@ const Choice = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [flipUp, setFlipUp] = useState(false);
+  const [menuStyle, setMenuStyle] = useState(null);
   const root = useRef(null);
   const trigger = useRef(null);
   const menu = useRef(null);
   const selected = Math.max(0, options.findIndex(option => option.value === value));
   useLayoutEffect(() => {
-    if (!open || !trigger.current || !menu.current) return;
-    const triggerRect = trigger.current.getBoundingClientRect();
-    const menuHeight = menu.current.offsetHeight || 72;
-    const spaceBelow = window.innerHeight - triggerRect.bottom;
-    setFlipUp(spaceBelow < menuHeight + 14 && triggerRect.top > menuHeight + 14);
-  }, [open]);
+    if (!open || !trigger.current) return undefined;
+    const updatePosition = () => {
+      if (!trigger.current) return;
+      const triggerRect = trigger.current.getBoundingClientRect();
+      if (triggerRect.bottom < 0 || triggerRect.top > window.innerHeight) {
+        setOpen(false);
+        return;
+      }
+      const estimatedHeight = menu.current?.offsetHeight || options.length * 29 + 10;
+      const spaceBelow = window.innerHeight - triggerRect.bottom;
+      const shouldFlip = spaceBelow < estimatedHeight + 14 && triggerRect.top > estimatedHeight + 14;
+      setFlipUp(shouldFlip);
+      const width = Math.max(triggerRect.width, 112);
+      const left = Math.max(8, Math.min(triggerRect.left, window.innerWidth - width - 8));
+      setMenuStyle(shouldFlip ? {
+        position: "fixed",
+        left,
+        width,
+        bottom: Math.max(8, window.innerHeight - triggerRect.top + 5),
+        top: "auto"
+      } : {
+        position: "fixed",
+        left,
+        width,
+        top: Math.min(window.innerHeight - 16, triggerRect.bottom + 5),
+        bottom: "auto"
+      });
+    };
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, options.length]);
   useEffect(() => {
     if (!open) return undefined;
     const dismiss = event => {
-      if (!root.current?.contains(event.target)) setOpen(false);
+      if (!root.current?.contains(event.target) && !menu.current?.contains(event.target)) {
+        setOpen(false);
+      }
     };
     const escape = event => {
       if (event.key !== "Escape") return;
@@ -96,6 +129,32 @@ const Choice = ({
     const next = event.key === "Home" ? 0 : event.key === "End" ? nodes.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + nodes.length) % nodes.length;
     nodes[next]?.focus();
   };
+  const menuNode = open && /*#__PURE__*/React.createElement("div", {
+    className: `choice-menu${flipUp ? " flip-up" : ""}`,
+    role: "listbox",
+    "aria-label": label,
+    ref: menu,
+    style: menuStyle || {
+      position: "fixed",
+      visibility: "hidden"
+    }
+  }, options.map((option, index) => /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    key: option.value,
+    className: "choice-option",
+    role: "option",
+    "data-value": option.value,
+    "aria-selected": option.value === value,
+    onKeyDown: event => moveFocus(event, index),
+    onClick: () => {
+      setOpen(false);
+      if (option.value !== value) onChange(option.value);
+      trigger.current?.focus();
+    }
+  }, /*#__PURE__*/React.createElement("span", null, option.label), option.value === value && /*#__PURE__*/React.createElement(Icon, {
+    name: "check",
+    size: 12
+  }))));
   return /*#__PURE__*/React.createElement("div", {
     className: `choice ${open ? "open" : ""}`,
     ref: root
@@ -119,28 +178,7 @@ const Choice = ({
   }, options[selected]?.label), /*#__PURE__*/React.createElement(Icon, {
     name: "chevron",
     size: 12
-  })), open && /*#__PURE__*/React.createElement("div", {
-    className: `choice-menu${flipUp ? " flip-up" : ""}`,
-    role: "listbox",
-    "aria-label": label,
-    ref: menu
-  }, options.map((option, index) => /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    key: option.value,
-    className: "choice-option",
-    role: "option",
-    "data-value": option.value,
-    "aria-selected": option.value === value,
-    onKeyDown: event => moveFocus(event, index),
-    onClick: () => {
-      setOpen(false);
-      if (option.value !== value) onChange(option.value);
-      trigger.current?.focus();
-    }
-  }, /*#__PURE__*/React.createElement("span", null, option.label), option.value === value && /*#__PURE__*/React.createElement(Icon, {
-    name: "check",
-    size: 12
-  })))));
+  })), menuNode && (typeof ReactDOM !== "undefined" && ReactDOM.createPortal ? ReactDOM.createPortal(menuNode, document.body) : menuNode));
 };
 
 /* 暖杏灰（apricot）暂时灰度下线，置 enabled: true 即可重新开放选项。 */

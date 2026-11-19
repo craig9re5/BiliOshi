@@ -18,23 +18,48 @@ const SettingRow = ({ name, desc, className = "", children }) => (
 const Choice = ({ value, options, onChange, label, disabled }) => {
   const [open, setOpen] = useState(false);
   const [flipUp, setFlipUp] = useState(false);
+  const [menuStyle, setMenuStyle] = useState(null);
   const root = useRef(null);
   const trigger = useRef(null);
   const menu = useRef(null);
   const selected = Math.max(0, options.findIndex((option) => option.value === value));
 
   useLayoutEffect(() => {
-    if (!open || !trigger.current || !menu.current) return;
-    const triggerRect = trigger.current.getBoundingClientRect();
-    const menuHeight = menu.current.offsetHeight || 72;
-    const spaceBelow = window.innerHeight - triggerRect.bottom;
-    setFlipUp(spaceBelow < menuHeight + 14 && triggerRect.top > menuHeight + 14);
-  }, [open]);
+    if (!open || !trigger.current) return undefined;
+    const updatePosition = () => {
+      if (!trigger.current) return;
+      const triggerRect = trigger.current.getBoundingClientRect();
+      if (triggerRect.bottom < 0 || triggerRect.top > window.innerHeight) {
+        setOpen(false);
+        return;
+      }
+      const estimatedHeight = menu.current?.offsetHeight || (options.length * 29 + 10);
+      const spaceBelow = window.innerHeight - triggerRect.bottom;
+      const shouldFlip = spaceBelow < estimatedHeight + 14 && triggerRect.top > estimatedHeight + 14;
+      setFlipUp(shouldFlip);
+      const width = Math.max(triggerRect.width, 112);
+      const left = Math.max(8, Math.min(triggerRect.left, window.innerWidth - width - 8));
+      setMenuStyle(
+        shouldFlip
+          ? { position: "fixed", left, width, bottom: Math.max(8, window.innerHeight - triggerRect.top + 5), top: "auto" }
+          : { position: "fixed", left, width, top: Math.min(window.innerHeight - 16, triggerRect.bottom + 5), bottom: "auto" }
+      );
+    };
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, options.length]);
 
   useEffect(() => {
     if (!open) return undefined;
     const dismiss = (event) => {
-      if (!root.current?.contains(event.target)) setOpen(false);
+      if (!root.current?.contains(event.target) && !menu.current?.contains(event.target)) {
+        setOpen(false);
+      }
     };
     const escape = (event) => {
       if (event.key !== "Escape") return;
@@ -63,6 +88,30 @@ const Choice = ({ value, options, onChange, label, disabled }) => {
     nodes[next]?.focus();
   };
 
+  const menuNode = open && (
+    <div
+      className={`choice-menu${flipUp ? " flip-up" : ""}`}
+      role="listbox"
+      aria-label={label}
+      ref={menu}
+      style={menuStyle || { position: "fixed", visibility: "hidden" }}
+    >
+      {options.map((option, index) => (
+        <button type="button" key={option.value} className="choice-option" role="option"
+          data-value={option.value} aria-selected={option.value === value}
+          onKeyDown={(event) => moveFocus(event, index)}
+          onClick={() => {
+            setOpen(false);
+            if (option.value !== value) onChange(option.value);
+            trigger.current?.focus();
+          }}>
+          <span>{option.label}</span>
+          {option.value === value && <Icon name="check" size={12} />}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className={`choice ${open ? "open" : ""}`} ref={root}>
       <button type="button" className="choice-button" ref={trigger} aria-haspopup="listbox"
@@ -77,21 +126,9 @@ const Choice = ({ value, options, onChange, label, disabled }) => {
         <span className="choice-label">{options[selected]?.label}</span>
         <Icon name="chevron" size={12} />
       </button>
-      {open && <div className={`choice-menu${flipUp ? " flip-up" : ""}`} role="listbox" aria-label={label} ref={menu}>
-        {options.map((option, index) => (
-          <button type="button" key={option.value} className="choice-option" role="option"
-            data-value={option.value} aria-selected={option.value === value}
-            onKeyDown={(event) => moveFocus(event, index)}
-            onClick={() => {
-              setOpen(false);
-              if (option.value !== value) onChange(option.value);
-              trigger.current?.focus();
-            }}>
-            <span>{option.label}</span>
-            {option.value === value && <Icon name="check" size={12} />}
-          </button>
-        ))}
-      </div>}
+      {menuNode && (typeof ReactDOM !== "undefined" && ReactDOM.createPortal
+        ? ReactDOM.createPortal(menuNode, document.body)
+        : menuNode)}
     </div>
   );
 };

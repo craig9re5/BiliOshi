@@ -1525,23 +1525,21 @@ button:disabled { cursor: default; }
 .choice.open .choice-button svg { color: var(--accent); transform: rotate(180deg); }
 
 .choice-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 5px);
-  width: 100%;
+  position: fixed;
+  margin: 0;
   padding: 4px;
+  max-height: min(260px, calc(100vh - 24px));
+  overflow-y: auto;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow-2);
   transform-origin: top right;
   animation: choice-down 120ms var(--ease);
-  z-index: 30;
+  z-index: 50;
 }
 
 .choice-menu.flip-up {
-  top: auto;
-  bottom: calc(100% + 5px);
   transform-origin: bottom right;
   animation: choice-in 120ms var(--ease);
 }

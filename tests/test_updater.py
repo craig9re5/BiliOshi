@@ -276,8 +276,9 @@ class UpdaterContractTests(unittest.TestCase):
                 public_key=ed25519_public_key(b"\x11" * 32).hex(),
                 manifest_url="https://example.test/latest.json",
                 opener=opener,
-                self_updatable=True,
+                frozen=True,
                 executable=root / "BiliOshi.exe",
+                auto_start_background=False,
             )
             result = updater.check_now(download=False)
             self.assertTrue(result["ok"])

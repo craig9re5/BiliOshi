@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 
 from bilioshi.runtime import APP_VERSION, read_json, write_json
 from bilioshi.safety import blocks_watch
@@ -32,6 +33,7 @@ from desktop.windows import Mutex, instance_name, terminate_verified, process_id
 
 STARTUP_DELAY_SECONDS = 12.0
 POLL_INTERVAL_SECONDS = 20 * 60.0
+NOT_FOUND_BACKOFF_SECONDS = 6 * 3600.0
 POLL_JITTER_SECONDS = 180.0
 READY_RECHECK_SECONDS = 10.0
 FOREGROUND_IDLE_GRACE_SECONDS = 60.0
@@ -326,6 +328,30 @@ class DesktopUpdater:
         finally:
             self._op_lock.release()
 
+    def _handle_manifest_error(self, exc, prev_ready):
+        has_ready = bool(prev_ready[0] and prev_ready[1] and prev_ready[1].is_file())
+        if isinstance(exc, urllib.error.HTTPError) and exc.code == 404:
+            logging.info("Update manifest not published yet (HTTP 404); backing off")
+            with self._lock:
+                self._status = "ready" if has_ready else "up_to_date"
+                self._error = ""
+            update_updater_state(self.root, lambda cur: {**cur, "last_error": ""})
+            self._notify_change()
+            return {
+                "ok": True,
+                "has_update": False,
+                "not_published": True,
+                "message": f"当前已是最新版本（v{self._current_version}）",
+            }
+        logging.warning("Update manifest check failed: %s", exc)
+        msg = str(exc) if isinstance(exc, ValueError) else "检查更新失败，请检查网络连接后重试。"
+        with self._lock:
+            self._status = "ready" if has_ready else "error"
+            self._error = msg
+        update_updater_state(self.root, lambda cur: {**cur, "last_error": msg})
+        self._notify_change()
+        return {"ok": False, "error": msg}
+
     def _check_and_stage_locked(self, *, download=None):
         if self._stop.is_set():
             return {"ok": False, "error": "程序正在退出。"}
@@ -352,17 +378,7 @@ class DesktopUpdater:
                 allow_http=self._allow_http,
             )
         except Exception as exc:
-            logging.warning("Update manifest check failed: %s", exc)
-            msg = str(exc) if isinstance(exc, ValueError) else "检查更新失败，请检查网络连接后重试。"
-            with self._lock:
-                if prev_ready[0] and prev_ready[1] and prev_ready[1].is_file():
-                    self._status = "ready"
-                else:
-                    self._status = "error"
-                self._error = msg
-            update_updater_state(self.root, lambda cur: {**cur, "last_error": msg})
-            self._notify_change()
-            return {"ok": False, "error": msg}
+            return self._handle_manifest_error(exc, prev_ready)
 
         manifest = outcome["manifest"]
         ver = manifest["version"]
@@ -585,12 +601,18 @@ class DesktopUpdater:
             now = time.monotonic()
             cfg = load_updater_settings(self.root)
             if cfg["auto_update"] and now >= next_poll:
+                poll_result = None
                 if self._op_lock.acquire(blocking=False):
                     try:
-                        self._check_and_stage_locked(download=self._self_updatable)
+                        poll_result = self._check_and_stage_locked(download=self._self_updatable)
                     finally:
                         self._op_lock.release()
-                next_poll = time.monotonic() + POLL_INTERVAL_SECONDS + random.uniform(0, POLL_JITTER_SECONDS)
+                interval = (
+                    NOT_FOUND_BACKOFF_SECONDS
+                    if isinstance(poll_result, dict) and poll_result.get("not_published")
+                    else POLL_INTERVAL_SECONDS
+                )
+                next_poll = time.monotonic() + interval + random.uniform(0, POLL_JITTER_SECONDS)
             elif not cfg["auto_update"] and next_poll == 0.0:
                 next_poll = now + 60.0
 

@@ -263,6 +263,47 @@ class UpdaterContractTests(unittest.TestCase):
             self.assertEqual(rollback_launches[-1], (b"NEW-EXE-BYTES", ("--supervised",)))
             self.assertTrue(load_updater_state(root).get("skipped_versions"))
 
+    def test_manifest_http_404_is_treated_as_unpublished_without_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            def opener(request, timeout=15):
+                raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+            updater = DesktopUpdater(
+                root,
+                current_version="2026.10.18.3",
+                public_key=ed25519_public_key(b"\x11" * 32).hex(),
+                manifest_url="https://example.test/latest.json",
+                opener=opener,
+                self_updatable=True,
+                executable=root / "BiliOshi.exe",
+            )
+            result = updater.check_now(download=False)
+            self.assertTrue(result["ok"])
+            self.assertFalse(result["has_update"])
+            self.assertTrue(result.get("not_published"))
+            snap = updater.snapshot()
+            self.assertEqual(snap["status"], "up_to_date")
+            self.assertEqual(snap["error"], "")
+
+    def test_read_json_retries_transient_permission_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "monitor-health.json"
+            target.write_text('{"ok": true}', encoding="utf-8")
+            real_read_text = Path.read_text
+            calls = {"n": 0}
+
+            def flaky_read(self_path, *args, **kwargs):
+                if self_path == target and calls["n"] < 2:
+                    calls["n"] += 1
+                    raise PermissionError(13, "Permission denied", str(self_path))
+                return real_read_text(self_path, *args, **kwargs)
+
+            with patch.object(Path, "read_text", flaky_read):
+                self.assertEqual(read_json(target, {}), {"ok": True})
+            self.assertEqual(calls["n"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -62,9 +62,21 @@ def session_fingerprint(sessdata):
     return hashlib.sha256(sessdata.encode("utf-8")).hexdigest()[:20]
 
 
+def _read_text_retry(path, encoding="utf-8-sig"):
+    """Retry transient Windows sharing violations during concurrent atomic replaces."""
+    target = Path(path)
+    for attempt in range(5):
+        try:
+            return target.read_text(encoding=encoding)
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.02 * (attempt + 1))
+
+
 def _read_json(path, default=None):
     try:
-        value = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+        value = json.loads(_read_text_retry(path, encoding="utf-8-sig"))
         if is_envelope(value):
             value = unseal(value)
         if isinstance(value, dict) and ("SESSDATA" in value or "pushplus_token" in value):
@@ -78,7 +90,7 @@ def read_json(path, default=None):
     """Read compatible data; atomically protect an existing plaintext login file."""
     path = Path(path)
     if path.name in {"credentials.json", "pushplus.credentials.json"} and path.exists():
-        raw = json.loads(path.read_text(encoding="utf-8-sig"))
+        raw = json.loads(_read_text_retry(path, encoding="utf-8-sig"))
         if raw and not is_envelope(raw):
             return update_json(path, lambda value: value, default)
     return _read_json(path, default)
@@ -95,7 +107,7 @@ def write_json(path, value):
     if protected:
         register_secrets(value)
         if path.exists():
-            old = json.loads(path.read_text(encoding="utf-8-sig"))
+            old = json.loads(_read_text_retry(path, encoding="utf-8-sig"))
         value = seal(value)
     else:
         value = redact(value)

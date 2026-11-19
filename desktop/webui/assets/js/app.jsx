@@ -42,7 +42,9 @@ const Sidebar = ({ page, onPage, account, activeAccount, runningCount = 0, pause
           : { label: "挂机中", tone: "live" };
   const state = baseState.tone === "live" && runningCount > 1
     ? { ...baseState, label: `挂机中 · ${runningCount} 号并发` }
-    : baseState;
+    : baseState.tone !== "live" && runningCount > 0
+      ? { ...baseState, label: `${baseState.label} · ${runningCount} 号挂机中` }
+      : baseState;
   return (
     <aside className="side" inert={inert ? "" : undefined}>
       {!brandHidden && <div className="brand"><div className="logo"><Pulse size={26} /></div>
@@ -130,6 +132,7 @@ const SidebarToggle = ({ collapsed, onToggle }) => (
 
 function App() {
   const [page, setPage] = useState("monitor");
+  const [settingsTab, setSettingsTab] = useState("account");
   const [theme, setTheme] = useState(() =>
     normalizeThemeKey(document.documentElement.dataset.theme, THEME_KEYS, "system")
   );
@@ -244,10 +247,30 @@ function App() {
 
   const receiveSnapshot = useCallback((data) => {
     if (!data || !alive.current) return;
-    latest.current = { ...EMPTY_SNAPSHOT, ...data,
+    const overrides = settingOverrides.current || {};
+    const nextView = data.view
+      ? {
+          ...data.view,
+          settings: { ...DEFAULT_SETTINGS, ...data.view.settings, ...overrides },
+          accountInfo: {
+            ...EMPTY_SNAPSHOT.accountInfo,
+            ...data.view.accountInfo,
+            safety: data.view.safety || data.view.accountInfo?.safety || {},
+          },
+        }
+      : undefined;
+    latest.current = {
+      ...EMPTY_SNAPSHOT,
+      ...data,
       settings: { ...DEFAULT_SETTINGS, ...data.settings },
-      accountInfo: { ...EMPTY_SNAPSHOT.accountInfo, ...data.accountInfo, safety: data.safety || data.accountInfo?.safety || {} } };
-    setSnap({ ...latest.current, settings: { ...latest.current.settings, ...settingOverrides.current } });
+      accountInfo: { ...EMPTY_SNAPSHOT.accountInfo, ...data.accountInfo, safety: data.safety || data.accountInfo?.safety || {} },
+      ...(nextView ? { view: nextView } : {}),
+    };
+    setSnap({
+      ...latest.current,
+      settings: { ...latest.current.settings, ...overrides },
+      ...(nextView ? { view: nextView } : {}),
+    });
     setConnected(true);
   }, []);
 
@@ -317,9 +340,19 @@ function App() {
 
   const accounts = snap.accounts || [];
   const activeId = snap.active_account_id || "";
-  const viewId = activeId;
+  const rawViewId = snap.view_account_id || "";
+  const viewId = (rawViewId && rawViewId !== "all" && accounts.some((item) => item.id === rawViewId))
+    ? rawViewId
+    : (activeId || accounts[0]?.id || "");
   const isAllView = false;
-  const viewed = snap;
+  const viewed = (snap.view && snap.view.account_id === viewId) ? snap.view : snap;
+  const viewedAccountObj = accounts.find((item) => item.id === viewId) || null;
+  const viewedRunning = Boolean(
+    viewedAccountObj
+      ? (viewedAccountObj.engine_active || viewedAccountObj.running)
+      : (!viewed.inactive && viewed.active)
+  );
+  const viewedSettings = { ...DEFAULT_SETTINGS, ...(viewed.settings || snap.settings || {}) };
 
   const rawRooms = (viewed.rows || []).map((row) => toRoom(row, viewed));
   const rooms = typeof roomSortTier === "function"
@@ -340,7 +373,7 @@ function App() {
     if (!uid || images[uid] || avatarPending.current.has(uid)) return;
     if (Date.now() < (avatarRetry.current[uid] || 0)) return;
     avatarPending.current.add(uid);
-    call("avatar", uid, "", activeId).then((result) => {
+    call("avatar", uid, "", viewId).then((result) => {
       avatarPending.current.delete(uid);
       if (result?.ok && result.data_uri && alive.current) {
         delete avatarRetry.current[uid];
@@ -352,7 +385,7 @@ function App() {
       avatarPending.current.delete(uid);
       avatarRetry.current[uid] = Date.now() + 60000;
     });
-  }, [images, activeId]);
+  }, [images, viewId]);
 
   useEffect(() => {
     if (!connected || !viewed.accountInfo?.signed_in) return;
@@ -367,7 +400,7 @@ function App() {
 
   useEffect(() => {
     setMenu(null);
-  }, [page, activeId]);
+  }, [page, viewId]);
 
   useEffect(() => {
     const onDocContextMenu = (event) => {
@@ -392,12 +425,12 @@ function App() {
     let live = true;
     let retry = 0;
     const load = () => {
-      call("account_avatar", activeId).then((result) => {
+      call("account_avatar", viewId).then((result) => {
         if (!live) return;
         if (result?.ok && result.data_uri) {
           setAccountAvatar(result.data_uri);
-          if (activeId) {
-            setAccountAvatars((items) => (items[activeId] === result.data_uri ? items : { ...items, [activeId]: result.data_uri }));
+          if (viewId) {
+            setAccountAvatars((items) => (items[viewId] === result.data_uri ? items : { ...items, [viewId]: result.data_uri }));
           }
         } else if (result?.error) retry = window.setTimeout(load, 60000);
       }).catch(() => {
@@ -406,7 +439,7 @@ function App() {
     };
     load();
     return () => { live = false; window.clearTimeout(retry); };
-  }, [connected, account.signed_in, account.name, avatarVersion, activeId]);
+  }, [connected, account.signed_in, account.name, avatarVersion, viewId]);
 
   const accountKeys = accounts.map((item) => `${item.id}:${item.signed_in ? 1 : 0}`).join(",");
   useEffect(() => {
@@ -491,9 +524,13 @@ function App() {
       for (const k of keys) next.add(k);
       return next;
     });
-    setSnap((current) => ({ ...current, settings: { ...current.settings, ...updates } }));
+    setSnap((current) => ({
+      ...current,
+      settings: { ...current.settings, ...updates },
+      ...(current.view ? { view: { ...current.view, settings: { ...current.view.settings, ...updates } } } : {}),
+    }));
     window.clearTimeout(settingsTimer.current);
-    const targetAccount = activeId;
+    const targetAccount = viewId;
     settingsTimer.current = window.setTimeout(() => {
       const payload = { ...settingsBatch.current };
       const flushedKeys = Object.keys(payload);
@@ -522,7 +559,7 @@ function App() {
   const refreshDaily = async () => {
     if (dailyBusy || closing) return;
     setDailyBusy(true);
-    try { await invoke("refresh_daily"); await refresh(); }
+    try { await invoke("refresh_daily", viewId ? [viewId] : []); await refresh(); }
     finally { if (alive.current) setDailyBusy(false); }
   };
 
@@ -530,7 +567,7 @@ function App() {
     if (dailyBusy || closing) return;
     setDailyBusy(true);
     try {
-      await invoke("run_daily", onlyTask ? [onlyTask] : []);
+      await invoke("run_daily", [onlyTask || "", viewId || ""]);
       await refresh();
     } finally { if (alive.current) setDailyBusy(false); }
   };
@@ -716,7 +753,7 @@ function App() {
     setSafetyProbe({ loading: false, result: null });
     setDialog({
       type: "safety",
-      account: targetAccount || accounts.find((item) => item.id === activeId) || null,
+      account: targetAccount || viewedAccountObj || accounts.find((item) => item.id === viewId) || null,
     });
   };
 
@@ -794,6 +831,24 @@ function App() {
     }
   };
 
+  const selectAccountTab = async (accountId) => {
+    if (!accountId || accountId === viewId) return;
+    const target = accounts.find((item) => item.id === accountId);
+    if (!target) return;
+    settingOverrides.current = {};
+    settingsBatch.current = {};
+    window.clearTimeout(settingsTimer.current);
+    const alreadyRunning = Boolean(target.engine_active || target.running);
+    const result = alreadyRunning
+      ? await invoke("switch_account", [accountId, false])
+      : await invoke("set_view_account", [accountId]);
+    if (result?.ok) {
+      selectionInitialized.current = false;
+      setSelectedId(null);
+      await refresh();
+    }
+  };
+
   const switchAccount = async (accountId, exclusive = false) => {
     if (!accountId) return;
     const target = accounts.find((item) => item.id === accountId);
@@ -806,8 +861,7 @@ function App() {
       openSafety(target);
       return;
     }
-    if (!exclusive && accountId === activeId && (target.engine_active || target.running)) {
-      toast("当前已是这个账号");
+    if (!exclusive && accountId === viewId && (target.engine_active || target.running)) {
       return;
     }
     if (!exclusive && !target.engine_active && !target.running) {
@@ -920,9 +974,9 @@ function App() {
 
   const nativeModal = dialog === "diagnostic" || dialog?.type === "safety";
   const modalOpen = Boolean(qr || (dialog && !nativeModal));
-  const activeAccountObj = accounts.find((item) => item.id === activeId) || null;
+  const activeAccountObj = viewedAccountObj || accounts.find((item) => item.id === activeId) || null;
   const modalAvatar = dialog?.account?.id
-    ? (dialog.account.id === activeId ? (accountAvatar || accountAvatars[dialog.account.id]) : accountAvatars[dialog.account.id])
+    ? (dialog.account.id === viewId ? (accountAvatar || accountAvatars[dialog.account.id]) : accountAvatars[dialog.account.id])
     : "";
   const safetyAccount = dialog?.type === "safety"
     ? ((dialog.account?.id && accounts.find((item) => item.id === dialog.account.id))
@@ -934,12 +988,13 @@ function App() {
   const safetyHold = isSafetyActive
     ? snap.safety
     : (safetyAccount?.safety?.blocked ? safetyAccount.safety : { blocked: true, kind: "review", reason: "该账号处于保护暂停状态" });
+  const viewedBlocked = Boolean(viewedAccountObj?.status === "blocked" || account.safety?.blocked);
 
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
-      <Sidebar page={page} onPage={setPage} account={account} activeAccount={activeAccountObj}
-        runningCount={runningAccountsCount} paused={snap.paused}
-        avatar={accountAvatar || accountAvatars[activeId]}
+      <Sidebar page={page} onPage={setPage} account={account} activeAccount={viewedAccountObj}
+        runningCount={runningAccountsCount} paused={viewed.paused}
+        avatar={accountAvatar || accountAvatars[viewId]}
         onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} inert={modalOpen} />
       <main className="main" aria-busy={!connected} inert={modalOpen ? "" : undefined}>
         <header className="chrome pywebview-drag-region">
@@ -957,67 +1012,88 @@ function App() {
                 <Icon name="download" size={12} />重启更新 v{snap.update.ready_version}
               </button>
             )}
-            {page === "monitor" && <window.OverviewActions paused={snap.paused}
+            {page === "monitor" && <window.OverviewActions paused={viewed.paused}
               globalPaused={Boolean(snap.global_paused)} signedIn={account.signed_in}
+              blocked={viewedBlocked}
+              multiAccount={accounts.length > 0}
+              viewedRunning={viewedRunning}
               onTogglePause={() => control("toggle_pause")}
-              onCheck={() => control("check_now")} checking={snap.checking}
+              onStartWatch={() => setAccountRunning(viewId, true)}
+              onStopWatch={() => setAccountRunning(viewId, false)}
+              onOpenLogin={() => openQr(viewId)}
+              onOpenSafety={() => openSafety(viewedAccountObj)}
+              onCheck={() => control("check_now")} checking={viewed.checking}
               controlBusy={controlBusy} closing={closing} />}
           </div>
           <WindowButtons />
         </header>
         {((page === "monitor" && accounts.length > 0)
-          || ((page === "daily" || page === "growth" || page === "automation") && accounts.length > 1)) && (
-          <window.AccountTabs accounts={accounts} activeId={activeId}
-            avatars={accountAvatars} onSelect={switchAccount} onAdd={() => openQr("")} />
+          || ((page === "daily" || page === "growth") && accounts.length > 1)
+          || (page === "automation" && settingsTab === "account" && accounts.length > 1)) && (
+          <window.AccountTabs accounts={accounts} viewId={viewId} activeId={activeId}
+            avatars={accountAvatars} onSelect={selectAccountTab} onAdd={() => openQr("")} />
         )}
         <div className="page" id="monitor-body">
         {/* Keyed by account: batch selections must never survive an account
             switch, or they would apply to the other account's follow list. */}
-        {page === "monitor" && <window.Overview key={activeId} rooms={rooms} selectedId={selectedId} onSelect={select}
-          paused={snap.paused} globalPaused={Boolean(snap.global_paused)}
+        {page === "monitor" && <window.Overview key={viewId} rooms={rooms} selectedId={selectedId} onSelect={select}
+          paused={viewed.paused} globalPaused={Boolean(snap.global_paused)}
+          viewedRunning={viewedRunning} multiAccount={accounts.length > 0}
+          accountName={viewedAccountObj?.name || account.name || ""}
+          blocked={viewedBlocked}
+          onStartWatch={() => setAccountRunning(viewId, true)}
+          onOpenLogin={() => openQr(viewId)}
+          onOpenSafety={() => openSafety(viewedAccountObj)}
           onAction={roomAction} onOpen={(id) => invoke("open_room", [id])} onAddMember={openAdd} onSyncMedals={openMedals}
           onRemove={remove} onContextMenu={onContextMenu} menuRoom={menu?.room} menuMode={menu?.mode}
           busyRoom={busyRoom} controlBusy={controlBusy}
-          error={snap.error || snap.ui_error} recovery={snap.recovery} onRecovery={recover}
-          interval={snap.settings?.check_minutes || 5} lastCheck={snap.last_check} checking={snap.checking}
+          error={viewed.error || snap.ui_error} recovery={viewed.recovery} onRecovery={recover}
+          interval={viewedSettings.check_minutes || 5} lastCheck={viewed.last_check} checking={viewed.checking}
           images={images} signedIn={account.signed_in} closing={closing} bridgeConnected={connected}
           onBatchRemove={batchRemove} onClearRoomBlock={clearRoomBlock}
           onDismissTaskError={(room) => dismissRoomNotice("dismiss_task_error", room)}
           onDismissWatchWarning={(room) => dismissRoomNotice("dismiss_watch_warning", room)} />}
         {page === "daily" && <window.DailyPage
           daily={viewed.daily} dailyRunning={Boolean(viewed.daily_running)} today={viewed.today}
-          settings={snap.settings || DEFAULT_SETTINGS}
+          settings={viewedSettings}
           account={account} profile={viewed.profile}
           busy={dailyBusy || closing}
           onRun={runDaily} onRefresh={refreshDaily}
-          onOpenLogin={() => openQr(activeId)}
-          onOpenSafety={() => openSafety()}
-          onOpenSettings={() => setPage("automation")} />}
-        {page === "growth" && <window.GrowthPage viewId={activeId} images={images} onNeedAvatar={fetchAvatar}
+          onOpenLogin={() => openQr(viewId)}
+          onOpenSafety={() => openSafety(viewedAccountObj)}
+          onOpenSettings={() => { setSettingsTab("account"); setPage("automation"); }} />}
+        {page === "growth" && <window.GrowthPage viewId={viewId} images={images} onNeedAvatar={fetchAvatar}
           onOpenAccount={() => setPage("account")} onOpenMonitor={() => setPage("monitor")} />}
-        {page === "automation" && <window.SettingsPage settings={snap.settings || DEFAULT_SETTINGS} onSetting={setSetting}
+        {page === "automation" && <window.SettingsPage settings={viewedSettings} onSetting={setSetting}
           onSettingsBatch={setSettingsBatch}
           pendingSettings={pendingSettings} theme={theme} onTheme={chooseTheme}
           dayTheme={dayTheme} onDayTheme={chooseDayTheme}
-          scope={accounts.find((item) => item.id === activeId) || null} scopeAll={false}
-          onLogs={() => invoke("open_logs", [activeId])}
+          tab={settingsTab} onTab={setSettingsTab}
+          scope={viewedAccountObj}
+          scopeAvatar={accountAvatar || accountAvatars[viewId]}
+          onSetRunning={setAccountRunning}
+          onOpenLogin={openQr}
+          onOpenSafety={openSafety}
+          onLogs={() => invoke("open_logs", [viewId])}
           onHostLogs={() => invoke("open_logs", [""])}
           onDiagnostics={openDiagnostics}
           version={snap.version}
           update={snap.update}
           onCheckUpdate={checkUpdate}
           onApplyUpdate={applyUpdate}
-          updateBusy={updateBusy || closing} />}
-        {page === "account" && <window.AccountPage accounts={accounts} activeId={activeId} viewId={activeId}
+          updateBusy={updateBusy || closing}
+          busy={closing || controlBusy} />}
+        {page === "account" && <window.AccountPage accounts={accounts} activeId={viewId} viewId={viewId}
           maxConcurrent={maxConcurrent}
           account={account} avatar={accountAvatar} avatars={accountAvatars} onScan={openQr}
-          onView={() => setPage("monitor")} onSwitch={(id) => switchAccount(id, false)}
+          onView={async (id) => { await selectAccountTab(id); setPage("monitor"); }}
+          onSwitch={(id) => switchAccount(id, false)}
           onSetRunning={setAccountRunning}
           onSwitchExclusive={(id) => switchAccount(id, true)}
           onLogout={(id) => setDialog({ type: "logout", account: accounts.find((item) => item.id === id) })}
           onRemove={(id) => setDialog({ type: "removeAccount", account: accounts.find((item) => item.id === id) })}
           onProtection={(id) => openSafety(accounts.find((item) => item.id === id))}
-          onResumeSafety={() => openSafety()}
+          onResumeSafety={() => openSafety(viewedAccountObj)}
           onCheckSafety={checkSafety} safetyProbe={safetyProbe}
           onCheck={() => control("check_now")} busy={closing}
           version={snap.version} />}

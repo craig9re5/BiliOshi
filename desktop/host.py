@@ -360,9 +360,10 @@ class AccountHost:
                         if not self.store.get(aid).get("watch_enabled"):
                             self.store.set_watch_enabled(aid, True)
                 self.store.set_watch_enabled(account_id, True)
-                self.store.set_active_view(account_id)
-                self.active_id = account_id
-                self.view_id = account_id
+                if self.active_id is None or self.view_id in (None, account_id):
+                    self.store.set_active_view(account_id)
+                    self.active_id = account_id
+                    self.view_id = account_id
                 if not already_up:
                     target.check_now()
                 return account_id
@@ -375,8 +376,6 @@ class AccountHost:
                 next_active = remaining[0] if remaining else None
                 self.active_id = next_active
                 self.store.set_active(next_active)
-                if next_active is not None:
-                    self.view(next_active)
             return self.active_id
 
     def set_account_paused(self, account_id, paused):

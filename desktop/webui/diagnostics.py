@@ -197,7 +197,17 @@ class _DiagnosticSession:
         self.wait("document.querySelector('.account-tab.active')?.id === " + json.dumps("account-tab-" + self.second_id))
         self.wait("document.querySelectorAll('.room').length === 1")
         self.wait("document.querySelector('.detail-name')?.textContent === '第二主播'")
-        self.check("switch to second account without QR", True)
+        self.wait("Boolean(document.querySelector('.view-status-bar'))")
+        self.check(
+            "clicking stopped account tab stays read-only without starting watch",
+            len(self.accounts_host.active_engine_ids()) == 1,
+        )
+        self.click(".view-status-bar .btn.primary")
+        self.wait("!document.querySelector('.view-status-bar')")
+        self.check(
+            "explicit start button enables concurrent watch",
+            len(self.accounts_host.active_engine_ids()) == 2,
+        )
         self.click("#account-tab-" + self.first_id)
         self.wait("document.querySelector('.account-tab.active')?.id === " + json.dumps("account-tab-" + self.first_id))
         self.wait("document.querySelectorAll('.room').length === 2")
@@ -258,18 +268,22 @@ class _DiagnosticSession:
         self.check("daily check-in tasks rendered", eval_js("document.querySelectorAll('.daily-task').length === 4"))
         self.click('button[aria-label="设置"]')
         self.wait("document.querySelector('.chrome-title')?.textContent === '设置'")
-        self.check("developer settings collapsed by default", eval_js("!document.querySelector('.settings-dev')?.open"))
+        self.check("account tabs visible on account settings tab", eval_js("Boolean(document.querySelector('.account-tabs'))"))
         self.click('[role="switch"][aria-label="直播点赞"]')
         self.wait("document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]')?.getAttribute('aria-checked') === 'true'")
         self.wait("!document.querySelector('[role=\"switch\"][aria-label=\"直播点赞\"]').disabled")
         self.check("setting persisted", json.loads(settings_path.read_text(encoding="utf-8"))["auto_like"] is True)
-        self.check("auto update switch defaults to on", eval_js(
-            "document.querySelector('[role=\"switch\"][aria-label=\"自动更新\"]')?.getAttribute('aria-checked') === 'true'"))
         self.check("native select removed", eval_js("!document.querySelector('select')"))
         self.check(
             "run mode switch feature-gated",
             eval_js("!document.querySelector('.choice-button[aria-label=\"运行模式\"]')"),
         )
+        self.click('.settings-tabs button[role="tab"]:nth-child(2)')
+        self.wait("!document.querySelector('.account-tabs')")
+        self.check("account tabs hidden on app settings tab", True)
+        self.check("developer settings collapsed by default", eval_js("!document.querySelector('.settings-dev')?.open"))
+        self.check("auto update switch defaults to on", eval_js(
+            "document.querySelector('[role=\"switch\"][aria-label=\"自动更新\"]')?.getAttribute('aria-checked') === 'true'"))
         original_theme = eval_js("document.documentElement.dataset.theme || 'system'")
         self.click('.theme-option[data-theme="mist"]')
         self.wait("document.documentElement.dataset.theme === 'mist'")

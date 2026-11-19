@@ -298,8 +298,43 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
   );
 };
 
-const OverviewActions = ({ paused, globalPaused, signedIn = true, onTogglePause, onCheck, checking, controlBusy, closing }) => {
-  const effectivelyPaused = Boolean(paused || globalPaused);
+const OverviewActions = ({
+  paused, globalPaused, signedIn = true, blocked = false,
+  multiAccount = false, viewedRunning = true,
+  onTogglePause, onStartWatch, onStopWatch, onOpenLogin, onOpenSafety,
+  onCheck, checking, controlBusy, closing
+}) => {
+  if (globalPaused) {
+    return (
+      <button type="button" className="btn primary" onClick={onTogglePause}
+        disabled={controlBusy || closing}>
+        <Icon name="play" size={13} />恢复全部
+      </button>
+    );
+  }
+  if (multiAccount && !viewedRunning) {
+    if (!signedIn) {
+      return (
+        <button type="button" className="btn primary" onClick={onOpenLogin} disabled={closing}>
+          <Icon name="qr" size={13} />扫码登录
+        </button>
+      );
+    }
+    if (blocked) {
+      return (
+        <button type="button" className="btn" onClick={onOpenSafety} disabled={closing}>
+          <Icon name="alert" size={13} />查看原因
+        </button>
+      );
+    }
+    return (
+      <button type="button" className="btn primary" onClick={onStartWatch}
+        disabled={controlBusy || closing} title="开启当前账号的直播挂机与自动巡检">
+        <Icon name="play" size={13} />开启挂机
+      </button>
+    );
+  }
+  const effectivelyPaused = Boolean(paused);
   const noAccountReady = !signedIn && !effectivelyPaused;
   return (
     <>
@@ -307,16 +342,26 @@ const OverviewActions = ({ paused, globalPaused, signedIn = true, onTogglePause,
         title={noAccountReady ? "请先登录 B 站账号" : "检查开播状态与任务进度"}
         disabled={checking || controlBusy || closing || noAccountReady}>
         <Icon name="refresh" size={13} className={checking ? "spin" : ""} />{checking ? "检查中…" : "立即检查"}</button>
-      <button type="button" className={`btn ${effectivelyPaused ? "primary" : ""}`} onClick={onTogglePause}
-        title={noAccountReady ? "请先登录 B 站账号" : ""}
-        disabled={controlBusy || closing || noAccountReady}>
-        <Icon name={effectivelyPaused ? "play" : "pause"} size={13} />
-        {globalPaused ? "恢复全部" : paused ? "恢复挂机" : "暂停挂机"}</button>
+      {multiAccount && !effectivelyPaused && onStopWatch ? (
+        <button type="button" className="btn" onClick={onStopWatch}
+          title="停止当前账号的直播挂机（不影响其他挂机中的账号）"
+          disabled={controlBusy || closing}>
+          <Icon name="pause" size={13} />停止挂机
+        </button>
+      ) : (
+        <button type="button" className={`btn ${effectivelyPaused ? "primary" : ""}`} onClick={onTogglePause}
+          title={noAccountReady ? "请先登录 B 站账号" : ""}
+          disabled={controlBusy || closing || noAccountReady}>
+          <Icon name={effectivelyPaused ? "play" : "pause"} size={13} />
+          {effectivelyPaused ? "恢复挂机" : "暂停挂机"}</button>
+      )}
     </>
   );
 };
 
 const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
+  viewedRunning = true, multiAccount = false, accountName = "", blocked = false,
+  onStartWatch, onOpenLogin, onOpenSafety,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, menuRoom, menuMode,
   busyRoom, controlBusy, error, recovery, onRecovery, interval, lastCheck, checking, images,
   signedIn, closing, bridgeConnected, onBatchRemove, onClearRoomBlock, onDismissTaskError, onDismissWatchWarning }) => {
@@ -394,36 +439,72 @@ const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
   const selected = rooms.find((room) => room.room === selectedId);
   const healthy = rooms.filter((room) => room.healthy).length;
   const unknown = rooms.filter((room) => room.live_status == null).length;
+  const readOnlyInactive = Boolean(multiAccount && !viewedRunning && !globalPaused);
   const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…"
     : globalPaused ? "全部挂机已暂停"
+    : !signedIn ? "等待登录"
+    : blocked ? "保护暂停中"
+    : readOnlyInactive ? "当前账号未挂机"
     : paused ? "已暂停挂机"
-    : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中`
+    : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中`
     : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.
-  const cadence = `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
-  const showBanner = Boolean(error || recovery?.action === "login" || recovery?.action === "resume_global" || recovery?.action === "switch_prompt");
+  const cadence = readOnlyInactive
+    ? (lastCheck ? `仅查看模式 · 上次同步 ${relativeTime(lastCheck)}` : "仅查看模式 · 不会自动开始挂机")
+    : `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
+  const showErrorBanner = Boolean(error || recovery?.action === "login" || recovery?.action === "resume_global");
+  const showInactiveStrip = !showErrorBanner && readOnlyInactive;
   const bannerMessage = error || recovery?.message || (!signedIn ? "请先登录 B 站账号以开始挂机" : "");
+  const listMutationDisabled = closing || readOnlyInactive;
+  const inactiveTip = "开启此账号挂机后可管理关注列表";
   return (<>
-    {showBanner && <div className="banner" role="status">
-      <Icon name={recovery?.action === "login" || recovery?.action === "switch_prompt" ? "user" : "alert"} size={14} />
+    {showErrorBanner && <div className="banner" role="status">
+      <Icon name={recovery?.action === "login" ? "user" : "alert"} size={14} />
       <span>{bannerMessage}</span>
       {recovery?.action && <button type="button" className="btn sm" onClick={onRecovery}>{recovery.label || "查看详情"}</button>}
     </div>}
+    {showInactiveStrip && (
+      <div className={`view-status-bar ${!signedIn || blocked ? "warn" : ""}`} role="status">
+        <Icon name={!signedIn ? "user" : blocked ? "alert" : "info"} size={14} />
+        <span>
+          {!signedIn
+            ? `「${accountName || "此账号"}」尚未登录或登录已失效，当前仅展示上次记录。`
+            : blocked
+              ? `「${accountName || "此账号"}」处于保护暂停状态，当前仅展示上次记录。`
+              : `「${accountName || "此账号"}」当前未开启挂机，正在只读查看上次同步的数据。`}
+        </span>
+        {!signedIn && onOpenLogin ? (
+          <button type="button" className="btn sm primary" onClick={onOpenLogin} disabled={closing}>
+            <Icon name="qr" size={12} />重新扫码
+          </button>
+        ) : blocked && onOpenSafety ? (
+          <button type="button" className="btn sm" onClick={onOpenSafety} disabled={closing}>
+            查看原因
+          </button>
+        ) : onStartWatch ? (
+          <button type="button" className="btn sm primary" onClick={onStartWatch} disabled={controlBusy || closing}>
+            <Icon name="play" size={12} />开启挂机
+          </button>
+        ) : null}
+      </div>
+    )}
     <div className="workspace">
       <section className="list card" aria-label="关注的直播间">
         {!managing ? (
           <header className="list-head">
             <span className="list-title">关注的直播间</span><span className="list-count tnum">{rooms.length}</span>
             <span className="spacer" />
-            <button type="button" className="btn ghost sm" onClick={onAddMember} disabled={closing}>
+            <button type="button" className="btn ghost sm" onClick={onAddMember} disabled={listMutationDisabled}
+              title={readOnlyInactive ? inactiveTip : ""}>
               <Icon name="plus" size={12} />添加主播</button>
             {onSyncMedals && (
-              <button type="button" className="btn ghost sm" onClick={onSyncMedals} disabled={closing || !signedIn}
-                title={!signedIn ? "请先登录账号" : "从账号已有粉丝牌批量导入"}>
+              <button type="button" className="btn ghost sm" onClick={onSyncMedals} disabled={listMutationDisabled || !signedIn}
+                title={readOnlyInactive ? inactiveTip : !signedIn ? "请先登录账号" : "从账号已有粉丝牌批量导入"}>
                 <Icon name="medal" size={12} />同步粉丝牌</button>
             )}
-            <button type="button" className="btn ghost sm" onClick={() => setManaging(true)} disabled={closing || !rooms.length}>
+            <button type="button" className="btn ghost sm" onClick={() => setManaging(true)} disabled={listMutationDisabled || !rooms.length}
+              title={readOnlyInactive ? inactiveTip : ""}>
               批量管理</button>
           </header>
         ) : (

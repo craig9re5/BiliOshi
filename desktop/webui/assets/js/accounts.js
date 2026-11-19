@@ -1,8 +1,8 @@
-/* BiliOshi JSX {"code_sha256":"332087c668474412b3f380dbd565c091c95ba8da4453cc24eff08e9152274ba8","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"9a02be2c300a323e58c35a498e3238efdba7d32b4fcb304ec45dc228b3f6be7e"} */
+/* BiliOshi JSX {"code_sha256":"bf0a4cb23e0d6e32a3b435eb3b14eab371efaa7684bdd574d2a4f552c55ea6c5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"0b7022f1a15ccc888e161d09478140e1d43efe42f45ce6ff9cf68a981ea60f00"} */
 (function () {
 "use strict";
-/* Account tabs. One account is displayed and active at a time; switching is
-   instant, so a tab click also has to say what will happen. */
+/* Account tabs. Selecting a tab only changes which account is viewed;
+   starting or stopping background watch always requires an explicit action. */
 
 const {
   Icon
@@ -20,7 +20,7 @@ function accountInitial(name) {
 /* One state per account, so an account keeps its own status wording. */
 function accountStateLabel(account) {
   if (!account) return {
-    label: "未运行",
+    label: "未挂机",
     tone: "muted"
   };
   if (account.status === "blocked") return {
@@ -44,7 +44,7 @@ function accountStateLabel(account) {
     tone: "muted"
   };
   return {
-    label: "未运行",
+    label: "未挂机",
     tone: "muted"
   };
 }
@@ -73,13 +73,14 @@ const AccountAvatar = ({
 };
 const AccountTabs = ({
   accounts,
+  viewId,
   activeId,
   avatars = {},
   onSelect,
   onAdd
 }) => {
   if (!accounts || !accounts.length) return null;
-  const runningCount = accounts.filter(item => item.running).length;
+  const currentId = viewId || activeId || "";
   const move = (event, index) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -96,12 +97,12 @@ const AccountTabs = ({
     role: "tablist",
     "aria-label": "\u8D26\u53F7\u5217\u8868"
   }, accounts.map((account, index) => {
-    const selected = activeId === account.id;
+    const selected = currentId === account.id;
     const state = accountStateLabel(account);
     const image = avatars[account.id];
     const live = account.live_room_count || 0;
     const liveText = live ? ` · ${live} 个开播` : "";
-    const actionText = selected ? "当前查看" : account.running ? "点击切换查看 · 后台保持挂机" : runningCount > 0 ? "点击开启同时挂机" : "点击开始挂机";
+    const actionText = selected ? "当前查看" : "点击查看";
     return /*#__PURE__*/React.createElement("button", {
       type: "button",
       key: account.id,

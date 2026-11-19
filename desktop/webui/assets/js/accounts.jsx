@@ -1,5 +1,5 @@
-/* Account tabs. One account is displayed and active at a time; switching is
-   instant, so a tab click also has to say what will happen. */
+/* Account tabs. Selecting a tab only changes which account is viewed;
+   starting or stopping background watch always requires an explicit action. */
 
 const { Icon } = window;
 
@@ -17,13 +17,13 @@ function accountInitial(name) {
 
 /* One state per account, so an account keeps its own status wording. */
 function accountStateLabel(account) {
-  if (!account) return { label: "未运行", tone: "muted" };
+  if (!account) return { label: "未挂机", tone: "muted" };
   if (account.status === "blocked") return { label: "保护暂停", tone: "warn" };
   if (!account.signed_in || account.status === "needs_login") return { label: "登录失效", tone: "warn" };
   if (account.global_paused) return { label: "全局暂停", tone: "muted" };
   if (account.running) return { label: "挂机中", tone: "live" };
   if (account.paused) return { label: "已暂停", tone: "muted" };
-  return { label: "未运行", tone: "muted" };
+  return { label: "未挂机", tone: "muted" };
 }
 
 const AccountAvatar = ({ account, size = "sm", image }) => {
@@ -32,9 +32,9 @@ const AccountAvatar = ({ account, size = "sm", image }) => {
     aria-hidden="true">{image ? <img src={image} alt="" /> : accountInitial(account.name)}</span>;
 };
 
-const AccountTabs = ({ accounts, activeId, avatars = {}, onSelect, onAdd }) => {
+const AccountTabs = ({ accounts, viewId, activeId, avatars = {}, onSelect, onAdd }) => {
   if (!accounts || !accounts.length) return null;
-  const runningCount = accounts.filter((item) => item.running).length;
+  const currentId = viewId || activeId || "";
   const move = (event, index) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -49,18 +49,12 @@ const AccountTabs = ({ accounts, activeId, avatars = {}, onSelect, onAdd }) => {
     <div className="account-tabs">
       <div className="account-tablist" role="tablist" aria-label="账号列表">
         {accounts.map((account, index) => {
-          const selected = activeId === account.id;
+          const selected = currentId === account.id;
           const state = accountStateLabel(account);
           const image = avatars[account.id];
           const live = account.live_room_count || 0;
           const liveText = live ? ` · ${live} 个开播` : "";
-          const actionText = selected
-            ? "当前查看"
-            : account.running
-              ? "点击切换查看 · 后台保持挂机"
-              : runningCount > 0
-                ? "点击开启同时挂机"
-                : "点击开始挂机";
+          const actionText = selected ? "当前查看" : "点击查看";
           return <button type="button" key={account.id} id={`account-tab-${account.id}`} role="tab"
             aria-selected={selected} aria-controls="monitor-body" tabIndex={selected ? 0 : -1}
             className={`account-tab ${selected ? "active" : ""}`}

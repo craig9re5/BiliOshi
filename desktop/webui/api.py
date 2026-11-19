@@ -28,7 +28,7 @@ from bilioshi.growth import CHINA_TZ, load_history
 from bilioshi.members import load_account_members, load_members
 from bilioshi.operating_mode import PROFILES, profile_for
 from bilioshi.redaction import redact, redact_paths
-from bilioshi.runtime import APP_VERSION, file_stat_signature, read_json, update_json
+from bilioshi.runtime import APP_VERSION, file_stat_signature, read_json, task_day, update_json
 from bilioshi.safety import describe_hold, format_task_errors
 from bilioshi.secret_store import is_envelope
 from bilioshi.updater import load_updater_settings, save_updater_settings, updater_settings_path
@@ -68,7 +68,7 @@ _PENDING_MESSAGES = {
 _ACTIVE_VIEW_ONLY = {
     "add", "import", "resolve", "medals", "check", "pause",
     "safety", "safety_check", "remove", "clear_room_block",
-    "dismiss_task_error", "dismiss_watch_warning", "run_daily", "refresh_daily",
+    "dismiss_task_error", "dismiss_watch_warning",
 }
 
 
@@ -385,6 +385,9 @@ class Api:
         )
         snap["accounts"] = [self._summary_public(item) for item in self._host.summaries()]
         view_id = self._host.view_id
+        if not view_id and not self._host.active_id and snap["accounts"]:
+            view_id = snap["accounts"][0]["id"]
+            snap["view_account_id"] = view_id
         viewing_other = bool(view_id) and view_id not in (self._host.active_id, ALL_ACCOUNTS)
         try:
             snap["settings"] = self.settings(None if viewing_other else view_id)
@@ -409,9 +412,20 @@ class Api:
         snap["notifications"] = {"available": False}
         snap["version"] = snap.get("version") or APP_VERSION
         snap["update"] = self._update_snapshot()
-        if self._host.view_id and self._host.view_id not in (self._host.active_id, ALL_ACCOUNTS):
-            snap["view"] = self._view_snapshot(self._host.view_id)
+        if view_id and view_id not in (self._host.active_id, ALL_ACCOUNTS):
+            snap["view"] = self._view_snapshot(view_id)
         return _public(snap)
+
+    @staticmethod
+    def _load_daily_cache(root):
+        try:
+            saved = read_json(Path(root) / "state" / "daily-exp.json", {})
+        except (OSError, ValueError):
+            saved = {}
+        if not isinstance(saved, dict):
+            return {}, {}
+        user = saved.get("user")
+        return saved, (dict(user) if isinstance(user, dict) else {})
 
     def _view_snapshot(self, account_id):
         live_engine = self._host.engine_for(account_id) if self._host is not None else None
@@ -484,6 +498,12 @@ class Api:
             settings["run_mode"] = "stable"
             settings["check_minutes"] = 5
         rows = copy.deepcopy(status.get("rows") or [])
+        if not rows:
+            rows = [
+                {"room": m["room"], "uid": m["uid"], "name": m.get("name", "")}
+                for m in load_account_members(root)
+                if m.get("room")
+            ]
         for row in rows:
             row.update(
                 account_id=account_id,
@@ -502,6 +522,7 @@ class Api:
             hold = {"blocked": True, "kind": "review", "reason": "账号保护暂停"}
         if hold.get("blocked") and "steps" not in hold:
             hold = {**hold, **describe_hold(hold, load_account_members(root))}
+        daily, profile = self._load_daily_cache(root)
         view = {
             **self._empty_snapshot(),
             **status,
@@ -513,6 +534,10 @@ class Api:
             "paused": bool(settings.get("paused")),
             "safety": hold,
             "rows": rows,
+            "daily": daily,
+            "daily_running": False,
+            "today": task_day(),
+            "profile": profile,
             "settings": _public(settings),
             "accountInfo": {
                 "signed_in": summary.get("signed_in", False),
@@ -1383,9 +1408,59 @@ class Api:
 
         return self._run("add", add)
 
-    def refresh_daily(self):
+    def _execute_daily_for_target(self, account_id=None, *, only_task=None, refresh_only=False):
+        target_id = account_id or self._view_account_id() or self._active_account_id()
+        if target_id == ALL_ACCOUNTS:
+            target_id = self._active_account_id()
+        engine = None
+        if self._host is not None and target_id:
+            if not self._store.has(target_id):
+                return None, "账号不存在或已被移除。"
+            candidate = self._host.engine_for(target_id)
+            if candidate is not None and not candidate.suspended:
+                engine = candidate
+        elif self._engine is not None:
+            engine = self._engine
+        if engine is not None:
+            return engine.execute_daily_sync(only_task=only_task, refresh_only=refresh_only), ""
+        if self._store is not None:
+            if not target_id or not self._store.has(target_id):
+                return None, "请先选择或登录 B 站账号。"
+            if not self._store.has_credentials(target_id):
+                return None, "此账号尚未登录或登录已失效，请先扫码登录。"
+            target_root = self._store.account_root(target_id)
+        else:
+            target_root = self._root
+        if not (target_root / "settings.json").exists():
+            from desktop.storage import initialize
+
+            initialize(target_root, [])
+        config, members = load_config(target_root)
+        app = AppContext(target_root)
+        do_coin = bool(config.get("do_coin", False))
+        coin_target = max(0, min(5, int(config.get("coin_target", 5) or 0)))
+        if refresh_only:
+            res = app.daily_status(do_coin=do_coin, coin_target=coin_target)
+        else:
+            if only_task == "coin":
+                do_coin = True
+                if coin_target <= 0:
+                    coin_target = 5
+            res = app.run_daily(
+                do_coin=do_coin,
+                coin_target=coin_target,
+                prefer_medals=bool(config.get("prefer_medals", True)),
+                coin_with_like=bool(config.get("coin_with_like", False)),
+                only_task=only_task,
+                members=members,
+            )
+        return res, ""
+
+    def refresh_daily(self, account_id=None):
         def refresh():
-            res = self._engine.execute_daily_sync(refresh_only=True)
+            res, err = self._execute_daily_for_target(account_id, refresh_only=True)
+            if err:
+                return {"ok": False, "error": err}
             if not isinstance(res, dict):
                 return {"ok": False, "error": "无法读取今日签到进度，稍后重试。"}
             ok = bool(res.get("ok"))
@@ -1395,15 +1470,17 @@ class Api:
                 **({"message": "今日进度已更新"} if ok else {"error": res.get("error") or "读取今日进度失败"}),
             }
 
-        return self._run("refresh_daily", refresh, mutating=False)
+        return self._run("refresh_daily", refresh, mutating=False, allow_without_engine=True)
 
-    def run_daily(self, only_task=None):
+    def run_daily(self, only_task=None, account_id=None):
         if only_task not in (None, "", "watch", "share", "coin"):
             return {"ok": False, "error": "未知签到任务类型。"}
         task = only_task or None
 
         def execute():
-            res = self._engine.execute_daily_sync(only_task=task, refresh_only=False)
+            res, err = self._execute_daily_for_target(account_id, only_task=task, refresh_only=False)
+            if err:
+                return {"ok": False, "error": err}
             if not isinstance(res, dict):
                 return {"ok": False, "error": "每日签到执行失败，稍后重试。"}
             ok = bool(res.get("ok"))
@@ -1424,7 +1501,7 @@ class Api:
                 **({"message": msg} if ok else {"error": msg}),
             }
 
-        return self._run("run_daily", execute)
+        return self._run("run_daily", execute, allow_without_engine=True)
 
     def _fetch_medals(self):
         signature = _signature(self._root / "credentials.json")

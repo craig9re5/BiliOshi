@@ -271,6 +271,58 @@ class AccountWebUiTests(unittest.TestCase):
         self.assertTrue(view_snap["view"]["active"])
         self.assertEqual(view_snap["view"]["rows"][0]["live_status"], 1)
 
+    def test_viewing_stopped_account_exposes_cached_daily_and_never_starts_watch(self):
+        acc_root = self.store.account_root("uid-2")
+        (acc_root / "state").mkdir(parents=True, exist_ok=True)
+        (acc_root / "state" / "daily-exp.json").write_text(
+            json.dumps({
+                "ok": True,
+                "day": "2026-11-19",
+                "user": {"name": "账号2", "level": 5, "coins": 88},
+                "ledger": {"login": True, "watch": True, "share": False, "coins_exp": 0, "coins_count": 0, "earned_exp": 10},
+            }, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        res = self.api.set_view_account("uid-2")
+        self.assertTrue(res["ok"])
+        self.assertIsNone(self.host.engine_for("uid-2"))
+        self.assertFalse(self.store.get("uid-2")["watch_enabled"])
+        snap = self.api.snapshot()
+        self.assertEqual(snap["view_account_id"], "uid-2")
+        self.assertTrue(snap["view"]["inactive"])
+        self.assertEqual(snap["view"]["daily"]["user"]["coins"], 88)
+        self.assertEqual(snap["view"]["profile"]["level"], 5)
+
+    def test_daily_checkin_works_for_stopped_viewed_account_without_starting_watch(self):
+        self.api.set_view_account("uid-2")
+        fake_ctx = Mock()
+        fake_ctx.daily_status.return_value = {"ok": True, "day": "2026-11-19", "ledger": {"earned_exp": 5}}
+        fake_ctx.run_daily.return_value = {
+            "ok": True,
+            "day": "2026-11-19",
+            "submitted_gain": 10,
+            "tasks": [{"task": "watch", "success": True}, {"task": "share", "success": True}],
+        }
+        with patch("desktop.webui.api.AppContext", return_value=fake_ctx) as ctx_cls:
+            refreshed = self.api.refresh_daily("uid-2")
+            ran = self.api.run_daily(None, "uid-2")
+        self.assertTrue(refreshed["ok"])
+        self.assertTrue(ran["ok"])
+        self.assertIn("+10", ran["message"])
+        self.assertEqual(ctx_cls.call_args[0][0], self.store.account_root("uid-2"))
+        self.assertIsNone(self.host.engine_for("uid-2"))
+        self.assertFalse(self.store.get("uid-2")["watch_enabled"])
+
+    def test_stopping_account_keeps_view_in_place(self):
+        self.api.set_account_running("uid-2", True)
+        self.api.switch_account("uid-2")
+        self.assertEqual(self.host.view_id, "uid-2")
+        res = self.api.set_account_running("uid-2", False)
+        self.assertTrue(res["ok"])
+        self.assertEqual(self.host.view_id, "uid-2")
+        self.assertEqual(self.host.active_id, "uid-1")
+        self.assertIsNone(self.host.engine_for("uid-2"))
+
 
 if __name__ == "__main__":
     unittest.main()

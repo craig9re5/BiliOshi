@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"33decd2103b9982541634dccfc2b50bcb8d2055abce3e9dad128e9dbfaf22a19","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"e7642f5a06495044bc543adb7e560842cdffd82eb509f8b2232de4573134a6a1"} */
+/* BiliOshi JSX {"code_sha256":"1f09bbf591655a9c22e738ad70d57ebf0cdcb6addedf1bb0a9610e91383233b2","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"b9d654e9b24c93266f87808089099de6b0e2b5674ecca1aadf403bb2aa9646a8"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -406,13 +406,65 @@ const OverviewActions = ({
   paused,
   globalPaused,
   signedIn = true,
+  blocked = false,
+  multiAccount = false,
+  viewedRunning = true,
   onTogglePause,
+  onStartWatch,
+  onStopWatch,
+  onOpenLogin,
+  onOpenSafety,
   onCheck,
   checking,
   controlBusy,
   closing
 }) => {
-  const effectivelyPaused = Boolean(paused || globalPaused);
+  if (globalPaused) {
+    return /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn primary",
+      onClick: onTogglePause,
+      disabled: controlBusy || closing
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "play",
+      size: 13
+    }), "\u6062\u590D\u5168\u90E8");
+  }
+  if (multiAccount && !viewedRunning) {
+    if (!signedIn) {
+      return /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        className: "btn primary",
+        onClick: onOpenLogin,
+        disabled: closing
+      }, /*#__PURE__*/React.createElement(Icon, {
+        name: "qr",
+        size: 13
+      }), "\u626B\u7801\u767B\u5F55");
+    }
+    if (blocked) {
+      return /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        className: "btn",
+        onClick: onOpenSafety,
+        disabled: closing
+      }, /*#__PURE__*/React.createElement(Icon, {
+        name: "alert",
+        size: 13
+      }), "\u67E5\u770B\u539F\u56E0");
+    }
+    return /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "btn primary",
+      onClick: onStartWatch,
+      disabled: controlBusy || closing,
+      title: "\u5F00\u542F\u5F53\u524D\u8D26\u53F7\u7684\u76F4\u64AD\u6302\u673A\u4E0E\u81EA\u52A8\u5DE1\u68C0"
+    }, /*#__PURE__*/React.createElement(Icon, {
+      name: "play",
+      size: 13
+    }), "\u5F00\u542F\u6302\u673A");
+  }
+  const effectivelyPaused = Boolean(paused);
   const noAccountReady = !signedIn && !effectivelyPaused;
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     type: "button",
@@ -424,7 +476,16 @@ const OverviewActions = ({
     name: "refresh",
     size: 13,
     className: checking ? "spin" : ""
-  }), checking ? "检查中…" : "立即检查"), /*#__PURE__*/React.createElement("button", {
+  }), checking ? "检查中…" : "立即检查"), multiAccount && !effectivelyPaused && onStopWatch ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn",
+    onClick: onStopWatch,
+    title: "\u505C\u6B62\u5F53\u524D\u8D26\u53F7\u7684\u76F4\u64AD\u6302\u673A\uFF08\u4E0D\u5F71\u54CD\u5176\u4ED6\u6302\u673A\u4E2D\u7684\u8D26\u53F7\uFF09",
+    disabled: controlBusy || closing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "pause",
+    size: 13
+  }), "\u505C\u6B62\u6302\u673A") : /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: `btn ${effectivelyPaused ? "primary" : ""}`,
     onClick: onTogglePause,
@@ -433,7 +494,7 @@ const OverviewActions = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: effectivelyPaused ? "play" : "pause",
     size: 13
-  }), globalPaused ? "恢复全部" : paused ? "恢复挂机" : "暂停挂机"));
+  }), effectivelyPaused ? "恢复挂机" : "暂停挂机"));
 };
 const Overview = ({
   rooms,
@@ -441,6 +502,13 @@ const Overview = ({
   onSelect,
   paused,
   globalPaused,
+  viewedRunning = true,
+  multiAccount = false,
+  accountName = "",
+  blocked = false,
+  onStartWatch,
+  onOpenLogin,
+  onOpenSafety,
   onAction,
   onOpen,
   onAddMember,
@@ -526,23 +594,54 @@ const Overview = ({
   const selected = rooms.find(room => room.room === selectedId);
   const healthy = rooms.filter(room => room.healthy).length;
   const unknown = rooms.filter(room => room.live_status == null).length;
-  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : globalPaused ? "全部挂机已暂停" : paused ? "已暂停挂机" : !signedIn ? "等待登录" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
+  const readOnlyInactive = Boolean(multiAccount && !viewedRunning && !globalPaused);
+  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : globalPaused ? "全部挂机已暂停" : !signedIn ? "等待登录" : blocked ? "保护暂停中" : readOnlyInactive ? "当前账号未挂机" : paused ? "已暂停挂机" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.
-  const cadence = `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
-  const showBanner = Boolean(error || recovery?.action === "login" || recovery?.action === "resume_global" || recovery?.action === "switch_prompt");
+  const cadence = readOnlyInactive ? lastCheck ? `仅查看模式 · 上次同步 ${relativeTime(lastCheck)}` : "仅查看模式 · 不会自动开始挂机" : `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
+  const showErrorBanner = Boolean(error || recovery?.action === "login" || recovery?.action === "resume_global");
+  const showInactiveStrip = !showErrorBanner && readOnlyInactive;
   const bannerMessage = error || recovery?.message || (!signedIn ? "请先登录 B 站账号以开始挂机" : "");
-  return /*#__PURE__*/React.createElement(React.Fragment, null, showBanner && /*#__PURE__*/React.createElement("div", {
+  const listMutationDisabled = closing || readOnlyInactive;
+  const inactiveTip = "开启此账号挂机后可管理关注列表";
+  return /*#__PURE__*/React.createElement(React.Fragment, null, showErrorBanner && /*#__PURE__*/React.createElement("div", {
     className: "banner",
     role: "status"
   }, /*#__PURE__*/React.createElement(Icon, {
-    name: recovery?.action === "login" || recovery?.action === "switch_prompt" ? "user" : "alert",
+    name: recovery?.action === "login" ? "user" : "alert",
     size: 14
   }), /*#__PURE__*/React.createElement("span", null, bannerMessage), recovery?.action && /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn sm",
     onClick: onRecovery
-  }, recovery.label || "查看详情")), /*#__PURE__*/React.createElement("div", {
+  }, recovery.label || "查看详情")), showInactiveStrip && /*#__PURE__*/React.createElement("div", {
+    className: `view-status-bar ${!signedIn || blocked ? "warn" : ""}`,
+    role: "status"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: !signedIn ? "user" : blocked ? "alert" : "info",
+    size: 14
+  }), /*#__PURE__*/React.createElement("span", null, !signedIn ? `「${accountName || "此账号"}」尚未登录或登录已失效，当前仅展示上次记录。` : blocked ? `「${accountName || "此账号"}」处于保护暂停状态，当前仅展示上次记录。` : `「${accountName || "此账号"}」当前未开启挂机，正在只读查看上次同步的数据。`), !signedIn && onOpenLogin ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    onClick: onOpenLogin,
+    disabled: closing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "qr",
+    size: 12
+  }), "\u91CD\u65B0\u626B\u7801") : blocked && onOpenSafety ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onOpenSafety,
+    disabled: closing
+  }, "\u67E5\u770B\u539F\u56E0") : onStartWatch ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    onClick: onStartWatch,
+    disabled: controlBusy || closing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "play",
+    size: 12
+  }), "\u5F00\u542F\u6302\u673A") : null), /*#__PURE__*/React.createElement("div", {
     className: "workspace"
   }, /*#__PURE__*/React.createElement("section", {
     className: "list card",
@@ -559,7 +658,8 @@ const Overview = ({
     type: "button",
     className: "btn ghost sm",
     onClick: onAddMember,
-    disabled: closing
+    disabled: listMutationDisabled,
+    title: readOnlyInactive ? inactiveTip : ""
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "plus",
     size: 12
@@ -567,8 +667,8 @@ const Overview = ({
     type: "button",
     className: "btn ghost sm",
     onClick: onSyncMedals,
-    disabled: closing || !signedIn,
-    title: !signedIn ? "请先登录账号" : "从账号已有粉丝牌批量导入"
+    disabled: listMutationDisabled || !signedIn,
+    title: readOnlyInactive ? inactiveTip : !signedIn ? "请先登录账号" : "从账号已有粉丝牌批量导入"
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "medal",
     size: 12
@@ -576,7 +676,8 @@ const Overview = ({
     type: "button",
     className: "btn ghost sm",
     onClick: () => setManaging(true),
-    disabled: closing || !rooms.length
+    disabled: listMutationDisabled || !rooms.length,
+    title: readOnlyInactive ? inactiveTip : ""
   }, "\u6279\u91CF\u7BA1\u7406")) : /*#__PURE__*/React.createElement("header", {
     className: "list-head managing-head"
   }, /*#__PURE__*/React.createElement("button", {

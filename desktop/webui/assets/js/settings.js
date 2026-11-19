@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"3334e1ff3d53dcfbd3bb76066fa6d1e948be2fa27447e33dd192f0c78a212350","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"dc446bdd32e6743fb9ffe4203709fbf24cdb568395776ade6be6163082852c36"} */
+/* BiliOshi JSX {"code_sha256":"80a543bd6d974ca1e3c9b3ac22c247014c7ccf589f525307fa60c4119148ae9e","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"4a34ddc9b53ea1afb6795930e9c587484634ad4da79482b5492edac3f4679b2f"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -283,7 +283,13 @@ const SettingsPage = ({
   onTheme,
   dayTheme = "white",
   onDayTheme,
+  tab = "account",
+  onTab,
   scope,
+  scopeAvatar,
+  onSetRunning,
+  onOpenLogin,
+  onOpenSafety,
   onLogs,
   onHostLogs,
   onDiagnostics,
@@ -291,7 +297,8 @@ const SettingsPage = ({
   update,
   onCheckUpdate,
   onApplyUpdate,
-  updateBusy
+  updateBusy,
+  busy
 }) => {
   const systemDark = useSystemDark();
   const disabled = key => pendingSettings.has(key);
@@ -299,7 +306,11 @@ const SettingsPage = ({
   const coinEnabled = Boolean(settings.do_coin);
   const coinTarget = coinEnabled ? Math.max(1, Math.min(5, Number(settings.coin_target ?? 5))) : 0;
   const dayThemeName = (DAY_THEME_CHOICES.find(item => item.key === dayTheme) || DAY_THEME_CHOICES[0]).name;
-  const accountScopeLabel = scope?.name ? `当前账号 · ${scope.name}` : "当前账号生效";
+  const activeTab = tab === "app" ? "app" : "account";
+  const scopeState = scope && window.accountStateLabel ? window.accountStateLabel(scope) : null;
+  const scopeNeedsLogin = Boolean(scope && (!scope.signed_in || scope.status === "needs_login"));
+  const scopeBlocked = Boolean(scope && (scope.status === "blocked" || scope.safety?.blocked));
+  const scopeRunning = Boolean(scope && (scope.engine_active || scope.running));
   const updateState = update?.status || "idle";
   const updateChecking = Boolean(updateBusy || ["checking", "downloading", "verifying", "applying"].includes(updateState));
   const updateDesc = updateState === "checking" ? "正在检查最新版本…" : updateState === "downloading" ? `正在下载新版本 v${update?.latest_version || ""}…` : updateState === "verifying" ? `正在校验新版本 v${update?.latest_version || ""}…` : updateState === "applying" ? "正在重启并安装更新…" : updateState === "ready" ? update?.waiting_reason ? `新版本 v${update.ready_version} 已就绪 · ${update.waiting_reason}` : `新版本 v${update?.ready_version || ""} 已下载就绪` : updateState === "update_available" ? `发现新版本 v${update?.latest_version || ""}` : updateState === "up_to_date" ? update?.last_checked_at ? `当前已是最新版本 · 上次检查 ${relativeTime(update.last_checked_at)}` : "当前已是最新版本" : updateState === "error" && update?.error ? update.error : "检查新版本或自动保持最新";
@@ -319,18 +330,93 @@ const SettingsPage = ({
       onSetting("coin_target", count);
     }
   };
+  const selectTab = next => {
+    if (typeof onTab === "function") onTab(next);
+  };
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8BBE\u7F6E"
   }, /*#__PURE__*/React.createElement("div", {
     className: "settings-inner"
-  }, /*#__PURE__*/React.createElement("section", {
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "settings-tabs-bar"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "settings-tabs",
+    role: "tablist",
+    "aria-label": "\u8BBE\u7F6E\u4F5C\u7528\u57DF"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    role: "tab",
+    "aria-selected": activeTab === "account",
+    className: `settings-tab ${activeTab === "account" ? "active" : ""}`,
+    onClick: () => selectTab("account")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "user",
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", null, "\u8D26\u53F7\u8BBE\u7F6E")), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    role: "tab",
+    "aria-selected": activeTab === "app",
+    className: `settings-tab ${activeTab === "app" ? "active" : ""}`,
+    onClick: () => selectTab("app")
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "sliders",
+    size: 13
+  }), /*#__PURE__*/React.createElement("span", null, "\u5E94\u7528\u8BBE\u7F6E"))), /*#__PURE__*/React.createElement("span", {
+    className: "settings-scope-hint"
+  }, activeTab === "account" ? scope?.name ? `以下配置仅对「${scope.name}」独立生效` : "以下配置按账号独立保存" : "以下配置对整个应用与本机全局生效")), activeTab === "account" ? !scope ? /*#__PURE__*/React.createElement("section", {
+    className: "group card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "empty list-empty"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "user",
+    size: 24
+  }), /*#__PURE__*/React.createElement("strong", null, "\u5C1A\u672A\u6DFB\u52A0 B \u7AD9\u8D26\u53F7"), /*#__PURE__*/React.createElement("span", null, "\u767B\u5F55\u8D26\u53F7\u540E\u53EF\u5355\u72EC\u914D\u7F6E\u6BCF\u65E5\u7B7E\u5230\u4E0E\u76F4\u64AD\u5E94\u63F4\u504F\u597D"), onOpenLogin && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn primary sm",
+    onClick: () => onOpenLogin(""),
+    disabled: busy
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "qr",
+    size: 12
+  }), "\u626B\u7801\u6DFB\u52A0\u8D26\u53F7"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("section", {
+    className: "card settings-account-bar"
+  }, /*#__PURE__*/React.createElement(window.AccountAvatar, {
+    account: scope,
+    size: "sm",
+    image: scopeAvatar
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "settings-account-info"
+  }, /*#__PURE__*/React.createElement("strong", null, scope.name), scopeState && /*#__PURE__*/React.createElement("span", {
+    className: `mini-tag ${scopeState.tone}`
+  }, scopeState.label)), /*#__PURE__*/React.createElement("div", {
+    className: "btn-row"
+  }, scopeNeedsLogin && onOpenLogin ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    onClick: () => onOpenLogin(scope.id),
+    disabled: busy
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "qr",
+    size: 12
+  }), "\u91CD\u65B0\u626B\u7801") : scopeBlocked && onOpenSafety ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: () => onOpenSafety(scope),
+    disabled: busy
+  }, "\u67E5\u770B\u539F\u56E0") : onSetRunning ? /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: `btn sm ${scopeRunning ? "" : "primary"}`,
+    onClick: () => onSetRunning(scope.id, !scopeRunning),
+    disabled: busy
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: scopeRunning ? "pause" : "play",
+    size: 12
+  }), scopeRunning ? "停止挂机" : "开启挂机") : null)), /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
-    className: "group-head group-head-meta"
-  }, /*#__PURE__*/React.createElement("span", null, "\u6BCF\u65E5\u7B7E\u5230"), /*#__PURE__*/React.createElement("span", {
-    className: "scope-tag"
-  }, accountScopeLabel)), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "group-head"
+  }, "\u6BCF\u65E5\u7B7E\u5230"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u81EA\u52A8\u5B8C\u6210\u65E5\u5E38\u7ECF\u9A8C",
     desc: "\u6BCF\u65E5\u81EA\u52A8\u9886\u53D6\u767B\u5F55\u3001\u89C2\u770B\u4E0E\u5206\u4EAB\u7ECF\u9A8C"
   }, /*#__PURE__*/React.createElement(Switch, {
@@ -386,10 +472,8 @@ const SettingsPage = ({
   })))), /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
-    className: "group-head group-head-meta"
-  }, /*#__PURE__*/React.createElement("span", null, "\u76F4\u64AD\u5E94\u63F4"), /*#__PURE__*/React.createElement("span", {
-    className: "scope-tag"
-  }, accountScopeLabel)), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "group-head"
+  }, "\u76F4\u64AD\u5E94\u63F4"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u70B9\u4EAE\u7C89\u4E1D\u724C",
     desc: "\u4EC5\u5728\u4E3B\u64AD\u5F00\u64AD\u65F6\u53D1\u9001\u5F39\u5E55\u91CD\u65B0\u70B9\u4EAE\u7184\u706D\u7684\u724C\u5B50"
   }, /*#__PURE__*/React.createElement(Switch, {
@@ -425,25 +509,17 @@ const SettingsPage = ({
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head"
-  }, "\u8FD0\u884C\u4E0E\u542F\u52A8"), /*#__PURE__*/React.createElement(SettingRow, {
+  }, "\u63D0\u9192\u4E0E\u8BB0\u5F55"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u5F00\u64AD\u901A\u77E5",
-    desc: "\u5F53\u524D\u8D26\u53F7\u5173\u6CE8\u7684\u4E3B\u64AD\u5F00\u64AD\u65F6\u5F39\u51FA\u684C\u9762\u63D0\u9192"
+    desc: "\u8BE5\u8D26\u53F7\u5173\u6CE8\u7684\u4E3B\u64AD\u5F00\u64AD\u65F6\u5F39\u51FA\u684C\u9762\u63D0\u9192"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u5F00\u64AD\u901A\u77E5",
     checked: settings.notify_on_live,
     disabled: disabled("notify_on_live"),
     onChange: value => onSetting("notify_on_live", value)
-  })), /*#__PURE__*/React.createElement(SettingRow, {
-    name: "\u5F00\u673A\u542F\u52A8",
-    desc: "\u672C\u673A\u5168\u5C40\u751F\u6548\uFF0C\u767B\u5F55\u540E\u5728\u6258\u76D8\u9759\u9ED8\u8FD0\u884C"
-  }, /*#__PURE__*/React.createElement(Switch, {
-    label: "\u5F00\u673A\u542F\u52A8",
-    checked: settings.autostart,
-    disabled: disabled("autostart"),
-    onChange: value => onSetting("autostart", value)
   })), ENABLE_RUN_MODE_SWITCH && /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u8FD0\u884C\u6A21\u5F0F",
-    desc: "\u7A33\u5065\u6A21\u5F0F\u63A8\u8350\u65E5\u5E38\u6302\u673A\uFF1B\u6FC0\u8FDB\u6A21\u5F0F\u68C0\u6D4B\u66F4\u9891\u7E41\uFF08\u6309\u8D26\u53F7\u72EC\u7ACB\u4FDD\u5B58\uFF09"
+    desc: "\u7A33\u5065\u6A21\u5F0F\u63A8\u8350\u65E5\u5E38\u6302\u673A\uFF1B\u6FC0\u8FDB\u6A21\u5F0F\u68C0\u6D4B\u66F4\u9891\u7E41"
   }, /*#__PURE__*/React.createElement(Choice, {
     label: "\u8FD0\u884C\u6A21\u5F0F",
     value: runMode,
@@ -456,13 +532,21 @@ const SettingsPage = ({
       label: "激进"
     }],
     onChange: value => onSetting("run_mode", value)
-  }))), /*#__PURE__*/React.createElement("section", {
+  })), onLogs && /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u6B64\u8D26\u53F7\u65E5\u5FD7",
+    desc: "\u67E5\u770B\u8BE5\u8D26\u53F7\u72EC\u7ACB\u7684\u8FD0\u884C\u4E0E\u4EFB\u52A1\u8BB0\u5F55\u76EE\u5F55"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onLogs
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "folder",
+    size: 13
+  }), "\u6253\u5F00\u76EE\u5F55")))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
-    className: "group-head group-head-meta"
-  }, /*#__PURE__*/React.createElement("span", null, "\u5916\u89C2"), /*#__PURE__*/React.createElement("span", {
-    className: "scope-tag"
-  }, "\u672C\u673A\u5168\u5C40")), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "group-head"
+  }, "\u5916\u89C2"), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u754C\u9762\u4E3B\u9898",
     desc: theme === "system" ? `跟随系统，当前为${systemDark ? "深色 · 墨青暗" : `浅色 · ${dayThemeName}`}` : "自定义应用配色风格"
   }, /*#__PURE__*/React.createElement(ThemeOptions, {
@@ -480,49 +564,21 @@ const SettingsPage = ({
     onChange: onDayTheme,
     ariaLabel: "\u767D\u5929\u9ED8\u8BA4\u4E3B\u9898",
     isDayPicker: true
-  }))), /*#__PURE__*/React.createElement("details", {
-    className: "group card settings-dev"
-  }, /*#__PURE__*/React.createElement("summary", {
-    className: "group-head group-head-meta dev-summary"
-  }, /*#__PURE__*/React.createElement("span", null, "\u5F00\u53D1\u8005\u4E0E\u8BCA\u65AD"), /*#__PURE__*/React.createElement("span", {
-    className: "dev-summary-right"
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "dev-summary-hint"
-  }, "\u65E5\u5FD7 \xB7 \u8BCA\u65AD\u5305 \xB7 \u7248\u672C\u66F4\u65B0"), /*#__PURE__*/React.createElement(Icon, {
-    name: "chevron",
-    size: 14
-  }))), /*#__PURE__*/React.createElement(SettingRow, {
-    name: "\u8FD0\u884C\u65E5\u5FD7",
-    desc: scope ? "可分别查看当前账号日志或主程序全局日志" : "打开日志文件所在目录，便于排障"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "btn-row"
-  }, /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm",
-    onClick: onLogs
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "folder",
-    size: 13
-  }), scope ? "账号日志" : "查看日志"), scope && onHostLogs && /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm",
-    onClick: onHostLogs
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "folder",
-    size: 13
-  }), "\u4E3B\u7A0B\u5E8F\u65E5\u5FD7"))), /*#__PURE__*/React.createElement(SettingRow, {
-    name: "\u4E00\u952E\u5BFC\u51FA\u8BCA\u65AD\u5305",
-    desc: "\u6253\u5305\u65E5\u5FD7\u3001\u8FD1\u671F\u62A5\u9519\u4E0E\u73AF\u5883\u6458\u8981\uFF0C\u81EA\u52A8\u79FB\u9664\u767B\u5F55\u51ED\u8BC1\u5E76\u9ED8\u8BA4\u533F\u540D\u5316"
-  }, /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "btn sm",
-    onClick: onDiagnostics
-  }, /*#__PURE__*/React.createElement(Icon, {
-    name: "download",
-    size: 13
-  }), "\u5BFC\u51FA\u8BCA\u65AD\u5305")), /*#__PURE__*/React.createElement(SettingRow, {
+  }))), /*#__PURE__*/React.createElement("section", {
+    className: "group card"
+  }, /*#__PURE__*/React.createElement("header", {
+    className: "group-head"
+  }, "\u542F\u52A8\u4E0E\u66F4\u65B0"), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u5F00\u673A\u542F\u52A8",
+    desc: "\u767B\u5F55\u540E\u5728\u7CFB\u7EDF\u6258\u76D8\u9759\u9ED8\u8FD0\u884C"
+  }, /*#__PURE__*/React.createElement(Switch, {
+    label: "\u5F00\u673A\u542F\u52A8",
+    checked: settings.autostart,
+    disabled: disabled("autostart"),
+    onChange: value => onSetting("autostart", value)
+  })), /*#__PURE__*/React.createElement(SettingRow, {
     name: "\u81EA\u52A8\u66F4\u65B0",
-    desc: "\u540E\u53F0\u81EA\u52A8\u83B7\u53D6\u65B0\u7248\u5E76\u5728\u7A7A\u95F2\u65F6\u5B89\u88C5\uFF08\u5168\u5C40\u751F\u6548\uFF09"
+    desc: "\u540E\u53F0\u81EA\u52A8\u83B7\u53D6\u65B0\u7248\u5E76\u5728\u7A7A\u95F2\u65F6\u5B89\u88C5"
   }, /*#__PURE__*/React.createElement(Switch, {
     label: "\u81EA\u52A8\u66F4\u65B0",
     checked: settings.auto_update !== false,
@@ -551,13 +607,45 @@ const SettingsPage = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "refresh",
     size: 13
-  }), "\u68C0\u67E5\u66F4\u65B0")))))));
+  }), "\u68C0\u67E5\u66F4\u65B0")))), /*#__PURE__*/React.createElement("details", {
+    className: "group card settings-dev"
+  }, /*#__PURE__*/React.createElement("summary", {
+    className: "group-head group-head-meta dev-summary"
+  }, /*#__PURE__*/React.createElement("span", null, "\u5F00\u53D1\u8005\u4E0E\u8BCA\u65AD"), /*#__PURE__*/React.createElement("span", {
+    className: "dev-summary-right"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "dev-summary-hint"
+  }, "\u4E3B\u7A0B\u5E8F\u65E5\u5FD7 \xB7 \u8131\u654F\u8BCA\u65AD\u5305"), /*#__PURE__*/React.createElement(Icon, {
+    name: "chevron",
+    size: 14
+  }))), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u4E3B\u7A0B\u5E8F\u65E5\u5FD7",
+    desc: "\u6253\u5F00\u684C\u9762\u5BBF\u4E3B\u4E0E\u5B88\u62A4\u8FDB\u7A0B\u65E5\u5FD7\u76EE\u5F55\uFF0C\u4FBF\u4E8E\u6392\u969C"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onHostLogs || onLogs
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "folder",
+    size: 13
+  }), "\u6253\u5F00\u76EE\u5F55")), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u4E00\u952E\u5BFC\u51FA\u8BCA\u65AD\u5305",
+    desc: "\u6253\u5305\u65E5\u5FD7\u3001\u8FD1\u671F\u62A5\u9519\u4E0E\u73AF\u5883\u6458\u8981\uFF0C\u81EA\u52A8\u79FB\u9664\u767B\u5F55\u51ED\u8BC1\u5E76\u9ED8\u8BA4\u533F\u540D\u5316"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm",
+    onClick: onDiagnostics
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "download",
+    size: 13
+  }), "\u5BFC\u51FA\u8BCA\u65AD\u5305")))))));
 };
 const AccountRow = ({
   account,
   isActive,
   image,
   runningCount = 0,
+  onView,
   onSwitch,
   onSetRunning,
   onSwitchExclusive,
@@ -610,11 +698,12 @@ const AccountRow = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "qr",
     size: 12
-  }), "\u91CD\u65B0\u626B\u7801"), !needsLogin && !protection && engineActive && !isActive && /*#__PURE__*/React.createElement("button", {
+  }), "\u91CD\u65B0\u626B\u7801"), !isActive && /*#__PURE__*/React.createElement("button", {
     type: "button",
-    className: "btn sm primary",
-    onClick: () => onSwitch(account.id),
+    className: "btn sm",
+    onClick: () => onView ? onView(account.id) : onSwitch(account.id),
     disabled: busy,
+    title: "\u53EA\u8BFB\u67E5\u770B\u6B64\u8D26\u53F7\u6570\u636E\uFF0C\u4E0D\u4F1A\u6539\u53D8\u5176\u6302\u673A\u72B6\u6001",
     "aria-label": `查看 ${account.name}`
   }, "\u67E5\u770B"), !needsLogin && !protection && engineActive && onSetRunning && /*#__PURE__*/React.createElement("button", {
     type: "button",

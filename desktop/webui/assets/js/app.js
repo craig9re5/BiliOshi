@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"86c104dbe7d70160ba9cb24fd914064e09aab9a5885922d403187292cba290b4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"d3d8ecee5596ebb0e0b5c68a27672d5c4ab7eb3675c0a2bf100ababeb9d197c7"} */
+/* BiliOshi JSX {"code_sha256":"76f5299ee966d42d147358348d197194bc2b9ed3abaf21a1079cd203893a19a7","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"b8e2e9cf1f74d5524ce8ca2b9ef78101973b4bdc7da2d2d4f913a412c56daa53"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -107,6 +107,9 @@ const Sidebar = ({
   const state = baseState.tone === "live" && runningCount > 1 ? {
     ...baseState,
     label: `挂机中 · ${runningCount} 号并发`
+  } : baseState.tone !== "live" && runningCount > 0 ? {
+    ...baseState,
+    label: `${baseState.label} · ${runningCount} 号挂机中`
   } : baseState;
   return /*#__PURE__*/React.createElement("aside", {
     className: "side",
@@ -322,6 +325,7 @@ const SidebarToggle = ({
 }))));
 function App() {
   const [page, setPage] = useState("monitor");
+  const [settingsTab, setSettingsTab] = useState("account");
   const [theme, setTheme] = useState(() => normalizeThemeKey(document.documentElement.dataset.theme, THEME_KEYS, "system"));
   const [dayTheme, setDayTheme] = useState(() => normalizeThemeKey(document.documentElement.dataset.dayTheme, DAY_THEME_KEYS, "white"));
   const chooseTheme = useCallback(value => {
@@ -450,6 +454,20 @@ function App() {
   }, []);
   const receiveSnapshot = useCallback(data => {
     if (!data || !alive.current) return;
+    const overrides = settingOverrides.current || {};
+    const nextView = data.view ? {
+      ...data.view,
+      settings: {
+        ...DEFAULT_SETTINGS,
+        ...data.view.settings,
+        ...overrides
+      },
+      accountInfo: {
+        ...EMPTY_SNAPSHOT.accountInfo,
+        ...data.view.accountInfo,
+        safety: data.view.safety || data.view.accountInfo?.safety || {}
+      }
+    } : undefined;
     latest.current = {
       ...EMPTY_SNAPSHOT,
       ...data,
@@ -461,14 +479,20 @@ function App() {
         ...EMPTY_SNAPSHOT.accountInfo,
         ...data.accountInfo,
         safety: data.safety || data.accountInfo?.safety || {}
-      }
+      },
+      ...(nextView ? {
+        view: nextView
+      } : {})
     };
     setSnap({
       ...latest.current,
       settings: {
         ...latest.current.settings,
-        ...settingOverrides.current
-      }
+        ...overrides
+      },
+      ...(nextView ? {
+        view: nextView
+      } : {})
     });
     setConnected(true);
   }, []);
@@ -541,9 +565,16 @@ function App() {
   }, [receiveSnapshot, toast]);
   const accounts = snap.accounts || [];
   const activeId = snap.active_account_id || "";
-  const viewId = activeId;
+  const rawViewId = snap.view_account_id || "";
+  const viewId = rawViewId && rawViewId !== "all" && accounts.some(item => item.id === rawViewId) ? rawViewId : activeId || accounts[0]?.id || "";
   const isAllView = false;
-  const viewed = snap;
+  const viewed = snap.view && snap.view.account_id === viewId ? snap.view : snap;
+  const viewedAccountObj = accounts.find(item => item.id === viewId) || null;
+  const viewedRunning = Boolean(viewedAccountObj ? viewedAccountObj.engine_active || viewedAccountObj.running : !viewed.inactive && viewed.active);
+  const viewedSettings = {
+    ...DEFAULT_SETTINGS,
+    ...(viewed.settings || snap.settings || {})
+  };
   const rawRooms = (viewed.rows || []).map(row => toRoom(row, viewed));
   const rooms = typeof roomSortTier === "function" ? rawRooms.map((room, idx) => [room, idx]).sort((a, b) => roomSortTier(a[0]) - roomSortTier(b[0]) || a[1] - b[1]).map(([room]) => room) : rawRooms;
   useEffect(() => {
@@ -556,7 +587,7 @@ function App() {
     if (!uid || images[uid] || avatarPending.current.has(uid)) return;
     if (Date.now() < (avatarRetry.current[uid] || 0)) return;
     avatarPending.current.add(uid);
-    call("avatar", uid, "", activeId).then(result => {
+    call("avatar", uid, "", viewId).then(result => {
       avatarPending.current.delete(uid);
       if (result?.ok && result.data_uri && alive.current) {
         delete avatarRetry.current[uid];
@@ -571,7 +602,7 @@ function App() {
       avatarPending.current.delete(uid);
       avatarRetry.current[uid] = Date.now() + 60000;
     });
-  }, [images, activeId]);
+  }, [images, viewId]);
   useEffect(() => {
     if (!connected || !viewed.accountInfo?.signed_in) return;
     for (const row of viewed.rows || []) {
@@ -583,7 +614,7 @@ function App() {
   const closing = Boolean(snap.closing);
   useEffect(() => {
     setMenu(null);
-  }, [page, activeId]);
+  }, [page, viewId]);
   useEffect(() => {
     const onDocContextMenu = event => {
       if (event.defaultPrevented) return;
@@ -608,14 +639,14 @@ function App() {
     let live = true;
     let retry = 0;
     const load = () => {
-      call("account_avatar", activeId).then(result => {
+      call("account_avatar", viewId).then(result => {
         if (!live) return;
         if (result?.ok && result.data_uri) {
           setAccountAvatar(result.data_uri);
-          if (activeId) {
-            setAccountAvatars(items => items[activeId] === result.data_uri ? items : {
+          if (viewId) {
+            setAccountAvatars(items => items[viewId] === result.data_uri ? items : {
               ...items,
-              [activeId]: result.data_uri
+              [viewId]: result.data_uri
             });
           }
         } else if (result?.error) retry = window.setTimeout(load, 60000);
@@ -628,7 +659,7 @@ function App() {
       live = false;
       window.clearTimeout(retry);
     };
-  }, [connected, account.signed_in, account.name, avatarVersion, activeId]);
+  }, [connected, account.signed_in, account.name, avatarVersion, viewId]);
   const accountKeys = accounts.map(item => `${item.id}:${item.signed_in ? 1 : 0}`).join(",");
   useEffect(() => {
     if (!connected || !accounts.length) return;
@@ -741,10 +772,19 @@ function App() {
       settings: {
         ...current.settings,
         ...updates
-      }
+      },
+      ...(current.view ? {
+        view: {
+          ...current.view,
+          settings: {
+            ...current.view.settings,
+            ...updates
+          }
+        }
+      } : {})
     }));
     window.clearTimeout(settingsTimer.current);
-    const targetAccount = activeId;
+    const targetAccount = viewId;
     settingsTimer.current = window.setTimeout(() => {
       const payload = {
         ...settingsBatch.current
@@ -776,7 +816,7 @@ function App() {
     if (dailyBusy || closing) return;
     setDailyBusy(true);
     try {
-      await invoke("refresh_daily");
+      await invoke("refresh_daily", viewId ? [viewId] : []);
       await refresh();
     } finally {
       if (alive.current) setDailyBusy(false);
@@ -786,7 +826,7 @@ function App() {
     if (dailyBusy || closing) return;
     setDailyBusy(true);
     try {
-      await invoke("run_daily", onlyTask ? [onlyTask] : []);
+      await invoke("run_daily", [onlyTask || "", viewId || ""]);
       await refresh();
     } finally {
       if (alive.current) setDailyBusy(false);
@@ -1013,7 +1053,7 @@ function App() {
     });
     setDialog({
       type: "safety",
-      account: targetAccount || accounts.find(item => item.id === activeId) || null
+      account: targetAccount || viewedAccountObj || accounts.find(item => item.id === viewId) || null
     });
   };
   const checkSafety = async (autoResume = true, accountId = null) => {
@@ -1091,6 +1131,21 @@ function App() {
       await refresh();
     }
   };
+  const selectAccountTab = async accountId => {
+    if (!accountId || accountId === viewId) return;
+    const target = accounts.find(item => item.id === accountId);
+    if (!target) return;
+    settingOverrides.current = {};
+    settingsBatch.current = {};
+    window.clearTimeout(settingsTimer.current);
+    const alreadyRunning = Boolean(target.engine_active || target.running);
+    const result = alreadyRunning ? await invoke("switch_account", [accountId, false]) : await invoke("set_view_account", [accountId]);
+    if (result?.ok) {
+      selectionInitialized.current = false;
+      setSelectedId(null);
+      await refresh();
+    }
+  };
   const switchAccount = async (accountId, exclusive = false) => {
     if (!accountId) return;
     const target = accounts.find(item => item.id === accountId);
@@ -1103,8 +1158,7 @@ function App() {
       openSafety(target);
       return;
     }
-    if (!exclusive && accountId === activeId && (target.engine_active || target.running)) {
-      toast("当前已是这个账号");
+    if (!exclusive && accountId === viewId && (target.engine_active || target.running)) {
       return;
     }
     if (!exclusive && !target.engine_active && !target.running) {
@@ -1269,8 +1323,8 @@ function App() {
   };
   const nativeModal = dialog === "diagnostic" || dialog?.type === "safety";
   const modalOpen = Boolean(qr || dialog && !nativeModal);
-  const activeAccountObj = accounts.find(item => item.id === activeId) || null;
-  const modalAvatar = dialog?.account?.id ? dialog.account.id === activeId ? accountAvatar || accountAvatars[dialog.account.id] : accountAvatars[dialog.account.id] : "";
+  const activeAccountObj = viewedAccountObj || accounts.find(item => item.id === activeId) || null;
+  const modalAvatar = dialog?.account?.id ? dialog.account.id === viewId ? accountAvatar || accountAvatars[dialog.account.id] : accountAvatars[dialog.account.id] : "";
   const safetyAccount = dialog?.type === "safety" ? dialog.account?.id && accounts.find(item => item.id === dialog.account.id) || dialog.account || activeAccountObj || null : null;
   const isSafetyActive = Boolean(!safetyAccount || activeId && safetyAccount.id === activeId);
   const safetyHold = isSafetyActive ? snap.safety : safetyAccount?.safety?.blocked ? safetyAccount.safety : {
@@ -1278,16 +1332,17 @@ function App() {
     kind: "review",
     reason: "该账号处于保护暂停状态"
   };
+  const viewedBlocked = Boolean(viewedAccountObj?.status === "blocked" || account.safety?.blocked);
   return /*#__PURE__*/React.createElement("div", {
     className: `app ${collapsed ? "side-collapsed" : ""}`
   }, /*#__PURE__*/React.createElement(Sidebar, {
     page: page,
     onPage: setPage,
     account: account,
-    activeAccount: activeAccountObj,
+    activeAccount: viewedAccountObj,
     runningCount: runningAccountsCount,
-    paused: snap.paused,
-    avatar: accountAvatar || accountAvatars[activeId],
+    paused: viewed.paused,
+    avatar: accountAvatar || accountAvatars[viewId],
     onQuit: () => setDialog({
       type: "quit"
     }),
@@ -1332,30 +1387,45 @@ function App() {
     name: "download",
     size: 12
   }), "\u91CD\u542F\u66F4\u65B0 v", snap.update.ready_version), page === "monitor" && /*#__PURE__*/React.createElement(window.OverviewActions, {
-    paused: snap.paused,
+    paused: viewed.paused,
     globalPaused: Boolean(snap.global_paused),
     signedIn: account.signed_in,
+    blocked: viewedBlocked,
+    multiAccount: accounts.length > 0,
+    viewedRunning: viewedRunning,
     onTogglePause: () => control("toggle_pause"),
+    onStartWatch: () => setAccountRunning(viewId, true),
+    onStopWatch: () => setAccountRunning(viewId, false),
+    onOpenLogin: () => openQr(viewId),
+    onOpenSafety: () => openSafety(viewedAccountObj),
     onCheck: () => control("check_now"),
-    checking: snap.checking,
+    checking: viewed.checking,
     controlBusy: controlBusy,
     closing: closing
-  })), /*#__PURE__*/React.createElement(WindowButtons, null)), (page === "monitor" && accounts.length > 0 || (page === "daily" || page === "growth" || page === "automation") && accounts.length > 1) && /*#__PURE__*/React.createElement(window.AccountTabs, {
+  })), /*#__PURE__*/React.createElement(WindowButtons, null)), (page === "monitor" && accounts.length > 0 || (page === "daily" || page === "growth") && accounts.length > 1 || page === "automation" && settingsTab === "account" && accounts.length > 1) && /*#__PURE__*/React.createElement(window.AccountTabs, {
     accounts: accounts,
+    viewId: viewId,
     activeId: activeId,
     avatars: accountAvatars,
-    onSelect: switchAccount,
+    onSelect: selectAccountTab,
     onAdd: () => openQr("")
   }), /*#__PURE__*/React.createElement("div", {
     className: "page",
     id: "monitor-body"
   }, page === "monitor" && /*#__PURE__*/React.createElement(window.Overview, {
-    key: activeId,
+    key: viewId,
     rooms: rooms,
     selectedId: selectedId,
     onSelect: select,
-    paused: snap.paused,
+    paused: viewed.paused,
     globalPaused: Boolean(snap.global_paused),
+    viewedRunning: viewedRunning,
+    multiAccount: accounts.length > 0,
+    accountName: viewedAccountObj?.name || account.name || "",
+    blocked: viewedBlocked,
+    onStartWatch: () => setAccountRunning(viewId, true),
+    onOpenLogin: () => openQr(viewId),
+    onOpenSafety: () => openSafety(viewedAccountObj),
     onAction: roomAction,
     onOpen: id => invoke("open_room", [id]),
     onAddMember: openAdd,
@@ -1366,12 +1436,12 @@ function App() {
     menuMode: menu?.mode,
     busyRoom: busyRoom,
     controlBusy: controlBusy,
-    error: snap.error || snap.ui_error,
-    recovery: snap.recovery,
+    error: viewed.error || snap.ui_error,
+    recovery: viewed.recovery,
     onRecovery: recover,
-    interval: snap.settings?.check_minutes || 5,
-    lastCheck: snap.last_check,
-    checking: snap.checking,
+    interval: viewedSettings.check_minutes || 5,
+    lastCheck: viewed.last_check,
+    checking: viewed.checking,
     images: images,
     signedIn: account.signed_in,
     closing: closing,
@@ -1384,23 +1454,26 @@ function App() {
     daily: viewed.daily,
     dailyRunning: Boolean(viewed.daily_running),
     today: viewed.today,
-    settings: snap.settings || DEFAULT_SETTINGS,
+    settings: viewedSettings,
     account: account,
     profile: viewed.profile,
     busy: dailyBusy || closing,
     onRun: runDaily,
     onRefresh: refreshDaily,
-    onOpenLogin: () => openQr(activeId),
-    onOpenSafety: () => openSafety(),
-    onOpenSettings: () => setPage("automation")
+    onOpenLogin: () => openQr(viewId),
+    onOpenSafety: () => openSafety(viewedAccountObj),
+    onOpenSettings: () => {
+      setSettingsTab("account");
+      setPage("automation");
+    }
   }), page === "growth" && /*#__PURE__*/React.createElement(window.GrowthPage, {
-    viewId: activeId,
+    viewId: viewId,
     images: images,
     onNeedAvatar: fetchAvatar,
     onOpenAccount: () => setPage("account"),
     onOpenMonitor: () => setPage("monitor")
   }), page === "automation" && /*#__PURE__*/React.createElement(window.SettingsPage, {
-    settings: snap.settings || DEFAULT_SETTINGS,
+    settings: viewedSettings,
     onSetting: setSetting,
     onSettingsBatch: setSettingsBatch,
     pendingSettings: pendingSettings,
@@ -1408,26 +1481,35 @@ function App() {
     onTheme: chooseTheme,
     dayTheme: dayTheme,
     onDayTheme: chooseDayTheme,
-    scope: accounts.find(item => item.id === activeId) || null,
-    scopeAll: false,
-    onLogs: () => invoke("open_logs", [activeId]),
+    tab: settingsTab,
+    onTab: setSettingsTab,
+    scope: viewedAccountObj,
+    scopeAvatar: accountAvatar || accountAvatars[viewId],
+    onSetRunning: setAccountRunning,
+    onOpenLogin: openQr,
+    onOpenSafety: openSafety,
+    onLogs: () => invoke("open_logs", [viewId]),
     onHostLogs: () => invoke("open_logs", [""]),
     onDiagnostics: openDiagnostics,
     version: snap.version,
     update: snap.update,
     onCheckUpdate: checkUpdate,
     onApplyUpdate: applyUpdate,
-    updateBusy: updateBusy || closing
+    updateBusy: updateBusy || closing,
+    busy: closing || controlBusy
   }), page === "account" && /*#__PURE__*/React.createElement(window.AccountPage, {
     accounts: accounts,
-    activeId: activeId,
-    viewId: activeId,
+    activeId: viewId,
+    viewId: viewId,
     maxConcurrent: maxConcurrent,
     account: account,
     avatar: accountAvatar,
     avatars: accountAvatars,
     onScan: openQr,
-    onView: () => setPage("monitor"),
+    onView: async id => {
+      await selectAccountTab(id);
+      setPage("monitor");
+    },
     onSwitch: id => switchAccount(id, false),
     onSetRunning: setAccountRunning,
     onSwitchExclusive: id => switchAccount(id, true),
@@ -1440,7 +1522,7 @@ function App() {
       account: accounts.find(item => item.id === id)
     }),
     onProtection: id => openSafety(accounts.find(item => item.id === id)),
-    onResumeSafety: () => openSafety(),
+    onResumeSafety: () => openSafety(viewedAccountObj),
     onCheckSafety: checkSafety,
     safetyProbe: safetyProbe,
     onCheck: () => control("check_now"),

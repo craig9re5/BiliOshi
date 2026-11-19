@@ -19,8 +19,11 @@ def modules():
 def inspect():
     paths = modules()
     graph, errors, sizes = {}, [], []
+    for directory in ("scripts", "tests", "tools"):
+        for extra_path in (ROOT / directory).rglob("*.py"):
+            ast.parse(extra_path.read_text(encoding="utf-8"), filename=str(extra_path), feature_version=(3, 9))
     for module, path in paths.items():
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path), feature_version=(3, 9))
         package = module if path.name == "__init__.py" else module.rpartition(".")[0]
         dependencies = set()
         for node in ast.walk(tree):

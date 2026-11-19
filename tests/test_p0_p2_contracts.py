@@ -10,7 +10,10 @@ import subprocess
 import sys
 import tempfile
 import threading
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11
+    tomllib = None
 import unittest
 from unittest.mock import Mock, patch
 import urllib.error
@@ -29,8 +32,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 class WebUIAndPackageContractTests(unittest.TestCase):
     def test_versions_are_synchronized(self):
-        with (REPO_ROOT / "pyproject.toml").open("rb") as fh:
-            pyproject_version = tomllib.load(fh)["project"]["version"]
+        pyproject_path = REPO_ROOT / "pyproject.toml"
+        if tomllib is not None:
+            with pyproject_path.open("rb") as fh:
+                pyproject_version = tomllib.load(fh)["project"]["version"]
+        else:
+            match = re.search(
+                r'(?ms)^\[project\]\s+.*?^version\s*=\s*"([^"]+)"',
+                pyproject_path.read_text(encoding="utf-8"),
+            )
+            self.assertIsNotNone(match, "version not found under [project] in pyproject.toml")
+            pyproject_version = match.group(1)
         pkg_version = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))["version"]
         self.assertEqual(runtime.APP_VERSION, pyproject_version)
         self.assertEqual(runtime.APP_VERSION, pkg_version)

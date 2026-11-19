@@ -303,7 +303,7 @@ powershell -ExecutionPolicy Bypass -File .\build_desktop.ps1 -Mode onefile
 python tools/release_update.py --generate-keypair --update-public --save-private build/release-signing-key.txt
 ```
 
-主分支推送自动触发跨平台（Ubuntu / Windows，Python 3.13）离线契约 CI；推送与 `APP_VERSION` 一致的 `v*` 标签会自动构建单文件 `BiliOshi.exe`、生成 Ed25519 签名的 `latest.json` 并发布 GitHub Release 供客户端静默更新。仓库内的 `.github/workflows/daily.yml` 仅支持手动触发（`workflow_dispatch`），需在自有 Fork 中自行配置 Secrets。
+主分支推送自动触发跨平台（Ubuntu / Windows，Python 3.9–3.14）离线契约 CI；推送与 `APP_VERSION` 一致的 `v*` 标签会自动构建单文件 `BiliOshi.exe`、生成 Ed25519 签名的 `latest.json` 并发布 GitHub Release 供客户端静默更新。仓库内的 `.github/workflows/daily.yml` 仅支持手动触发（`workflow_dispatch`），需在自有 Fork 中自行配置 Secrets。
 
 ## 许可证
 

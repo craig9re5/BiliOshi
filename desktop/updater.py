@@ -131,7 +131,8 @@ def evaluate_idle_blocker(
 def verify_staged_executable(staged_exe, expected_version, *, runner=subprocess.run, timeout=45):
     """Run `--diagnostic` in an isolated data root before ever stopping live watch."""
     staged_exe = Path(staged_exe).resolve()
-    with tempfile.TemporaryDirectory(prefix="bilioshi-upd-diag-", ignore_cleanup_errors=True) as tmp:
+    td_kwargs = {"ignore_cleanup_errors": True} if sys.version_info >= (3, 10) else {}
+    with tempfile.TemporaryDirectory(prefix="bilioshi-upd-diag-", **td_kwargs) as tmp:
         tmp_root = Path(tmp)
         proc = runner(
             [str(staged_exe), "--diagnostic"],

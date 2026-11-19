@@ -1,9 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-label="BiliOshi">
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" fill="none" role="img" aria-label="BiliOshi">
+  <style>
+    .mark { color: #0a0a0a; }
+    @media (prefers-color-scheme: dark) {
+      .mark { color: #ffffff; }
+    }
+  </style>
   <defs>
-    <linearGradient id="bilioshi-tile" x1="32" y1="4" x2="32" y2="60" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1e4d49" />
-      <stop offset="100%" stop-color="#0e2326" />
-    </linearGradient>
     <mask id="bilioshi-oshi" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
       <rect x="0" y="0" width="120" height="120" fill="#ffffff" />
       <g fill="none" stroke="#000000" stroke-width="7.8" stroke-linecap="butt" stroke-linejoin="round">
@@ -13,13 +15,11 @@
       <circle cx="58.2" cy="35" r="4.8" fill="#000000" />
     </mask>
   </defs>
-  <rect x="4" y="4" width="56" height="56" rx="15" fill="url(#bilioshi-tile)" />
-  <rect x="4.75" y="4.75" width="54.5" height="54.5" rx="14.25" stroke="#ffffff" stroke-opacity="0.1" stroke-width="1.5" />
-  <g transform="translate(6.48 7) scale(0.4167)">
-    <rect x="9" y="16" width="63" height="88" rx="16" fill="#f4fffb" mask="url(#bilioshi-oshi)" />
+  <g class="mark">
+    <rect x="9" y="16" width="63" height="88" rx="16" fill="currentColor" mask="url(#bilioshi-oshi)" />
     <path
       d="M 87.5 20 V 88.5 A 10 10 0 0 0 106.9 91.92 L 108.78 86.75"
-      stroke="#f4fffb"
+      stroke="currentColor"
       stroke-width="11"
       stroke-linecap="butt"
     />

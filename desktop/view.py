@@ -555,7 +555,7 @@ class TrayUI:
         else:
             self.account_label.configure(text="○ 尚未登录", fg="#9e3322")
             self.badge_frame.configure(bg="#fcece9", highlightbackground="#efc5bd")
-        color = "#f2ab55" if snap["error"] or warnings or stalled else "#9ca9af" if snap["paused"] else "#63d4b2"
+        color = "#f2ab55" if snap["error"] or warnings or stalled else "#9ca9af" if snap["paused"] else "#ffffff"
         if getattr(self, "last_color", None) != color:
             self.tray.icon = icon_image(color)
             self.last_color = color

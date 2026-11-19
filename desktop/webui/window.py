@@ -754,7 +754,7 @@ class WebHost:
         else:
             title = "等待开播"
         self._tray.title = "ビリ推し · " + title
-        color = "#f2ab55" if warnings else "#9ca9af" if all_paused else "#63d4b2"
+        color = "#f2ab55" if warnings else "#9ca9af" if all_paused else "#ffffff"
         if color != self._last_tray_color:
             from desktop.widgets import icon_image
 

@@ -63,8 +63,8 @@ def _draw_butt_stroke(draw, points, width, fill, tx, ty, sc):
             draw.ellipse((x0 - half, y0 - half, x0 + half, y0 + half), fill=fill)
 
 
-def icon_image(color="#f4fffb", size=64):
-    """陰陽推し札 mark ([お]し): lit fan-plaque with negative-space お + positive し hook.
+def icon_image(color="#ffffff", size=64):
+    """陰陽推し札 mark ([お]し): monochrome #0A0A0A / #FFFFFF fan-plaque + し hook.
 
     Drawn on an 8x supersampled 64x64 canvas so both 64 px window icons and
     16 px tray icons keep crisp counter-spaces without subpixel mudding.
@@ -73,20 +73,11 @@ def icon_image(color="#f4fffb", size=64):
     side = 64 * scale
     image = Image.new("RGBA", (side, side), (0, 0, 0, 0))
 
-    tile = Image.new("RGBA", (side, side), (0, 0, 0, 0))
-    gradient = ImageDraw.Draw(tile)
-    top, bottom = (0x1e, 0x4d, 0x49), (0x0e, 0x23, 0x26)
-    for y in range(side):
-        mix = y / (side - 1)
-        fill = tuple(round(top[i] + (bottom[i] - top[i]) * mix) for i in range(3)) + (255,)
-        gradient.line([(0, y), (side, y)], fill=fill)
-    mask = Image.new("L", (side, side), 0)
     pad = (2.5 if size <= 20 else 4.0) * scale
     rad = (13.0 if size <= 20 else 15.0) * scale
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (pad, pad, side - pad, side - pad), radius=rad, fill=255
+    ImageDraw.Draw(image).rounded_rectangle(
+        (pad, pad, side - pad, side - pad), radius=rad, fill=(0x0A, 0x0A, 0x0A, 255)
     )
-    image.paste(tile, (0, 0), mask)
 
     base = ImageColor.getrgb(color) if isinstance(color, str) else tuple(color[:3])
     fg = base + (255,)

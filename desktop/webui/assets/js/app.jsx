@@ -45,7 +45,7 @@ const Sidebar = ({ page, onPage, account, activeAccount, runningCount = 0, pause
     : baseState;
   return (
     <aside className="side" inert={inert ? "" : undefined}>
-      {!brandHidden && <div className="brand"><div className="logo"><Pulse size={22} /></div>
+      {!brandHidden && <div className="brand"><div className="logo"><Pulse size={26} /></div>
         <div className="brand-text"><span className="brand-name">ビリ推し</span></div>
       </div>}
       <nav className="nav" aria-label="主导航">
@@ -944,7 +944,7 @@ function App() {
       <main className="main" aria-busy={!connected} inert={modalOpen ? "" : undefined}>
         <header className="chrome pywebview-drag-region">
           <SidebarToggle collapsed={collapsed} onToggle={toggleSidebar} />
-          <div className="chrome-brand"><span className="logo"><Pulse size={19} /></span>
+          <div className="chrome-brand"><span className="logo"><Pulse size={22} /></span>
             <span className="chrome-name">ビリ推し</span></div>
           <span className="chrome-divider" aria-hidden="true" />
           <h1 className="chrome-title" tabIndex={-1} ref={titleRef}>{pageTitles[page]}</h1>

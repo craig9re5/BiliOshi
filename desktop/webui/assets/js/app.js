@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"8a856cabcbd501a8aab2557d40c04eaca7ce60acb1a3af66d376576366de172d","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"c9856f5b018ad119328c0b88cec885ea959080676e82362d611b4971ef8f73f9"} */
+/* BiliOshi JSX {"code_sha256":"86c104dbe7d70160ba9cb24fd914064e09aab9a5885922d403187292cba290b4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"d3d8ecee5596ebb0e0b5c68a27672d5c4ab7eb3675c0a2bf100ababeb9d197c7"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -116,7 +116,7 @@ const Sidebar = ({
   }, /*#__PURE__*/React.createElement("div", {
     className: "logo"
   }, /*#__PURE__*/React.createElement(Pulse, {
-    size: 22
+    size: 26
   })), /*#__PURE__*/React.createElement("div", {
     className: "brand-text"
   }, /*#__PURE__*/React.createElement("span", {
@@ -1308,7 +1308,7 @@ function App() {
   }, /*#__PURE__*/React.createElement("span", {
     className: "logo"
   }, /*#__PURE__*/React.createElement(Pulse, {
-    size: 19
+    size: 22
   })), /*#__PURE__*/React.createElement("span", {
     className: "chrome-name"
   }, "\u30D3\u30EA\u63A8\u3057")), /*#__PURE__*/React.createElement("span", {

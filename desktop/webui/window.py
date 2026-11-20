@@ -794,14 +794,21 @@ class WebHost:
                 self._notified_safety_holds.pop(account_id, None)
                 if prev[0] not in ("auth", "credentials"):
                     prefix = f"【{acct_name}】" if acct_name else ""
-                    msg = f"{prefix}账号保护状态已解除，挂机监控已恢复。"
-                    self._notify(msg, "ビリ推し · 保护暂停已解除")
+                    prev_interaction = len(prev) >= 4 and prev[3] == "interaction"
+                    if prev_interaction:
+                        msg = f"{prefix}互动保护冷却已解除，互动任务已恢复。"
+                        title = "ビリ推し · 互动保护已解除"
+                    else:
+                        msg = f"{prefix}账号保护状态已解除，挂机监控已恢复。"
+                        title = "ビリ推し · 保护暂停已解除"
+                    self._notify(msg, title)
                     self.emit("toast", {"message": msg, "tone": "info"})
             return
         kind = safety.get("kind") or "review"
         if kind == "network":
             return
-        key = (kind, safety.get("since"), safety.get("code"))
+        scope = safety.get("scope", "account")
+        key = (kind, safety.get("since"), safety.get("code"), scope)
         if prev == key:
             return
         self._notified_safety_holds[account_id] = key

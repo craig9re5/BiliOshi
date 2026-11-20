@@ -850,6 +850,29 @@ class SafetyAutoRecoveryTests(unittest.TestCase):
                 self.assertNotIn("stopped_reason", dur_res)
                 self.assertEqual(dur_res["beats_ok"], 1)
 
+                # Room entry transport blips must not poison other rooms with an account hold,
+                # while wear/daily-exp timeouts stay interaction-scoped (never blocking watch).
+                room_entry_url = "https://api.live.bilibili.com/xlive/web-room/v1/index/roomEntryAction"
+                write_json(root / "state/safety/uid-123.json", {})
+                with patch.object(http, "_once", return_value={"code": -1, "error_kind": "network"}):
+                    http.post_form(room_entry_url, {"room_id": "1"}, HEADERS)
+                self.assertFalse(safety.status(SESSION, root)["blocked"])
+                with patch.object(http, "_once", return_value={"code": -352, "message": "风控校验失败"}):
+                    http.post_form(room_entry_url, {"room_id": "1"}, HEADERS)
+                self.assertTrue(safety.blocks_watch(safety.status(SESSION, root)))
+
+                for aux_url, payload in (
+                    ("https://api.live.bilibili.com/xlive/web-room/v1/fansMedal/wear", {"medal_id": "1"}),
+                    ("https://api.bilibili.com/x/web-interface/coin/add", {"aid": "1"}),
+                ):
+                    write_json(root / "state/safety/uid-123.json", {})
+                    with patch.object(http, "_once", return_value={"code": -1, "error_kind": "network"}):
+                        http.post_form(aux_url, payload, HEADERS)
+                    aux_hold = safety.status(SESSION, root)
+                    self.assertEqual(aux_hold["kind"], "uncertain")
+                    self.assertEqual(aux_hold["scope"], "interaction")
+                    self.assertFalse(safety.blocks_watch(aux_hold))
+
     def test_auth_expiry_escalates_over_permanent_holds_and_account_escalates_interaction(self):
         with tempfile.TemporaryDirectory() as folder, use_context(RuntimeContext(Path(folder))):
             root = Path(folder)

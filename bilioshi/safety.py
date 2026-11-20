@@ -54,7 +54,8 @@ PROBATION_SECONDS = {
     "review": 300,
     "uncertain": 90,
 }
-INTERACTION_OPS = ("danmaku", "like")
+INTERACTION_OPS = ("danmaku", "like", "wear", "coin", "share", "watch")
+PROBATION_CLEAR_OPS = ("danmaku", "like")
 INTERACTION_SCOPED_KINDS = ("rate", "uncertain", "edge_limit")
 ACCOUNT_BAN_WORDS = ("封禁", "封号", "冻结", "注销")
 AUTO_PROBE_DELAYS = {
@@ -78,6 +79,8 @@ KIND_LABELS = {
 OPERATION_LABELS = {
     "danmaku": "发送弹幕",
     "like": "直播点赞",
+    "wear": "佩戴粉丝牌",
+    "room_entry": "进入直播间",
     "heartbeat": "观看状态同步",
     "coin": "视频投币",
     "share": "视频分享",
@@ -730,6 +733,10 @@ def operation(url, data, method):
         kind = "like"
     elif parsed.path in HEARTBEAT_PATHS:
         kind = "heartbeat"
+    elif parsed.path in ROOM_ENTRY_PATHS:
+        kind = "room_entry"
+    elif parsed.path == "/xlive/web-room/v1/fansMedal/wear":
+        kind = "wear"
     elif parsed.path == "/x/web-interface/coin/add":
         kind = "coin"
     elif parsed.path == "/x/web-interface/share/add":
@@ -813,6 +820,10 @@ def observe(sessdata, url, response, *, mutation=False, op=None):
                 code=response.get("code"), seconds=NETWORK_COOLDOWN, operation=op,
                 raw_message=raw_msg,
             )
+        elif path in ROOM_ENTRY_PATHS:
+            # Room entry is an idempotent presence ping; a single transport failure
+            # only aborts this room's startup and must not freeze other rooms.
+            return
         else:
             op_info = op or operation(url, None, "POST")
             uncertain_msg = (
@@ -854,7 +865,7 @@ def observe(sessdata, url, response, *, mutation=False, op=None):
                      operation=op_info, raw_message=raw_msg)
     elif mutation and response.get("code") == 0:
         op_info = op or operation(url, None, "POST")
-        if op_info.get("kind") in INTERACTION_OPS:
+        if op_info.get("kind") in PROBATION_CLEAR_OPS:
             shield_marker = str(response.get("msg") or response.get("message") or "").strip().lower()
             if shield_marker not in {"f", "k", "fire", "max limit"}:
                 _clear_probation(sessdata, op_info)

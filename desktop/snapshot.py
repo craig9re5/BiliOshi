@@ -4,7 +4,11 @@ import os
 import time
 from bilioshi.runtime import APP_VERSION, task_day
 from bilioshi.safety import blocks_watch, describe_hold, format_task_errors
-from bilioshi.services.watch_progress import CHECK_INTERVAL, parse_watch_task
+from bilioshi.services.watch_progress import (
+    CHECK_INTERVAL,
+    parse_watch_task,
+    room_daily_complete,
+)
 
 
 def project_snapshot(engine, states, now):
@@ -114,6 +118,47 @@ def _row_task_error(state, room_blocks, safety_blocked, *, task_entry=None, task
     return ""
 
 
+def _room_completion_source(task_entry, state, today, *, task_error=""):
+    """Pick the freshest same-day verified club task snapshot for this room."""
+    entry_day = task_entry.get("day") if isinstance(task_entry, dict) else None
+    entry_updated = number(task_entry.get("updated")) if isinstance(task_entry, dict) else 0
+    watch = state.get("watch_progress") if isinstance(state, dict) else None
+    watch_day = watch.get("day") if isinstance(watch, dict) else None
+    watch_updated = number(watch.get("verified_at")) if isinstance(watch, dict) else 0
+    entry_valid = bool(
+        entry_day == today
+        and not task_error
+        and isinstance((task_entry or {}).get("tasks"), list)
+        and parse_watch_task(task_entry) is not None
+    )
+    watch_valid = bool(
+        watch_day == today
+        and isinstance((watch or {}).get("tasks"), list)
+        and parse_watch_task(watch) is not None
+    )
+    if entry_valid and watch_valid:
+        return task_entry if entry_updated >= watch_updated else watch
+    if entry_valid:
+        return task_entry
+    if watch_valid:
+        return watch
+    return None
+
+
+def is_room_daily_complete(config, task_entry, state, today, *, task_error=""):
+    """Return True only when watchLive and every enabled reaction task are done today."""
+    source = _room_completion_source(task_entry, state, today, task_error=task_error)
+    if source is None:
+        return False
+    cfg = config if isinstance(config, dict) else {}
+    return room_daily_complete(
+        source,
+        auto_revive=bool(cfg.get("auto_revive", True)),
+        auto_intimacy=bool(cfg.get("auto_danmaku_intimacy", True)),
+        auto_like=bool(cfg.get("auto_like", False)),
+    )
+
+
 def _resolve_row_phase(
     engine,
     state,
@@ -124,6 +169,7 @@ def _resolve_row_phase(
     status_stale,
     observed,
     live_status,
+    daily_complete=False,
 ):
     """Choose the primary status label for a projected room row."""
     if heartbeat_stale:
@@ -136,6 +182,8 @@ def _resolve_row_phase(
         return "查询失败"
     if status_stale and observed:
         return "状态已过期"
+    if live_status == 1 and daily_complete:
+        return "今日已完成"
     if state.get("phase") == "运行失败":
         return "等待重试"
     if live_status == 1:
@@ -155,6 +203,7 @@ def _row_connection_state(
     live_status,
     safety_blocked,
     recovering,
+    daily_complete,
     now,
 ):
     """Compute heartbeat health, warning banner, and manual reconnect eligibility."""
@@ -173,10 +222,11 @@ def _row_connection_state(
     elif recovery.get("state") == "failed" and not engine.paused and not safety_blocked:
         connection_warning = recovery.get("message", "重连失败，请稍后再试。")
     reconnect_allowed = bool(
-        (active or live_status == 1 or connection_warning)
+        (active or (live_status == 1 and not daily_complete) or connection_warning)
         and not engine.paused
         and not safety_blocked
         and not recovering
+        and not (daily_complete and not active)
         and now >= recovery.get("cooldown_until", 0)
     )
     return heartbeat_healthy, connection_warning, reconnect_allowed
@@ -231,6 +281,13 @@ def project_row(engine, member, state, now):
         if isinstance(item, dict) and str(item.get("room")) == room_str
     ]
     active = room in engine.workers and engine.workers[room].poll() is None
+    daily_complete = is_room_daily_complete(
+        engine.config,
+        task_entry,
+        state,
+        task_day(),
+        task_error=engine.task_errors.get(room_str, ""),
+    )
     wake_grace = 0 < now - getattr(engine, "resumed_from_sleep_at", 0) < 90
     heartbeat_stale = active and not wake_grace and now - number(
         state.get("last_heartbeat"), number(state.get("started"), now)
@@ -244,6 +301,7 @@ def project_row(engine, member, state, now):
         status_stale=status_stale,
         observed=observed,
         live_status=live_status,
+        daily_complete=daily_complete,
     )
     recovery = getattr(engine, "manual_reconnects", {}).get(room, {})
     recovering = recovery.get("state") == "checking"
@@ -258,6 +316,7 @@ def project_row(engine, member, state, now):
         live_status=live_status,
         safety_blocked=safety_blocked,
         recovering=recovering,
+        daily_complete=daily_complete,
         now=now,
     )
     watch, watch_warning, watch_note, task_entry, tasks_stale = watch_observation(
@@ -296,6 +355,7 @@ def project_row(engine, member, state, now):
     return {
         **member,
         "phase": phase,
+        "daily_complete": bool(daily_complete),
         "room_blocks": room_blocks,
         "active": active,
         "status_stale": status_stale,

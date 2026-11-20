@@ -1,12 +1,11 @@
 import hashlib
 import random
-import re
 import sys
-import time
 from typing import Optional, Dict, Tuple
 from ..policies import *
 from .. import safety
 from ..task_window import task_window, TaskDeferred, check_window, wait
+from .watch_progress import parse_danmaku_task
 
 
 def send_danmaku_batch(
@@ -92,33 +91,16 @@ def light_up_medal(
 
 
 def _danmaku_task_progress(club_info: Dict, *, _gateway) -> Optional[Dict]:
-    tasks = club_info.get("task_info") if isinstance(club_info, dict) else None
-    if not isinstance(tasks, list):
+    parsed = parse_danmaku_task(club_info)
+    if not parsed:
         return None
-    task = next(
-        (t for t in tasks if isinstance(t, dict) and t.get("jump_type") == "sendDanmu"), None
-    )
-    if not task:
-        return None
-    if task.get("is_done"):
-        match = re.search("(\\d+)\\s*/\\s*(\\d+)", task.get("sub_title") or "")
-        current, limit = (
-            map(int, match.groups())
-            if match
-            else (_gateway.INTIMACY_DANMAKU_COUNT, _gateway.INTIMACY_DANMAKU_COUNT)
-        )
-        return {"current": current, "limit": limit, "done": True}
-    match = re.search("(\\d+)\\s*/\\s*(\\d+)", task.get("sub_title") or "")
-    if not match:
-        return None
-    current, limit = map(int, match.groups())
-    if limit < 1 or current > limit:
-        return None
-    return {
-        "current": current,
-        "limit": limit,
-        "done": bool(task.get("is_done")) or current >= limit,
-    }
+    if parsed["current"] is None:
+        return {
+            "current": _gateway.INTIMACY_DANMAKU_COUNT,
+            "limit": _gateway.INTIMACY_DANMAKU_COUNT,
+            "done": True,
+        }
+    return parsed
 
 
 def send_medal_danmaku_tasks(

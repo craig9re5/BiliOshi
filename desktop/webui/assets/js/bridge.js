@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"ea90c4a62dd9dcfc25ab8835cd7cb8945578c21aa78404c9992ea8022099a7b1","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"bridge.jsx","source_sha256":"8e82453051d21871009c4ef19755a45868bfbdffda65630cc5f4f9359a6dbcd7"} */
+/* BiliOshi JSX {"code_sha256":"547c3f235a537f43a3b915258e66bd3bf1dc29420e9f6c340f24873af027698c","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"bridge.jsx","source_sha256":"b3be83e2838ca47bd3bfb53a3320ca8758c11f759279f0e38e2d4e4d2fefa739"} */
 (function () {
 "use strict";
 /* Transport and presentation adapters. Business decisions stay in Python. */
@@ -133,6 +133,9 @@ function toRoom(row, snap) {
     if (row.task_error) {
       state = "任务待处理";
       tone = "warn";
+    } else if (row.daily_complete) {
+      state = "今日已完成";
+      tone = "";
     } else state = "等待连接";
   } else if (row.task_error || hasRoomBlock) {
     state = row.task_error ? "任务异常" : "互动受限";

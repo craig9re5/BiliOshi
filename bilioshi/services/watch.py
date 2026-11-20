@@ -6,7 +6,7 @@ from ..policies import *
 from .. import safety
 from ..operating_mode import current_profile
 from .credit_clock import CreditClock
-from .watch_progress import WatchProgressMonitor
+from .watch_progress import WatchProgressMonitor, room_daily_complete
 
 
 def intimacy_change(before, after, start_day, end_day, *, _gateway):
@@ -38,6 +38,96 @@ def _watch_error(name: str, room_id: int, error: str, *, stopped_reason: str = "
     return payload
 
 
+def _watch_completed_result(
+    name: str,
+    room_id: int,
+    beats_ok: int,
+    beats_total: int,
+    start_time: float,
+    progress_monitor,
+) -> Dict:
+    """Build a completed payload when all enabled daily room tasks are done."""
+    return {
+        "name": name,
+        "room": room_id,
+        "success": True,
+        "beats_ok": beats_ok,
+        "beats_total": beats_total,
+        "minutes": max(0, int((time.time() - start_time) / 60)),
+        "stopped_reason": "completed",
+        "x25kn": True,
+        "watch_progress": progress_monitor.result if progress_monitor else {},
+    }
+
+
+def _enabled_task_flags(task_runner, send_danmaku, send_live_likes, auto_revive, auto_intimacy):
+    revive = bool(
+        send_danmaku
+        and (
+            getattr(task_runner, "auto_revive", send_danmaku)
+            if auto_revive is None
+            else auto_revive
+        )
+    )
+    intimacy = bool(
+        send_danmaku
+        and (
+            getattr(task_runner, "auto_intimacy", send_danmaku)
+            if auto_intimacy is None
+            else auto_intimacy
+        )
+    )
+    return revive, intimacy, bool(send_live_likes)
+
+
+def _maybe_finish_completed(
+    progress_monitor,
+    task_runner,
+    *,
+    send_danmaku,
+    send_live_likes,
+    auto_revive,
+    auto_intimacy,
+    refreshed_keys,
+) -> bool:
+    """Return True when watchLive and every enabled reaction task are verified done today."""
+    if progress_monitor is None:
+        return False
+    revive, intimacy, like = _enabled_task_flags(
+        task_runner, send_danmaku, send_live_likes, auto_revive, auto_intimacy
+    )
+    if room_daily_complete(
+        progress_monitor.verified,
+        auto_revive=revive,
+        auto_intimacy=intimacy,
+        auto_like=like,
+    ):
+        return True
+    day = progress_monitor.gateway.task_day()
+    if progress_monitor.result.get("status") != "complete" or progress_monitor.result.get("day") != day:
+        return False
+    runner_day = getattr(task_runner, "day", None)
+    danmaku_flag = getattr(task_runner, "danmaku_done", None)
+    like_flag = getattr(task_runner, "like_done", None)
+    danmaku_done = (not (revive or intimacy)) or (runner_day == day and danmaku_flag is True)
+    like_done = (not like) or (runner_day == day and like_flag is True)
+    if not (danmaku_done and like_done):
+        return False
+    key = (day, danmaku_done, like_done)
+    if key in refreshed_keys:
+        return False
+    if len(refreshed_keys) >= 4:
+        refreshed_keys.clear()
+    refreshed_keys.add(key)
+    progress_monitor.check(force=True)
+    return room_daily_complete(
+        progress_monitor.verified,
+        auto_revive=revive,
+        auto_intimacy=intimacy,
+        auto_like=like,
+    )
+
+
 def _setup_watch_chain(
     member: Dict,
     sessdata: str,
@@ -48,11 +138,27 @@ def _setup_watch_chain(
     auto_revive: bool,
     auto_intimacy: bool,
     _gateway,
+    *,
+    until_offline: bool = False,
 ):
     """Enter the room, build task/progress trackers, and initialize the X25Kn chain."""
     room_id = member["room"]
     up_id = member["uid"]
     name = member["name"]
+    root = _gateway._runtime_path("_TASK_STATE_DIR").parent.parent
+    credit_clock = CreditClock(root, safety.identity(sessdata, root))
+    progress_monitor = WatchProgressMonitor(
+        room_id, up_id, name, sessdata, bili_jct, _gateway, clock=credit_clock
+    )
+    progress_monitor.check(force=True)
+    if until_offline and room_daily_complete(
+        progress_monitor.verified,
+        auto_revive=send_danmaku and auto_revive,
+        auto_intimacy=send_danmaku and auto_intimacy,
+        auto_like=send_live_likes,
+    ):
+        print("    ✅ 今日该直播间全部任务已完成，跳过进入房间以释放看播名额", file=sys.stderr)
+        return None, _watch_completed_result(name, room_id, 0, 0, time.time(), progress_monitor)
     if not _gateway.enter_room(room_id, sessdata, bili_jct):
         return None, _watch_error(name, room_id, "进入直播间失败")
     room_info = _gateway._get_room_info(room_id, sessdata, bili_jct)
@@ -73,12 +179,6 @@ def _setup_watch_chain(
         auto_like=send_live_likes,
     )
     uuid_str = str(uuid.uuid4())
-    root = _gateway._runtime_path("_TASK_STATE_DIR").parent.parent
-    credit_clock = CreditClock(root, safety.identity(sessdata, root))
-    progress_monitor = WatchProgressMonitor(
-        room_id, up_id, name, sessdata, bili_jct, _gateway, clock=credit_clock
-    )
-    progress_monitor.check(force=True)
     e_data = _gateway.x25kn_enter_room(
         room_id, parent_area_id, area_id, up_id, buvid, uuid_str, sessdata, bili_jct
     )
@@ -120,7 +220,7 @@ def watch_room(
     *,
     _gateway,
 ) -> Dict:
-    """对一个直播间进行 X25Kn 心跳挂机。until_offline=True 时持续到下播为止。"""
+    """对一个直播间进行 X25Kn 心跳挂机。until_offline=True 时持续到任务完成或下播为止。"""
     setup, error_result = _setup_watch_chain(
         member,
         sessdata,
@@ -131,12 +231,30 @@ def watch_room(
         auto_revive,
         auto_intimacy,
         _gateway,
+        until_offline=until_offline,
     )
     if error_result is not None:
         return error_result
     chain, task_runner, progress_monitor = setup
-    runner = _watch_until_offline if until_offline else _watch_duration
-    return runner(
+    if until_offline:
+        return _watch_until_offline(
+            chain,
+            task_runner,
+            member["name"],
+            member["room"],
+            title,
+            interval,
+            duration_min,
+            send_danmaku,
+            send_live_likes,
+            sessdata,
+            bili_jct,
+            _gateway,
+            progress_monitor=progress_monitor,
+            auto_revive=auto_revive,
+            auto_intimacy=auto_intimacy,
+        )
+    return _watch_duration(
         chain,
         task_runner,
         member["name"],
@@ -167,18 +285,32 @@ def _watch_until_offline(
     bili_jct,
     _gateway,
     progress_monitor=None,
+    auto_revive=None,
+    auto_intimacy=None,
 ):
     title_str = f"「{title}」" if title else ""
     start_clock = time.strftime("%H:%M")
     _gateway._notify(f"🔴 **{name}** 开播啦！{title_str}\n开始时间：{start_clock}，自动挂机中...")
     tasks = TaskSchedule(task_runner, room_id, _gateway,
                          enabled=send_danmaku or send_live_likes, likes=send_live_likes)
-    tasks.check(chain)
-    print(f"    ⏱  开始挂机直到下播（每 {interval}s 心跳一次）...", file=sys.stderr)
+    refreshed_keys = set()
     beats_ok = 0
     beat_num = 0
     consecutive_fail = 0
     start_time = time.time()
+    tasks.check(chain)
+    if _maybe_finish_completed(
+        progress_monitor,
+        task_runner,
+        send_danmaku=send_danmaku,
+        send_live_likes=send_live_likes,
+        auto_revive=auto_revive,
+        auto_intimacy=auto_intimacy,
+        refreshed_keys=refreshed_keys,
+    ):
+        print("    ✅ 今日该直播间全部任务已完成，自动结束挂机以释放看播名额", file=sys.stderr)
+        return _watch_completed_result(name, room_id, beats_ok, beat_num, start_time, progress_monitor)
+    print(f"    ⏱  开始挂机直到下播（每 {interval}s 心跳一次）...", file=sys.stderr)
     while True:
         hold = safety.status(sessdata)
         if safety.blocks_watch(hold):
@@ -200,6 +332,19 @@ def _watch_until_offline(
             consecutive_fail = 0
             if progress_monitor:
                 progress_monitor.heartbeat(chain.heartbeat_interval)
+                if _maybe_finish_completed(
+                    progress_monitor,
+                    task_runner,
+                    send_danmaku=send_danmaku,
+                    send_live_likes=send_live_likes,
+                    auto_revive=auto_revive,
+                    auto_intimacy=auto_intimacy,
+                    refreshed_keys=refreshed_keys,
+                ):
+                    print("    ✅ 今日该直播间全部任务已完成，自动结束挂机以释放看播名额", file=sys.stderr)
+                    return _watch_completed_result(
+                        name, room_id, beats_ok, beat_num, start_time, progress_monitor
+                    )
         else:
             consecutive_fail += 1
         elapsed_min = int((time.time() - start_time) / 60)
@@ -248,6 +393,17 @@ def _watch_until_offline(
         if result and progress_monitor:
             progress_monitor.maybe_recover(chain)
         tasks.check(chain)
+        if _maybe_finish_completed(
+            progress_monitor,
+            task_runner,
+            send_danmaku=send_danmaku,
+            send_live_likes=send_live_likes,
+            auto_revive=auto_revive,
+            auto_intimacy=auto_intimacy,
+            refreshed_keys=refreshed_keys,
+        ):
+            print("    ✅ 今日该直播间全部任务已完成，自动结束挂机以释放看播名额", file=sys.stderr)
+            return _watch_completed_result(name, room_id, beats_ok, beat_num, start_time, progress_monitor)
 
 
 def _watch_duration(

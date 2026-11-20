@@ -722,6 +722,10 @@ class WebHost:
         rows = snap.get("rows", [])
         safety = snap.get("safety") or {}
         active = sum(bool(row.get("heartbeat_healthy")) for row in rows)
+        done_live = sum(
+            bool(row.get("live_status") == 1 and row.get("daily_complete") and not row.get("active"))
+            for row in rows
+        )
         warnings = bool(snap.get("error") or snap.get("ui_error") or safety.get("blocked") or any(
             row.get("connection_warning") or row.get("watch_warning") for row in rows))
         accounts = snap.get("accounts") or []
@@ -751,6 +755,8 @@ class WebHost:
             title = "已暂停"
         elif active:
             title = f"{active} 个直播间挂机中"
+        elif done_live:
+            title = f"{done_live} 个直播间今日已完成"
         else:
             title = "等待开播"
         self._tray.title = "ビリ推し · " + title

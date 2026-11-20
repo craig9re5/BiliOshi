@@ -175,6 +175,7 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
             {room.state}
             <span className="state-sub" title={absoluteTime(room.last_heartbeat)}>
               {room.healthy ? `已连接 ${durationLabel(room.minutes)}`
+                : room.daily_complete && !room.active ? "已自动结束看播，让出结算名额"
                 : room.live ? "开播后自动建立连接" : "等待恢复正常"}
               {room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : ""}
             </span>
@@ -438,6 +439,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
 
   const selected = rooms.find((room) => room.room === selectedId);
   const healthy = rooms.filter((room) => room.healthy).length;
+  const doneCount = rooms.filter((room) => room.live && room.daily_complete && !room.healthy).length;
   const unknown = rooms.filter((room) => room.live_status == null).length;
   const readOnlyInactive = Boolean(multiAccount && !viewedRunning && !globalPaused);
   const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…"
@@ -447,6 +449,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
     : readOnlyInactive ? "当前账号未挂机"
     : paused ? "已暂停挂机"
     : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中`
+    : doneCount ? `${doneCount} 个直播间今日已完成`
     : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.

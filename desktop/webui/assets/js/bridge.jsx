@@ -99,6 +99,7 @@ function toRoom(row, snap) {
   else if (row.phase === "等待重试") { state = "等待重试"; tone = "warn"; }
   else if (live) {
     if (row.task_error) { state = "任务待处理"; tone = "warn"; }
+    else if (row.daily_complete) { state = "今日已完成"; tone = ""; }
     else state = "等待连接";
   }
   else if (row.task_error || hasRoomBlock) {

@@ -12,7 +12,7 @@ from bilioshi.services.credit_clock import CreditClock
 from bilioshi.services.watch_progress import ProgressTracker, WatchProgressMonitor, parse_watch_task
 from bilioshi.services.watch import HeartbeatChain, _watch_duration, _watch_until_offline
 from desktop.engine import Engine
-from desktop.storage import initialize, read_json
+from desktop.storage import initialize, read_json, write_json
 from desktop.worker import RoomStateRecorder
 from desktop.view import TrayUI
 
@@ -748,3 +748,224 @@ class DesktopRewardWarningTests(unittest.TestCase):
         }
         self.engine._reconcile_live_member({"room": 1, "name": "test"}, {"live_status": 1}, now)
         self.assertNotIn(1, self.engine.manual_reconnects)
+
+
+class DailyCompletionRetirementTests(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        initialize(self.root, [{"name": "test", "room": 1, "uid": 2}])
+        self.addCleanup(patch.stopall)
+
+    @staticmethod
+    def _full_club(*, watch_done=True, danmaku_done=True, like_done=True, is_lighted=True):
+        return {
+            "is_lighted": is_lighted,
+            "reach_free_intimacy_limit": False,
+            "task_info": [
+                {
+                    "jump_type": "watchLive",
+                    "title": "观看直播满15分钟",
+                    "sub_title": f"每日上限 {'10/10' if watch_done else '4/10'}",
+                    "is_done": watch_done,
+                },
+                {
+                    "jump_type": "sendDanmu",
+                    "title": "发送弹幕",
+                    "sub_title": f"每日上限 {'5/5' if danmaku_done else '0/5'}",
+                    "is_done": danmaku_done,
+                },
+                {
+                    "jump_type": "like",
+                    "title": "点赞30次",
+                    "sub_title": f"每日上限 {'5/5' if like_done else '0/5'}",
+                    "is_done": like_done,
+                },
+            ],
+        }
+
+    def test_room_daily_complete_respects_enabled_policies_and_fails_closed(self):
+        from bilioshi.services.watch_progress import room_daily_complete
+
+        self.assertFalse(room_daily_complete({}))
+        self.assertFalse(room_daily_complete(self._full_club(watch_done=False)))
+        self.assertFalse(room_daily_complete(self._full_club(is_lighted=False), auto_revive=True))
+        self.assertFalse(room_daily_complete(self._full_club(danmaku_done=False), auto_intimacy=True))
+        self.assertFalse(room_daily_complete(self._full_club(like_done=False), auto_like=True))
+        self.assertTrue(room_daily_complete(self._full_club(like_done=False), auto_like=False))
+        # Unlit / unsent danmaku does not block completion when both danmaku switches are off.
+        self.assertTrue(
+            room_daily_complete(
+                self._full_club(is_lighted=False, danmaku_done=False, like_done=False),
+                auto_revive=False,
+                auto_intimacy=False,
+                auto_like=False,
+            )
+        )
+        # Missing is_lighted fails closed when auto_revive is enabled.
+        incomplete = self._full_club()
+        incomplete.pop("is_lighted")
+        self.assertFalse(room_daily_complete(incomplete, auto_revive=True))
+
+    def test_watch_until_offline_skips_entry_if_already_completed_and_retires_midstream(self):
+        from bilioshi.services.watch import watch_room
+
+        clock = [0.0]
+        gateway = Mock(
+            HEARTBEAT_INTERVAL=60,
+            DANMAKU_RECHECK_INTERVAL=600,
+            DANMAKU_WORK_BUDGET=90,
+            DANMAKU_DELAY=0,
+        )
+        gateway.task_day.return_value = "2026-11-21"
+        gateway._runtime_path.return_value = self.root / "state" / "tasks"
+        # 1) Already completed at startup: exits cleanly without enter_room or x25kn_enter_room.
+        gateway.get_fans_club_task_info.return_value = self._full_club(like_done=False)
+        res_skip = watch_room(
+            {"name": "test", "room": 1, "uid": 2},
+            "fake",
+            "fake",
+            until_offline=True,
+            send_danmaku=True,
+            send_live_likes=False,
+            _gateway=gateway,
+        )
+        self.assertTrue(res_skip["success"])
+        self.assertEqual(res_skip["stopped_reason"], "completed")
+        gateway.enter_room.assert_not_called()
+        gateway.x25kn_enter_room.assert_not_called()
+
+        # 2) Finishes watchLive first, waits for auto_like completion, then retires cleanly.
+        gateway.enter_room.return_value = True
+        gateway._get_room_info.return_value = {"area_id": 1, "parent_area_id": 2}
+        gateway._ensure_live_buvid.return_value = "buvid-1"
+        gateway._get_single_room_status.return_value = {"live_status": 1}
+        gateway.x25kn_enter_room.return_value = {
+            "secret_key": "k1",
+            "secret_rule": [1],
+            "timestamp": 100,
+            "heartbeat_interval": 60,
+        }
+        gateway.x25kn_heartbeat.return_value = {
+            "secret_key": "k2",
+            "secret_rule": [1],
+            "timestamp": 160,
+            "heartbeat_interval": 60,
+        }
+
+        like_done = [False]
+        watch_done = [False]
+
+        def club_info(*_args):
+            return self._full_club(watch_done=watch_done[0], like_done=like_done[0])
+
+        class FakeRunner:
+            def __init__(self, *args, **kwargs):
+                self.day = "2026-11-21"
+                self.auto_revive = True
+                self.auto_intimacy = True
+                self.danmaku_done = True
+                self.like_done = False
+
+            def check(self, **_kwargs):
+                if watch_done[0]:
+                    like_done[0] = True
+                    self.like_done = True
+                    return {"success": True, "like": {"success": True, "done": True}}
+                return {"success": True, "like": {"success": True, "done": False}}
+
+        gateway.get_fans_club_task_info.side_effect = club_info
+        gateway.DailyTaskRunner = FakeRunner
+
+        def fake_wait(last_response_at, interval):
+            clock[0] += interval
+            watch_done[0] = True
+            return interval
+
+        gateway._wait_for_heartbeat_window.side_effect = fake_wait
+        with patch("bilioshi.services.watch.time.monotonic", side_effect=lambda: clock[0]), patch(
+            "bilioshi.services.watch_progress.time.monotonic", side_effect=lambda: clock[0]
+        ):
+            res_mid = watch_room(
+                {"name": "test", "room": 1, "uid": 2},
+                "fake",
+                "fake",
+                until_offline=True,
+                send_danmaku=True,
+                send_live_likes=True,
+                _gateway=gateway,
+            )
+        self.assertTrue(res_mid["success"])
+        self.assertEqual(res_mid["stopped_reason"], "completed")
+        self.assertEqual(res_mid["beats_ok"], 10)
+        gateway._notify.assert_called_once()
+        self.assertNotIn("下播了", gateway._notify.call_args.args[0])
+
+    def test_engine_retires_completed_live_room_and_wakes_on_policy_change_or_new_day(self):
+        engine = Engine(self.root, job=Mock())
+        today = task_day()
+        now = time.time()
+        engine.statuses = {"1": {"live_status": 1}}
+        engine.status_times = {"1": now}
+        completed_club = self._full_club(like_done=False)
+        engine.tasks = {
+            "1": {
+                "day": today,
+                "updated": now,
+                "tasks": completed_club["task_info"],
+                "is_lighted": True,
+            }
+        }
+        with patch.object(engine, "spawn") as spawn:
+            engine._reconcile_live_member({"name": "test", "room": 1, "uid": 2}, {"live_status": 1}, now)
+        spawn.assert_not_called()
+        row = engine.snapshot()["rows"][0]
+        self.assertTrue(row["daily_complete"])
+        self.assertEqual(row["phase"], "今日已完成")
+        self.assertFalse(row["reconnect_allowed"])
+        self.assertFalse(engine.reconnect_room(1)[0])
+
+        from desktop.webui.window import WebHost
+        tray_host = SimpleNamespace(
+            _has_tray=lambda: True,
+            _tray=Mock(),
+            _last_tray_color="#ffffff",
+            _last_safety_blocked=False,
+        )
+        WebHost._update_tray(tray_host, {"rows": [{**row, "live_status": 1}]})
+        self.assertEqual(tray_host._tray.title, "ビリ推し · 1 个直播间今日已完成")
+
+        # Enabling auto_like wakes the room back up because like is not done.
+        write_json(self.root / "settings.json", {**engine.config, "auto_like": True})
+        engine.reload_settings()
+        row2 = engine.snapshot()["rows"][0]
+        self.assertFalse(row2["daily_complete"])
+        with patch.object(engine, "spawn", return_value=Mock(pid=555)) as spawn:
+            engine._reconcile_live_member({"name": "test", "room": 1, "uid": 2}, {"live_status": 1}, now)
+        spawn.assert_called_once_with("--worker", "1")
+        engine.workers.clear()
+        engine.worker_health.clear()
+
+        # Worker completed exit cleans retries/manual_reconnects and persists phase.
+        import os
+        recorder = RoomStateRecorder(self.root / "state/1.json", {"name": "test", "room": 1})
+        recorder({"type": "watch_end", "stopped_reason": "completed"})
+        recorder.finish(0)
+        self.assertEqual(read_json(recorder.path)["phase"], "今日已完成")
+        proc = Mock(pid=os.getpid(), returncode=0)
+        proc.poll.return_value = 0
+        engine.workers[1] = proc
+        engine.worker_retries[1] = {"attempt": 1, "until": 0}
+        engine.manual_reconnects[1] = {"state": "starting"}
+        engine._watch_workers(now)
+        self.assertNotIn(1, engine.workers)
+        self.assertNotIn(1, engine.worker_retries)
+        self.assertNotIn(1, engine.manual_reconnects)
+
+        # Midnight day rollover invalidates yesterday's completion immediately.
+        engine.tasks["1"]["day"] = "2000-01-01"
+        row3 = engine.snapshot()["rows"][0]
+        self.assertFalse(row3["daily_complete"])
+        self.assertNotEqual(row3["phase"], "今日已完成")
+

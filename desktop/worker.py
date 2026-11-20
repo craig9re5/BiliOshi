@@ -105,7 +105,8 @@ class RoomStateRecorder:
                 started=time.time(),
             )
         elif kind == "watch_end":
-            self.state.update(phase="本轮结束", result=event)
+            phase = "今日已完成" if event.get("stopped_reason") == "completed" else "本轮结束"
+            self.state.update(phase=phase, result=event)
         elif kind == "task_check":
             self.state.update(task_result=event, task_updated=time.time())
             self._write_task_result = True
@@ -123,11 +124,14 @@ class RoomStateRecorder:
             self.state.update(phase="账号保护暂停", error=hold["reason"], safety=hold)
             self.save()
             return
+        stopped = (self.state.get("result") or {}).get("stopped_reason")
         if code:
             self.state.update(
                 phase="运行失败",
                 error=self.state.get("error") or "本轮挂机未成功完成，请查看日志",
             )
+        elif stopped == "completed":
+            self.state["phase"] = "今日已完成"
         else:
             self.state["phase"] = "本轮结束" if self.state["beats"] else "本轮结束（暂无成功心跳）"
         self.save()

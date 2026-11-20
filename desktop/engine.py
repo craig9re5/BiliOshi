@@ -1,5 +1,9 @@
 from desktop.health import check_progress, heartbeat_timeout, number, recovery_delay
-from desktop.snapshot import current_watch_warning_signature, project_snapshot
+from desktop.snapshot import (
+    current_watch_warning_signature,
+    is_room_daily_complete,
+    project_snapshot,
+)
 from bilioshi.application import AppContext
 import logging
 import hashlib
@@ -96,6 +100,7 @@ class Engine:
         self._cred_cache_key = None
         self._cred_sig_value = ""
         self._room_state_cache = {}
+        self._last_task_day = task_day()
         try:
             self.config, self.members = load_config(root)
             if load_config is _DEFAULT_LOAD_CONFIG:
@@ -393,6 +398,14 @@ class Engine:
             if previous.get("cooldown_until", 0) > now:
                 return False, "重连请求已提交，请稍后再试。"
             proc = self.workers.get(room)
+            if not proc and is_room_daily_complete(
+                self.config,
+                self.tasks.get(str(room)),
+                self._read_room_state(room),
+                task_day(),
+                task_error=self.task_errors.get(str(room), ""),
+            ):
+                return False, "今日看播与已启用互动任务均已完成，无需重连挂机。"
             if proc:
                 if proc.poll() is None:
                     proc.terminate()
@@ -809,14 +822,36 @@ class Engine:
         clock = time.monotonic()
         for room, proc in list(self.workers.items()):
             if proc.poll() is not None:
-                if proc.returncode:
-                    logging.warning("Room worker exited unexpectedly room=%s code=%s", room, proc.returncode)
+                state = self._read_room_state(room)
+                completed = (state.get("result") or {}).get("stopped_reason") == "completed"
+                if completed:
+                    logging.info("Room worker completed daily tasks room=%s", room)
+                    self.worker_retries.pop(room, None)
+                    self.manual_reconnects.pop(room, None)
+                    member = next((m for m in self.members if m["room"] == room), None)
+                    still_done = bool(
+                        member
+                        and is_room_daily_complete(
+                            self.config,
+                            self.tasks.get(str(room)),
+                            state,
+                            task_day(),
+                            task_error=self.task_errors.get(str(room), ""),
+                        )
+                    )
+                    if not still_done:
+                        self.next_check = min(self.next_check, now)
                 else:
-                    logging.info("Room worker exited room=%s code=%s", room, proc.returncode)
-                self._record_interruption(room, "worker_exited")
+                    if proc.returncode:
+                        logging.warning("Room worker exited unexpectedly room=%s code=%s", room, proc.returncode)
+                    else:
+                        logging.info("Room worker exited room=%s code=%s", room, proc.returncode)
+                    self._record_interruption(room, "worker_exited")
+                    self.next_check = min(self.next_check, now + 300)
                 del self.workers[room]
                 self.worker_health.pop(room, None)
-                self.next_check = min(self.next_check, now + 300)
+                if completed:
+                    self.persist()
                 continue
             state = self._read_room_state(room)
             request = self.manual_reconnects.get(room)
@@ -890,6 +925,15 @@ class Engine:
         if self.suspended:
             return
         self.reload_settings()
+        current_day = task_day()
+        if current_day != self._last_task_day:
+            self._last_task_day = current_day
+            if any(
+                (self.statuses.get(str(m["room"])) or {}).get("live_status") == 1
+                and m["room"] not in self.workers
+                for m in self.members
+            ):
+                self.next_check = 0
         now = time.time()
         self.safety = self.application.safety_status()
         self.room_blocks = self.application.room_safety_blocks()
@@ -1072,6 +1116,20 @@ class Engine:
             or room in self.workers
             or time.monotonic() < self.worker_retries.get(room, {}).get("until", 0)
         ):
+            return
+        if is_room_daily_complete(
+            self.config,
+            self.tasks.get(key),
+            self._read_room_state(room),
+            task_day(),
+            task_error=self.task_errors.get(key, ""),
+        ):
+            if request and request.get("state") == "checking":
+                request.update(
+                    state="done",
+                    message="今日全部任务已完成，无需重连。",
+                    skip_actions=False,
+                )
             return
         args = ["--worker", key]
         skip_actions = request.get("skip_actions", False)

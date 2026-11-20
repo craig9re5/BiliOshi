@@ -79,6 +79,10 @@ class InteractionTests(unittest.TestCase):
         self.assertIn("同步粉丝牌", action_reason(self.snap, {**self.row, "medal_name": ""}, "wear"))
         self.assertIn("17 秒", action_reason(self.snap, {**self.row, "reconnect_cooldown_until": 117}, "reconnect", now=100))
         self.assertIn("等待", action_reason(self.snap, {**self.row, "reconnecting": True}, "reconnect"))
+        self.assertIn(
+            "无需重连",
+            action_reason(self.snap, {**self.row, "daily_complete": True, "active": False}, "reconnect"),
+        )
 
     def test_pending_busy_or_closing_cannot_submit_a_second_write(self):
         for action in ("redo", "reconnect", "wear"):

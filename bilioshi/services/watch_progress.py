@@ -16,27 +16,88 @@ ACCOUNT_STALL_SECONDS = 60 * 60
 ROTATION_GRACE_SECONDS = 30 * 60
 
 
-def parse_watch_task(club):
-    tasks = club.get("task_info", []) if isinstance(club, dict) else []
-    if not isinstance(tasks, list):
-        return None
-    task = next((t for t in tasks if isinstance(t, dict) and t.get("jump_type") == "watchLive"), None)
+def _task_items(club):
+    if not isinstance(club, dict):
+        return []
+    tasks = club.get("task_info")
+    if isinstance(tasks, list):
+        return tasks
+    tasks = club.get("tasks")
+    return tasks if isinstance(tasks, list) else []
+
+
+def _parse_counter_task(club, jump_type):
+    tasks = _task_items(club)
+    task = next((t for t in tasks if isinstance(t, dict) and t.get("jump_type") == jump_type), None)
     if not task:
         return None
     subtitle = task.get("sub_title")
     match = re.search(r"(\d+)\s*/\s*(\d+)", subtitle) if isinstance(subtitle, str) else None
     if not match:
-        return {"done": True} if task.get("is_done") else None
+        return {"task": task, "current": None, "limit": None, "done": True} if task.get("is_done") else None
     current, limit = map(int, match.groups())
     if limit < 1 or current > limit:
         return None
-    title = task.get("title")
+    return {
+        "task": task,
+        "current": current,
+        "limit": limit,
+        "done": bool(task.get("is_done")) or current >= limit,
+    }
+
+
+def parse_watch_task(club):
+    parsed = _parse_counter_task(club, "watchLive")
+    if not parsed:
+        return None
+    if parsed["current"] is None:
+        return {"done": True}
+    title = parsed["task"].get("title")
     minutes = re.search(r"(\d+)\s*分钟", title) if isinstance(title, str) else None
     round_minutes = int(minutes[1]) if minutes else 15
     if not 1 <= round_minutes <= 120:
         round_minutes = 15
-    return {"current": current, "limit": limit, "done": bool(task.get("is_done")) or current >= limit,
-            "threshold": max(MIN_STALL_SECONDS, 2 * round_minutes * 60)}
+    return {
+        "current": parsed["current"],
+        "limit": parsed["limit"],
+        "done": parsed["done"],
+        "threshold": max(MIN_STALL_SECONDS, 2 * round_minutes * 60),
+    }
+
+
+def parse_danmaku_task(club):
+    parsed = _parse_counter_task(club, "sendDanmu")
+    if not parsed:
+        return None
+    return {key: parsed[key] for key in ("current", "limit", "done")}
+
+
+def parse_like_task(club):
+    parsed = _parse_counter_task(club, "like")
+    if not parsed:
+        return None
+    return {key: parsed[key] for key in ("current", "limit", "done")}
+
+
+def room_daily_complete(club, *, auto_revive=True, auto_intimacy=True, auto_like=False):
+    """Return True only when watchLive and every enabled reaction task are verified done."""
+    if not isinstance(club, dict):
+        return False
+    watch = parse_watch_task(club)
+    if not watch or not watch.get("done"):
+        return False
+    if auto_revive or auto_intimacy:
+        if "is_lighted" not in club or not bool(club.get("is_lighted")):
+            return False
+        if auto_intimacy:
+            danmaku = parse_danmaku_task(club)
+            if not danmaku or not danmaku.get("done"):
+                return False
+    if auto_like:
+        like = parse_like_task(club)
+        if not like or not like.get("done"):
+            return False
+    return True
 
 
 class ProgressTracker:

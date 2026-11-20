@@ -40,6 +40,8 @@ def action_reason(snap, row, action, pending=False, now=None):
     if not snap.get("account_confirmed", bool(snap.get("account"))):
         return "登录状态尚未验证，请立即检查或前往账号管理扫码。"
     if action == "reconnect":
+        if row.get("daily_complete") and not row.get("active"):
+            return "今日看播与已启用互动任务均已完成，无需重连挂机。"
         if row.get("reconnecting"):
             return "正在重新建立连接，请等待成功心跳。"
         remaining = row.get("reconnect_cooldown_until", 0) - now

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"1f09bbf591655a9c22e738ad70d57ebf0cdcb6addedf1bb0a9610e91383233b2","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"b9d654e9b24c93266f87808089099de6b0e2b5674ecca1aadf403bb2aa9646a8"} */
+/* BiliOshi JSX {"code_sha256":"4877844182ab7886682d321e2aa607c985a9b721d169f5085b3e401b88356734","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"9e3b0fda8d46fc986b65d889de4bbab826081d02904db0f84b3c2e922565bb27"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -261,7 +261,7 @@ const DetailPanel = ({
   }, room.state, /*#__PURE__*/React.createElement("span", {
     className: "state-sub",
     title: absoluteTime(room.last_heartbeat)
-  }, room.healthy ? `已连接 ${durationLabel(room.minutes)}` : room.live ? "开播后自动建立连接" : "等待恢复正常", room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : "")), /*#__PURE__*/React.createElement("button", {
+  }, room.healthy ? `已连接 ${durationLabel(room.minutes)}` : room.daily_complete && !room.active ? "已自动结束看播，让出结算名额" : room.live ? "开播后自动建立连接" : "等待恢复正常", room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : "")), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "link-btn state-action",
     onClick: () => onAction("reconnect", room.room),
@@ -593,9 +593,10 @@ const Overview = ({
   };
   const selected = rooms.find(room => room.room === selectedId);
   const healthy = rooms.filter(room => room.healthy).length;
+  const doneCount = rooms.filter(room => room.live && room.daily_complete && !room.healthy).length;
   const unknown = rooms.filter(room => room.live_status == null).length;
   const readOnlyInactive = Boolean(multiAccount && !viewedRunning && !globalPaused);
-  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : globalPaused ? "全部挂机已暂停" : !signedIn ? "等待登录" : blocked ? "保护暂停中" : readOnlyInactive ? "当前账号未挂机" : paused ? "已暂停挂机" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : unknown ? "等待检查" : "等待开播";
+  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : globalPaused ? "全部挂机已暂停" : !signedIn ? "等待登录" : blocked ? "保护暂停中" : readOnlyInactive ? "当前账号未挂机" : paused ? "已暂停挂机" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : doneCount ? `${doneCount} 个直播间今日已完成` : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.
   const cadence = readOnlyInactive ? lastCheck ? `仅查看模式 · 上次同步 ${relativeTime(lastCheck)}` : "仅查看模式 · 不会自动开始挂机" : `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;

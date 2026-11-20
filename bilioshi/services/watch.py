@@ -181,7 +181,7 @@ def _watch_until_offline(
     start_time = time.time()
     while True:
         hold = safety.status(sessdata)
-        if hold["blocked"]:
+        if safety.blocks_watch(hold):
             return {
                 "name": name,
                 "room": room_id,
@@ -277,7 +277,7 @@ def _watch_duration(
     beats_ok = 0
     beats_total = 0
     for _ in range(max(0, int(duration_min * 60 // 5)) + 1):
-        if safety.status(sessdata)["blocked"]:
+        if safety.blocks_watch(safety.status(sessdata)):
             break
         now = time.monotonic()
         ready_at = max(now, chain.last_response_at + chain.heartbeat_interval)
@@ -297,18 +297,19 @@ def _watch_duration(
         tasks.check(chain, limit=deadline)
     actual_minutes = int((time.monotonic() - started) / 60)
     hold = safety.status(sessdata)
-    if progress_monitor and not hold["blocked"]:
+    watch_blocked = safety.blocks_watch(hold)
+    if progress_monitor and not watch_blocked:
         progress_monitor.check(force=True)
     return {
         "name": name,
         "room": room_id,
-        "success": beats_ok > 0 and not hold["blocked"],
+        "success": beats_ok > 0 and not watch_blocked,
         "beats_ok": beats_ok,
         "beats_total": beats_total,
         "minutes": actual_minutes,
         "x25kn": True,
         "watch_progress": progress_monitor.result if progress_monitor else {},
-        **({"error": hold["reason"], "stopped_reason": "safety"} if hold["blocked"] else {}),
+        **({"error": hold["reason"], "stopped_reason": "safety"} if watch_blocked else {}),
     }
 
 

@@ -16,7 +16,15 @@ from email.utils import parsedate_to_datetime
 from .login_fields import parse_cookie_header
 from .redaction import redact, register_secrets
 from . import safety
-from .task_window import check_window, request_timeout, wait, read_cache
+from .task_window import (
+    MIN_READ_WINDOW,
+    MIN_WRITE_WINDOW,
+    check_window,
+    require_window,
+    request_timeout,
+    wait,
+    read_cache,
+)
 from .operating_mode import current_profile
 
 NAV_URL = "https://api.bilibili.com/x/web-interface/nav"
@@ -383,16 +391,20 @@ def request_json(
     cache_key = (sessdata, url)
     if cache is not None and cache_key in cache:
         return cache[cache_key]
-    check_window()
+    min_window = MIN_WRITE_WINDOW if mutation else MIN_READ_WINDOW
+    attempt_timeout = request_timeout(timeout, minimum=min_window)
     if sessdata and mutation:
         denied = safety.reserve(sessdata, op)
         if denied:
             return denied
     delays = () if mutation else current_profile().read_retry_delays
     for attempt in range(len(delays) + 1):
-        response = _once(url, headers, data=data, method=method, timeout=request_timeout(timeout))
+        if attempt:
+            attempt_timeout = request_timeout(timeout, minimum=min_window)
+        response = _once(url, headers, data=data, method=method, timeout=attempt_timeout)
         if response.get("error_kind") != "network" or attempt == len(delays):
             break
+        require_window(delays[attempt] + min(timeout, min_window))
         wait(delays[attempt])
         if sessdata:
             hold = safety.status(sessdata)

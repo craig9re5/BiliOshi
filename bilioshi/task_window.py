@@ -6,6 +6,12 @@ import time
 
 _WINDOW = ContextVar("task_window", default=None)
 
+# Leave enough socket budget inside a cooperative task window so tail-end
+# requests defer cleanly instead of timing out mid-flight (especially writes,
+# where a client-side read timeout leaves server state uncertain).
+MIN_READ_WINDOW = 2.0
+MIN_WRITE_WINDOW = 5.0
+
 
 class TaskDeferred(RuntimeError):
     """No new request was started because its task window has ended."""
@@ -34,10 +40,23 @@ def check_window(required=0):
         raise TaskDeferred("本轮任务时间不足，等待下次检查")
 
 
-def request_timeout(timeout):
+def require_window(minimum):
+    """Defer when remaining window time is strictly less than ``minimum``."""
     check_window()
     left = remaining()
-    return timeout if left is None else min(timeout, left)
+    if left is not None and minimum > 0 and left < minimum:
+        raise TaskDeferred("本轮任务时间不足，等待下次检查")
+
+
+def request_timeout(timeout, *, minimum=0):
+    check_window()
+    left = remaining()
+    if left is None:
+        return timeout
+    required = min(timeout, minimum) if minimum > 0 else 0
+    if required > 0 and left < required:
+        raise TaskDeferred("本轮任务时间不足，等待下次检查")
+    return min(timeout, left)
 
 
 def wait(seconds):

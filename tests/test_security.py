@@ -108,14 +108,27 @@ class SecurityTests(unittest.TestCase):
             with task_window(2), patch.object(http, "_once", return_value={"code": 0}) as send:
                 http.get_json(http.NAV_URL, HEADERS)
                 self.assertEqual(send.call_args.kwargs["timeout"], 2)
+                now[0] = 1.5
+                with self.assertRaises(TaskDeferred):
+                    http.get_json("https://api.live.bilibili.com/progress", HEADERS)
                 now[0] = 2
                 with self.assertRaises(TaskDeferred):
                     http.post_form(URL, {"roomid": 1}, HEADERS)
                 self.assertEqual(send.call_count, 1)
+            # Tail-end write budget (< MIN_WRITE_WINDOW) defers without sending or setting uncertain.
             with task_window(3), patch.object(http, "_once", return_value={
+                    "code": -1, "error_kind": "network"}) as send:
+                with self.assertRaises(TaskDeferred):
+                    http.post_form(URL, {"roomid": 1}, HEADERS)
+                send.assert_not_called()
+                self.assertFalse(safety.status(SESSION)["blocked"])
+                self.assertEqual(read_json(self.root / "state/safety/uid-123.json", {}).get("counts", {}), {})
+            # With enough write budget remaining, a real transport failure still marks uncertain.
+            with task_window(8), patch.object(http, "_once", return_value={
                     "code": -1, "error_kind": "network"}) as send:
                 http.post_form(URL, {"roomid": 1}, HEADERS)
                 send.assert_called_once()
+                self.assertEqual(send.call_args.kwargs["timeout"], 6)
                 self.assertEqual(safety.status(SESSION)["kind"], "uncertain")
             path = self.root / "pace.lock"
             path.write_text(str(time.time()), encoding="ascii")
@@ -805,6 +818,37 @@ class SafetyAutoRecoveryTests(unittest.TestCase):
                 self.assertTrue(row["heartbeat_healthy"])
                 self.assertEqual(action_reason(snap, row, "reconnect"), "")
                 self.assertIn("看播正常继续", action_reason(snap, row, "redo"))
+
+                # Watch loops keep beating under interaction-only holds instead of exiting with safety.
+                from bilioshi.services.watch import _watch_until_offline, _watch_duration
+                watch_gateway = Mock(DANMAKU_RECHECK_INTERVAL=600, DANMAKU_WORK_BUDGET=90)
+                watch_gateway.task_day.return_value = task_day()
+                watch_gateway._get_single_room_status.side_effect = [{"live_status": 1}, {"live_status": 0}]
+                chain = Mock(last_response_at=time.monotonic(), heartbeat_interval=60)
+                chain.beat.return_value = {"ok": True}
+                runner = Mock()
+                runner.check.return_value = {"success": False, "safety": hold}
+                until_res = _watch_until_offline(
+                    chain, runner, "主播A", 1, "", 60, 0, False, False, SESSION, CSRF, watch_gateway
+                )
+                self.assertTrue(until_res["success"])
+                self.assertEqual(until_res["stopped_reason"], "offline")
+                self.assertEqual(until_res["beats_ok"], 2)
+
+                clock = [1000.0]
+                dur_chain = Mock(last_response_at=1000.0, heartbeat_interval=60)
+                def _beat_once():
+                    clock[0] += 60.0
+                    dur_chain.last_response_at = clock[0]
+                    return {"ok": True}
+                dur_chain.beat.side_effect = _beat_once
+                with patch("bilioshi.services.watch.time.monotonic", side_effect=lambda: clock[0]):
+                    dur_res = _watch_duration(
+                        dur_chain, runner, "主播A", 1, "", 60, 1, False, False, SESSION, CSRF, watch_gateway
+                    )
+                self.assertTrue(dur_res["success"])
+                self.assertNotIn("stopped_reason", dur_res)
+                self.assertEqual(dur_res["beats_ok"], 1)
 
     def test_auth_expiry_escalates_over_permanent_holds_and_account_escalates_interaction(self):
         with tempfile.TemporaryDirectory() as folder, use_context(RuntimeContext(Path(folder))):

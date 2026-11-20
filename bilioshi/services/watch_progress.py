@@ -183,7 +183,7 @@ class WatchProgressMonitor:
         if (self.result.get("status") != "stalled" or now < self.next_recovery_check
                 or self._episode() in self.recovery_episodes
                 or self.reconnects >= MAX_REWARD_RECONNECTS
-                or safety.status(self.credentials[0])["blocked"]):
+                or safety.blocks_watch(safety.status(self.credentials[0]))):
             return
         account = self.result.get("account") or {}
         since = account.get("seconds_since_credit")

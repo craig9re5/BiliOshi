@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import Callable, TypeVar
 from .runtime import data_dir
-from .task_window import check_window, wait as task_wait
+from .task_window import MIN_WRITE_WINDOW, require_window, wait as task_wait
 
 MIN_SEND_INTERVAL = 6.0
 LOCK_WAIT_TIMEOUT = 45.0
@@ -66,12 +66,13 @@ def _pace_on_file(
     lock_path.touch(exist_ok=True)
     with lock_path.open("r+b") as stream:
         while not _try_lock(stream):
-            check_window()
+            require_window(MIN_WRITE_WINDOW)
             if time.monotonic() >= deadline:
                 raise TimeoutError("等待发送锁超时")
+            require_window(0.1 + MIN_WRITE_WINDOW)
             task_wait(0.1)
         try:
-            check_window()
+            require_window(MIN_WRITE_WINDOW)
             stream.seek(0)
             try:
                 last_sent = float(stream.read(32).strip() or b"0")
@@ -85,8 +86,9 @@ def _pace_on_file(
             )
             wait = max(0.0, effective_interval - elapsed)
             if wait > 0:
+                require_window(wait + MIN_WRITE_WINDOW)
                 task_wait(wait)
-            check_window()
+            require_window(MIN_WRITE_WINDOW)
             stream.seek(0)
             stream.write(f"{time.time():.6f}".encode("ascii").ljust(32, b" "))
             stream.flush()

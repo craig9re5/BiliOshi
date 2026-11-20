@@ -387,7 +387,7 @@ class AppContext:
     def probe(self, members):
         credentials = self.credentials()
         hold = self.safety_status()
-        if hold["blocked"]:
+        if safety.blocks_watch(hold):
             return {"error": hold["reason"], "safety": hold}
         valid, message = self.validate_credentials(*credentials)
         if not valid:

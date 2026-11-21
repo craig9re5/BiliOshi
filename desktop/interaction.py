@@ -40,6 +40,8 @@ def action_reason(snap, row, action, pending=False, now=None):
     if not snap.get("account_confirmed", bool(snap.get("account"))):
         return "登录状态尚未验证，请立即检查或前往账号管理扫码。"
     if action == "reconnect":
+        if snap.get("auto_watch") is False:
+            return "已关闭此账号的直播自动挂机，请在设置中开启。"
         if row.get("daily_complete") and not row.get("active"):
             return "今日看播与已启用互动任务均已完成，无需重连挂机。"
         if row.get("reconnecting"):
@@ -53,6 +55,8 @@ def action_reason(snap, row, action, pending=False, now=None):
         return "直播状态待确认，请点击“立即检查”。"
     if row.get("live_status") != 1 and action != "wear":
         return "主播已下播，开播后可以操作。"
+    if action == "redo" and row.get("no_medal"):
+        return "尚未拥有该主播粉丝牌，加入粉丝团后即可操作。"
     if action == "wear" and not row.get("medal_name"):
         return "没有可佩戴的粉丝牌，可先同步粉丝牌。"
     return "" if action != "reconnect" else "连接尚未就绪，请立即检查后重试。"
@@ -107,7 +111,9 @@ def recovery_route(snap):
             action = "check" if field == "status_error" else "room"
             return {"action": action, "label": label, "room": row["room"],
                     "message": f"【{row['name']}】{row[field]}"}
-    if any(row.get("status_stale") or row.get("tasks_stale") for row in snap.get("rows", [])):
+    if snap.get("live_monitoring", True) and any(
+        row.get("status_stale") or row.get("tasks_stale") for row in snap.get("rows", [])
+    ):
         return {"action": "check", "label": "更新进度", "message": "部分状态或任务进度已过期，请立即检查。"}
     return {}
 

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"76f5299ee966d42d147358348d197194bc2b9ed3abaf21a1079cd203893a19a7","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"b8e2e9cf1f74d5524ce8ca2b9ef78101973b4bdc7da2d2d4f913a412c56daa53"} */
+/* BiliOshi JSX {"code_sha256":"999b7a28277c7ceb60cfb8a84c6347ea2a12f42ee46f9ad4ec42eeef4bdb1387","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"app.jsx","source_sha256":"f17458fa82fef9d6d58ced91906a7a05c87af2fa0ccf2b7eb6df9d6e14276132"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -19,6 +19,7 @@ const {
   roomSortTier
 } = window;
 const DEFAULT_SETTINGS = {
+  auto_watch: true,
   auto_revive: true,
   auto_danmaku_intimacy: true,
   auto_like: false,
@@ -1107,6 +1108,7 @@ function App() {
   };
   const maxConcurrent = snap.max_concurrent_accounts || 3;
   const runningAccountsCount = accounts.filter(item => item.running || item.engine_active).length;
+  const liveWatchAccountsCount = accounts.filter(item => (item.running || item.engine_active) && item.auto_watch !== false).length;
   const setAccountRunning = async (accountId, enabled) => {
     if (!accountId) return;
     const target = accounts.find(item => item.id === accountId);
@@ -1340,7 +1342,7 @@ function App() {
     onPage: setPage,
     account: account,
     activeAccount: viewedAccountObj,
-    runningCount: runningAccountsCount,
+    runningCount: liveWatchAccountsCount,
     paused: viewed.paused,
     avatar: accountAvatar || accountAvatars[viewId],
     onQuit: () => setDialog({
@@ -1421,6 +1423,8 @@ function App() {
     globalPaused: Boolean(snap.global_paused),
     viewedRunning: viewedRunning,
     multiAccount: accounts.length > 0,
+    autoWatch: viewedSettings.auto_watch !== false,
+    onEnableAutoWatch: () => setSetting("auto_watch", true),
     accountName: viewedAccountObj?.name || account.name || "",
     blocked: viewedBlocked,
     onStartWatch: () => setAccountRunning(viewId, true),

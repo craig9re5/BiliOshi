@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"4877844182ab7886682d321e2aa607c985a9b721d169f5085b3e401b88356734","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"9e3b0fda8d46fc986b65d889de4bbab826081d02904db0f84b3c2e922565bb27"} */
+/* BiliOshi JSX {"code_sha256":"b9c1d7b41fdb2bb7732f793612ea03cb0ae1b2c6e08d8700b271be348c20cbaf","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"overview.jsx","source_sha256":"659466f9c8ed78969567db0e1a26bde15e5d84317d323b34d8aa8f5ef425602c"} */
 (function () {
 "use strict";
 /* Overview and room detail. Labels describe verified state from the engine. */
@@ -152,6 +152,7 @@ const DetailPanel = ({
   room,
   image,
   busy,
+  autoWatch = true,
   onAction,
   onOpen,
   onMore,
@@ -261,7 +262,7 @@ const DetailPanel = ({
   }, room.state, /*#__PURE__*/React.createElement("span", {
     className: "state-sub",
     title: absoluteTime(room.last_heartbeat)
-  }, room.healthy ? `已连接 ${durationLabel(room.minutes)}` : room.daily_complete && !room.active ? "已自动结束看播，让出结算名额" : room.live ? "开播后自动建立连接" : "等待恢复正常", room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : "")), /*#__PURE__*/React.createElement("button", {
+  }, room.healthy ? `已连接 ${durationLabel(room.minutes)}` : room.daily_complete && !room.active ? "已自动结束看播，让出结算名额" : !autoWatch ? "已关闭此账号直播自动挂机" : room.live ? "开播后自动建立连接" : "等待恢复正常", room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : "")), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "link-btn state-action",
     onClick: () => onAction("reconnect", room.room),
@@ -283,7 +284,7 @@ const DetailPanel = ({
     className: "gain-value"
   }, room.gain === null ? "—" : `+${numberLabel(room.gain)}`), /*#__PURE__*/React.createElement("div", {
     className: "gain-foot"
-  }, /*#__PURE__*/React.createElement("span", null, room.gain === null ? "等待更新" : "今日已获得"), room.day_limit > 0 && /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("span", null, room.gain === null ? room.no_medal ? "无此主播粉丝牌" : "等待更新" : "今日已获得"), room.day_limit > 0 && /*#__PURE__*/React.createElement("span", {
     className: "tnum"
   }, "\u6BCF\u65E5\u4E0A\u9650 ", numberLabel(room.day_limit))), knownExperience && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "bar level-bar",
@@ -346,7 +347,9 @@ const DetailPanel = ({
     className: "block-title"
   }, "\u4ECA\u65E5\u4EFB\u52A1"), /*#__PURE__*/React.createElement("span", {
     className: "block-note tnum"
-  }, room.tasks_stale ? "等待更新" : `${taskCount} / ${room.tasks.length} 已完成`)), /*#__PURE__*/React.createElement("div", {
+  }, room.no_medal ? "未持有粉丝牌" : room.tasks_stale ? "等待更新" : `${taskCount} / ${room.tasks.length} 已完成`)), room.no_medal ? /*#__PURE__*/React.createElement("p", {
+    className: "action-hint"
+  }, "\u5F53\u524D\u8D26\u53F7\u5C1A\u672A\u62E5\u6709\u8BE5\u4E3B\u64AD\u7684\u7C89\u4E1D\u724C\uFF0C\u6682\u4E0D\u7EDF\u8BA1\u6BCF\u65E5\u4EB2\u5BC6\u5EA6\u4EFB\u52A1\u3002") : /*#__PURE__*/React.createElement("div", {
     className: "task-table"
   }, room.tasks.map(task => {
     const canRedoSingle = !room.tasks_stale && !task.done && !pending && !reason && (task.key === "danmaku" || task.key === "like");
@@ -504,6 +507,8 @@ const Overview = ({
   globalPaused,
   viewedRunning = true,
   multiAccount = false,
+  autoWatch = true,
+  onEnableAutoWatch,
   accountName = "",
   blocked = false,
   onStartWatch,
@@ -596,12 +601,14 @@ const Overview = ({
   const doneCount = rooms.filter(room => room.live && room.daily_complete && !room.healthy).length;
   const unknown = rooms.filter(room => room.live_status == null).length;
   const readOnlyInactive = Boolean(multiAccount && !viewedRunning && !globalPaused);
-  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : globalPaused ? "全部挂机已暂停" : !signedIn ? "等待登录" : blocked ? "保护暂停中" : readOnlyInactive ? "当前账号未挂机" : paused ? "已暂停挂机" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : doneCount ? `${doneCount} 个直播间今日已完成` : unknown ? "等待检查" : "等待开播";
+  const watchDisabled = Boolean(!readOnlyInactive && !globalPaused && !paused && signedIn && !blocked && autoWatch === false);
+  const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…" : globalPaused ? "全部挂机已暂停" : !signedIn ? "等待登录" : blocked ? "保护暂停中" : readOnlyInactive ? "当前账号未挂机" : paused ? "已暂停挂机" : watchDisabled ? "已关闭直播挂机" : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中` : doneCount ? `${doneCount} 个直播间今日已完成` : unknown ? "等待检查" : "等待开播";
   // The cadence and the last check belong together: the title bar keeps only
   // the page name, so the footer is the single place this is reported.
-  const cadence = readOnlyInactive ? lastCheck ? `仅查看模式 · 上次同步 ${relativeTime(lastCheck)}` : "仅查看模式 · 不会自动开始挂机" : `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
+  const cadence = readOnlyInactive ? lastCheck ? `仅查看模式 · 上次同步 ${relativeTime(lastCheck)}` : "仅查看模式 · 不会自动开始挂机" : watchDisabled ? lastCheck ? `仅每日签到 · 上次检查 ${relativeTime(lastCheck)}` : "仅每日签到 · 已停止直播自动挂机" : `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
   const showErrorBanner = Boolean(error || recovery?.action === "login" || recovery?.action === "resume_global");
   const showInactiveStrip = !showErrorBanner && readOnlyInactive;
+  const showWatchDisabledStrip = !showErrorBanner && !showInactiveStrip && watchDisabled;
   const bannerMessage = error || recovery?.message || (!signedIn ? "请先登录 B 站账号以开始挂机" : "");
   const listMutationDisabled = closing || readOnlyInactive;
   const inactiveTip = "开启此账号挂机后可管理关注列表";
@@ -642,7 +649,21 @@ const Overview = ({
   }, /*#__PURE__*/React.createElement(Icon, {
     name: "play",
     size: 12
-  }), "\u5F00\u542F\u6302\u673A") : null), /*#__PURE__*/React.createElement("div", {
+  }), "\u5F00\u542F\u6302\u673A") : null), showWatchDisabledStrip && /*#__PURE__*/React.createElement("div", {
+    className: "view-status-bar",
+    role: "status"
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "info",
+    size: 14
+  }), /*#__PURE__*/React.createElement("span", null, "\u300C", accountName || "此账号", "\u300D\u5DF2\u5173\u95ED\u76F4\u64AD\u81EA\u52A8\u6302\u673A\uFF0C\u4EC5\u4FDD\u7559\u6BCF\u65E5\u7B7E\u5230\u4E0E\u624B\u52A8\u64CD\u4F5C\u3002"), onEnableAutoWatch && /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "btn sm primary",
+    onClick: onEnableAutoWatch,
+    disabled: controlBusy || closing
+  }, /*#__PURE__*/React.createElement(Icon, {
+    name: "play",
+    size: 12
+  }), "\u5F00\u542F\u76F4\u64AD\u6302\u673A")), /*#__PURE__*/React.createElement("div", {
     className: "workspace"
   }, /*#__PURE__*/React.createElement("section", {
     className: "list card",
@@ -808,6 +829,7 @@ const Overview = ({
     room: selected,
     image: images[selected?.uid],
     busy: busyRoom === selected?.room,
+    autoWatch: autoWatch,
     onAction: onAction,
     onOpen: onOpen,
     onClearRoomBlock: onClearRoomBlock,

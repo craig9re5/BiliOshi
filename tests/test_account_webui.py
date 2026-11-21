@@ -323,6 +323,39 @@ class AccountWebUiTests(unittest.TestCase):
         self.assertEqual(self.host.active_id, "uid-1")
         self.assertIsNone(self.host.engine_for("uid-2"))
 
+    def test_daily_only_account_does_not_report_live_watching_or_concurrent_tray(self):
+        from types import SimpleNamespace
+        from desktop.webui.window import WebHost
+
+        self.api.set_account_running("uid-2", True)
+        (self.store.account_root("uid-2") / "settings.json").write_text(
+            json.dumps({
+                "auto_watch": False,
+                "notify_on_live": False,
+                "auto_daily_exp": True,
+            }),
+            encoding="utf-8",
+        )
+        snap = self.api.snapshot()
+        by_id = {item["id"]: item for item in snap["accounts"]}
+        self.assertTrue(by_id["uid-1"]["live_watching"])
+        self.assertTrue(by_id["uid-2"]["running"])
+        self.assertFalse(by_id["uid-2"]["auto_watch"])
+        self.assertFalse(by_id["uid-2"]["live_watching"])
+        self.assertEqual(by_id["uid-2"]["live_room_count"], 0)
+
+        tray_host = SimpleNamespace(
+            _has_tray=lambda: True,
+            _tray=Mock(),
+            _last_tray_color="#ffffff",
+            _last_safety_blocked=False,
+        )
+        WebHost._update_tray(tray_host, {
+            **snap,
+            "rows": [{"live_status": 1, "active": True, "heartbeat_healthy": True}],
+        })
+        self.assertEqual(tray_host._tray.title, "ビリ推し · 1 个直播间挂机中")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -730,8 +730,10 @@ class WebHost:
             row.get("connection_warning") or row.get("watch_warning") for row in rows))
         accounts = snap.get("accounts") or []
         running_accounts = [row for row in accounts if row.get("running")]
+        live_accounts = [row for row in running_accounts if row.get("live_watching", row.get("auto_watch", True))]
         running = len(running_accounts)
-        total_live = sum(int(row.get("live_room_count") or 0) for row in running_accounts)
+        live_running = len(live_accounts)
+        total_live = sum(int(row.get("live_room_count") or 0) for row in live_accounts)
         bg_blocked = any(
             row.get("state") == "protection" or (row.get("safety") or {}).get("blocked")
             for row in accounts
@@ -749,10 +751,12 @@ class WebHost:
                 title = "冷却中" if safety.get("until") else "保护暂停"
         elif warnings:
             title = "需要处理"
-        elif running > 1:
-            title = f"{running} 个账号挂机中 · {total_live} 房开播" if total_live else f"{running} 个账号等待开播"
+        elif live_running > 1:
+            title = f"{live_running} 个账号挂机中 · {total_live} 房开播" if total_live else f"{live_running} 个账号等待开播"
         elif snap.get("paused"):
             title = "已暂停"
+        elif snap.get("auto_watch") is False and not active:
+            title = "仅每日签到"
         elif active:
             title = f"{active} 个直播间挂机中"
         elif done_live:

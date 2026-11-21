@@ -3,15 +3,32 @@
 const { useState, useEffect, useLayoutEffect, useRef } = React;
 const { Icon, relativeTime, absoluteTime, numberLabel } = window;
 
-const Switch = ({ checked, onChange, label, disabled }) => (
-  <button type="button" className="switch" role="switch" aria-checked={Boolean(checked)}
-    aria-label={label} disabled={disabled} onClick={() => onChange(!checked)} />
-);
+const SettingDescriptionContext = React.createContext("");
 
-const SettingRow = ({ name, desc, className = "", children }) => (
-  <div className={`setting${className ? ` ${className}` : ""}`}><div className="setting-text"><div className="setting-name">{name}</div>
-    {desc && <div className="setting-desc">{desc}</div>}</div>{children}</div>
-);
+const Switch = ({ checked, onChange, label, disabled, describedBy }) => {
+  const ctxDesc = React.useContext(SettingDescriptionContext);
+  const descId = describedBy || ctxDesc || undefined;
+  return (
+    <button type="button" className="switch" role="switch" aria-checked={Boolean(checked)}
+      aria-label={label} aria-describedby={descId} disabled={disabled}
+      onClick={() => onChange(!checked)} />
+  );
+};
+
+const SettingRow = ({ name, desc, className = "", children }) => {
+  const descId = React.useId();
+  return (
+    <SettingDescriptionContext.Provider value={desc ? descId : ""}>
+      <div className={`setting${className ? ` ${className}` : ""}`}>
+        <div className="setting-text">
+          <div className="setting-name">{name}</div>
+          {desc && <div id={descId} className="setting-desc">{desc}</div>}
+        </div>
+        {children}
+      </div>
+    </SettingDescriptionContext.Provider>
+  );
+};
 
 /* A compact trigger plus a themed menu. The native select rendered its own
    system popup, which did not follow the card surfaces or spacing. */
@@ -345,22 +362,30 @@ const SettingsPage = ({
             </section>
             <section className="group card">
               <header className="group-head">直播应援</header>
-              <SettingRow name="点亮粉丝牌" desc="仅在主播开播时发送弹幕重新点亮熄灭的牌子">
-                <Switch label="点亮粉丝牌" checked={settings.auto_revive} disabled={disabled("auto_revive")}
-                  onChange={(value) => onSetting("auto_revive", value)} />
+              <SettingRow name="直播自动挂机" desc="主播开播后自动进入直播间看播挂机；关闭后不监控也不连接直播间，仅保留每日签到">
+                <Switch label="直播自动挂机" checked={settings.auto_watch !== false} disabled={disabled("auto_watch")}
+                  onChange={(value) => onSetting("auto_watch", value)} />
               </SettingRow>
-              <SettingRow name="完成弹幕任务" desc="仅在主播开播时自动补齐每日弹幕亲密度任务">
-                <Switch label="完成弹幕任务" checked={settings.auto_danmaku_intimacy} disabled={disabled("auto_danmaku_intimacy")}
-                  onChange={(value) => onSetting("auto_danmaku_intimacy", value)} />
-              </SettingRow>
-              <SettingRow name="发弹幕前佩戴粉丝牌" desc="开播执行弹幕任务前自动佩戴对应主播的粉丝牌">
-                <Switch label="发弹幕前佩戴粉丝牌" checked={settings.auto_wear !== false} disabled={disabled("auto_wear")}
-                  onChange={(value) => onSetting("auto_wear", value)} />
-              </SettingRow>
-              <SettingRow name="直播点赞" desc="进入开播直播间后自动完成点赞">
-                <Switch label="直播点赞" checked={settings.auto_like} disabled={disabled("auto_like")}
-                  onChange={(value) => onSetting("auto_like", value)} />
-              </SettingRow>
+              {settings.auto_watch !== false && (
+                <>
+                  <SettingRow className="setting-sub" name="点亮粉丝牌" desc="仅在主播开播时发送弹幕重新点亮熄灭的牌子">
+                    <Switch label="点亮粉丝牌" checked={settings.auto_revive} disabled={disabled("auto_revive")}
+                      onChange={(value) => onSetting("auto_revive", value)} />
+                  </SettingRow>
+                  <SettingRow className="setting-sub" name="完成弹幕任务" desc="仅在主播开播时自动补齐每日弹幕亲密度任务">
+                    <Switch label="完成弹幕任务" checked={settings.auto_danmaku_intimacy} disabled={disabled("auto_danmaku_intimacy")}
+                      onChange={(value) => onSetting("auto_danmaku_intimacy", value)} />
+                  </SettingRow>
+                  <SettingRow className="setting-sub" name="发弹幕前佩戴粉丝牌" desc="开播执行弹幕任务前自动佩戴对应主播的粉丝牌">
+                    <Switch label="发弹幕前佩戴粉丝牌" checked={settings.auto_wear !== false} disabled={disabled("auto_wear")}
+                      onChange={(value) => onSetting("auto_wear", value)} />
+                  </SettingRow>
+                  <SettingRow className="setting-sub" name="直播点赞" desc="进入开播直播间后自动完成点赞">
+                    <Switch label="直播点赞" checked={settings.auto_like} disabled={disabled("auto_like")}
+                      onChange={(value) => onSetting("auto_like", value)} />
+                  </SettingRow>
+                </>
+              )}
             </section>
             <section className="group card">
               <header className="group-head">提醒与记录</header>
@@ -481,7 +506,7 @@ const AccountRow = ({
         </div>
         <div className="account-item-meta">
           UID {account.uid}{account.room_count > 0 ? ` · 关注 ${account.room_count} 位` : ""}
-          {account.live_room_count > 0 ? ` · ${account.live_room_count} 房直播中` : ""}
+          {account.auto_watch !== false && account.live_room_count > 0 ? ` · ${account.live_room_count} 房直播中` : ""}
         </div>
         {issueText && <div className="account-item-sub warn">{issueText}</div>}
       </div>
@@ -545,6 +570,7 @@ const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, maxCon
   const checkingSafety = Boolean(safetyProbe?.loading);
   const locationParts = [hold.room_label, hold.operation_label].filter(Boolean);
   const runningCount = (accounts || []).filter((item) => item.running || item.engine_active).length;
+  const liveWatchingCount = (accounts || []).filter((item) => (item.running || item.engine_active) && item.auto_watch !== false).length;
   return (<>
     <div className="settings" data-screen-label="账号"><div className="settings-inner">
       <section className="group card">
@@ -553,7 +579,7 @@ const AccountPage = ({ accounts, activeId, account, avatar, avatars = {}, maxCon
             <span className="group-head-title">B 站账号</span>
             {accounts.length > 1 && (
               <span className="scope-tag">
-                {runningCount > 1 ? `${runningCount} 号同时挂机中` : `最多支持 ${maxConcurrent} 号同时挂机`}
+                {liveWatchingCount > 1 ? `${liveWatchingCount} 号同时看播中` : `最多支持 ${maxConcurrent} 号同时挂机`}
               </span>
             )}
           </div>

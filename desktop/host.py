@@ -18,7 +18,7 @@ from bilioshi.members import load_account_members
 from bilioshi.runtime import FileLock, file_stat_signature, read_json, update_json
 from bilioshi.safety import blocks_watch, describe_hold
 from desktop.engine import Engine
-from desktop.storage import initialize
+from desktop.storage import initialize, resolve_auto_watch
 from desktop.windows import Job
 
 MAX_CONCURRENT_ACCOUNTS = 3
@@ -486,10 +486,30 @@ class AccountHost:
             state = "paused"
         else:
             state = "idle"
+        auto_watch = (
+            bool(engine.config.get("auto_watch", True))
+            if engine is not None and isinstance(getattr(engine, "config", None), dict)
+            else resolve_auto_watch(settings)
+        )
+        auto_daily_exp = (
+            bool(engine.config.get("auto_daily_exp", True))
+            if engine is not None and isinstance(getattr(engine, "config", None), dict)
+            else bool(settings.get("auto_daily_exp", True))
+        )
+        notify_on_live = (
+            bool(engine.config.get("notify_on_live", True))
+            if engine is not None and isinstance(getattr(engine, "config", None), dict)
+            else bool(settings.get("notify_on_live", True))
+        )
+        live_monitoring = auto_watch or notify_on_live
         rows = status.get("rows") if isinstance(status.get("rows"), list) else []
-        live = sum(
-            1 for item in rows
-            if isinstance(item, dict) and item.get("live_status") == 1
+        live = (
+            sum(
+                1 for item in rows
+                if isinstance(item, dict) and item.get("live_status") == 1
+            )
+            if live_monitoring
+            else 0
         )
         gain = None
         for item in rows:
@@ -505,6 +525,9 @@ class AccountHost:
             "signed_in": self.store.has_credentials(account_id),
             "engine_active": engine_active,
             "running": running,
+            "live_watching": bool(running and auto_watch),
+            "auto_watch": auto_watch,
+            "auto_daily_exp": auto_daily_exp,
             "paused": paused,
             "global_paused": self.global_paused,
             "state": state,

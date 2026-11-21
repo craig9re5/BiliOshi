@@ -119,7 +119,7 @@ const RoomRow = ({ room, selected, onSelect, onContextMenu, image, managing, che
   );
 };
 
-const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, onClearRoomBlock, onDismissTaskError, onDismissWatchWarning, dimmed }) => {
+const DetailPanel = ({ room, image, busy, autoWatch = true, onAction, onOpen, onMore, moreOpen, onClearRoomBlock, onDismissTaskError, onDismissWatchWarning, dimmed }) => {
   const classes = `detail card${dimmed ? " detail-dim" : ""}`;
   if (!room) return (
     <aside className={classes} aria-label="直播间详情" aria-hidden={dimmed || undefined}>
@@ -176,6 +176,7 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
             <span className="state-sub" title={absoluteTime(room.last_heartbeat)}>
               {room.healthy ? `已连接 ${durationLabel(room.minutes)}`
                 : room.daily_complete && !room.active ? "已自动结束看播，让出结算名额"
+                : !autoWatch ? "已关闭此账号直播自动挂机"
                 : room.live ? "开播后自动建立连接" : "等待恢复正常"}
               {room.last_heartbeat && room.active ? ` · ${relativeTime(room.last_heartbeat)}同步` : ""}
             </span>
@@ -198,7 +199,7 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
           </div>
           <div className="gain-value">{room.gain === null ? "—" : `+${numberLabel(room.gain)}`}</div>
           <div className="gain-foot">
-            <span>{room.gain === null ? "等待更新" : "今日已获得"}</span>
+            <span>{room.gain === null ? (room.no_medal ? "无此主播粉丝牌" : "等待更新") : "今日已获得"}</span>
             {room.day_limit > 0 && <span className="tnum">每日上限 {numberLabel(room.day_limit)}</span>}
           </div>
           {knownExperience && <>
@@ -251,34 +252,40 @@ const DetailPanel = ({ room, image, busy, onAction, onOpen, onMore, moreOpen, on
         {room.reconnect_message && <div className="inline-status" role="status">{room.reconnect_message}</div>}
         <section className="block">
           <div className="block-head"><span className="block-title">今日任务</span>
-            <span className="block-note tnum">{room.tasks_stale ? "等待更新" : `${taskCount} / ${room.tasks.length} 已完成`}</span>
+            <span className="block-note tnum">
+              {room.no_medal ? "未持有粉丝牌" : room.tasks_stale ? "等待更新" : `${taskCount} / ${room.tasks.length} 已完成`}
+            </span>
           </div>
-          <div className="task-table">
-            {room.tasks.map((task) => {
-              const canRedoSingle = !room.tasks_stale && !task.done && !pending && !reason
-                && (task.key === "danmaku" || task.key === "like");
-              return (
-                <div className="task" key={task.key}>
-                  <span className="task-left">
-                    <Icon name={TASK_ICONS[task.key] || "circle"} size={13} />
-                    <span className="task-name">{task.name}</span>
-                  </span>
-                  <span className="task-right">
-                    <span className={`task-val ${task.done ? "done" : !task.text ? "pending" : ""}`}>
-                      {task.done && <Icon name="check" size={11} />}{task.text || "待更新"}
+          {room.no_medal ? (
+            <p className="action-hint">当前账号尚未拥有该主播的粉丝牌，暂不统计每日亲密度任务。</p>
+          ) : (
+            <div className="task-table">
+              {room.tasks.map((task) => {
+                const canRedoSingle = !room.tasks_stale && !task.done && !pending && !reason
+                  && (task.key === "danmaku" || task.key === "like");
+                return (
+                  <div className="task" key={task.key}>
+                    <span className="task-left">
+                      <Icon name={TASK_ICONS[task.key] || "circle"} size={13} />
+                      <span className="task-name">{task.name}</span>
                     </span>
-                    {canRedoSingle && (
-                      <button type="button" className="task-redo-btn"
-                        onClick={() => onAction("redo", room.room, task.key)}
-                        title={`单独补齐${task.name}任务`}>
-                        补做
-                      </button>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+                    <span className="task-right">
+                      <span className={`task-val ${task.done ? "done" : !task.text ? "pending" : ""}`}>
+                        {task.done && <Icon name="check" size={11} />}{task.text || "待更新"}
+                      </span>
+                      {canRedoSingle && (
+                        <button type="button" className="task-redo-btn"
+                          onClick={() => onAction("redo", room.room, task.key)}
+                          title={`单独补齐${task.name}任务`}>
+                          补做
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
       <div className="detail-action-area">
@@ -361,8 +368,8 @@ const OverviewActions = ({
 };
 
 const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
-  viewedRunning = true, multiAccount = false, accountName = "", blocked = false,
-  onStartWatch, onOpenLogin, onOpenSafety,
+  viewedRunning = true, multiAccount = false, autoWatch = true, onEnableAutoWatch,
+  accountName = "", blocked = false, onStartWatch, onOpenLogin, onOpenSafety,
   onAction, onOpen, onAddMember, onSyncMedals, onRemove, onContextMenu, menuRoom, menuMode,
   busyRoom, controlBusy, error, recovery, onRecovery, interval, lastCheck, checking, images,
   signedIn, closing, bridgeConnected, onBatchRemove, onClearRoomBlock, onDismissTaskError, onDismissWatchWarning }) => {
@@ -442,12 +449,14 @@ const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
   const doneCount = rooms.filter((room) => room.live && room.daily_complete && !room.healthy).length;
   const unknown = rooms.filter((room) => room.live_status == null).length;
   const readOnlyInactive = Boolean(multiAccount && !viewedRunning && !globalPaused);
+  const watchDisabled = Boolean(!readOnlyInactive && !globalPaused && !paused && signedIn && !blocked && autoWatch === false);
   const status = closing ? "正在退出…" : !bridgeConnected ? "正在连接后台…"
     : globalPaused ? "全部挂机已暂停"
     : !signedIn ? "等待登录"
     : blocked ? "保护暂停中"
     : readOnlyInactive ? "当前账号未挂机"
     : paused ? "已暂停挂机"
+    : watchDisabled ? "已关闭直播挂机"
     : error ? "需要处理" : healthy ? `${healthy} 个直播间挂机中`
     : doneCount ? `${doneCount} 个直播间今日已完成`
     : unknown ? "等待检查" : "等待开播";
@@ -455,9 +464,12 @@ const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
   // the page name, so the footer is the single place this is reported.
   const cadence = readOnlyInactive
     ? (lastCheck ? `仅查看模式 · 上次同步 ${relativeTime(lastCheck)}` : "仅查看模式 · 不会自动开始挂机")
-    : `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
+    : watchDisabled
+      ? (lastCheck ? `仅每日签到 · 上次检查 ${relativeTime(lastCheck)}` : "仅每日签到 · 已停止直播自动挂机")
+      : `每 ${interval} 分钟检查一次${lastCheck ? ` · 上次检查 ${relativeTime(lastCheck)}` : ""}`;
   const showErrorBanner = Boolean(error || recovery?.action === "login" || recovery?.action === "resume_global");
   const showInactiveStrip = !showErrorBanner && readOnlyInactive;
+  const showWatchDisabledStrip = !showErrorBanner && !showInactiveStrip && watchDisabled;
   const bannerMessage = error || recovery?.message || (!signedIn ? "请先登录 B 站账号以开始挂机" : "");
   const listMutationDisabled = closing || readOnlyInactive;
   const inactiveTip = "开启此账号挂机后可管理关注列表";
@@ -490,6 +502,19 @@ const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
             <Icon name="play" size={12} />开启挂机
           </button>
         ) : null}
+      </div>
+    )}
+    {showWatchDisabledStrip && (
+      <div className="view-status-bar" role="status">
+        <Icon name="info" size={14} />
+        <span>
+          「{accountName || "此账号"}」已关闭直播自动挂机，仅保留每日签到与手动操作。
+        </span>
+        {onEnableAutoWatch && (
+          <button type="button" className="btn sm primary" onClick={onEnableAutoWatch} disabled={controlBusy || closing}>
+            <Icon name="play" size={12} />开启直播挂机
+          </button>
+        )}
       </div>
     )}
     <div className="workspace">
@@ -584,7 +609,7 @@ const Overview = ({ rooms, selectedId, onSelect, paused, globalPaused,
             managing={managing} checked={selectedBatch.has(room.room)} onToggleCheck={toggleCheck} />)}
         </div>
       </section>
-      <DetailPanel room={selected} image={images[selected?.uid]} busy={busyRoom === selected?.room} onAction={onAction} onOpen={onOpen}
+      <DetailPanel room={selected} image={images[selected?.uid]} busy={busyRoom === selected?.room} autoWatch={autoWatch} onAction={onAction} onOpen={onOpen}
         onClearRoomBlock={onClearRoomBlock} onDismissTaskError={onDismissTaskError}
         onDismissWatchWarning={onDismissWatchWarning} dimmed={managing}
         moreOpen={Boolean(selected && menuMode === "overflow" && menuRoom === selected.room)}

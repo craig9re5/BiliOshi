@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"80a543bd6d974ca1e3c9b3ac22c247014c7ccf589f525307fa60c4119148ae9e","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"4a34ddc9b53ea1afb6795930e9c587484634ad4da79482b5492edac3f4679b2f"} */
+/* BiliOshi JSX {"code_sha256":"6d5a94d6141fbafab4759d7687c2334b2608165065da84fabca69939eebf9ad4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"settings.jsx","source_sha256":"93b6bc170943c4601056dddaf10d49ac5471a851051598fe8be53238cd041e05"} */
 (function () {
 "use strict";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
@@ -16,34 +16,47 @@ const {
   absoluteTime,
   numberLabel
 } = window;
+const SettingDescriptionContext = React.createContext("");
 const Switch = ({
   checked,
   onChange,
   label,
-  disabled
-}) => /*#__PURE__*/React.createElement("button", {
-  type: "button",
-  className: "switch",
-  role: "switch",
-  "aria-checked": Boolean(checked),
-  "aria-label": label,
-  disabled: disabled,
-  onClick: () => onChange(!checked)
-});
+  disabled,
+  describedBy
+}) => {
+  const ctxDesc = React.useContext(SettingDescriptionContext);
+  const descId = describedBy || ctxDesc || undefined;
+  return /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "switch",
+    role: "switch",
+    "aria-checked": Boolean(checked),
+    "aria-label": label,
+    "aria-describedby": descId,
+    disabled: disabled,
+    onClick: () => onChange(!checked)
+  });
+};
 const SettingRow = ({
   name,
   desc,
   className = "",
   children
-}) => /*#__PURE__*/React.createElement("div", {
-  className: `setting${className ? ` ${className}` : ""}`
-}, /*#__PURE__*/React.createElement("div", {
-  className: "setting-text"
-}, /*#__PURE__*/React.createElement("div", {
-  className: "setting-name"
-}, name), desc && /*#__PURE__*/React.createElement("div", {
-  className: "setting-desc"
-}, desc)), children);
+}) => {
+  const descId = React.useId();
+  return /*#__PURE__*/React.createElement(SettingDescriptionContext.Provider, {
+    value: desc ? descId : ""
+  }, /*#__PURE__*/React.createElement("div", {
+    className: `setting${className ? ` ${className}` : ""}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "setting-text"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "setting-name"
+  }, name), desc && /*#__PURE__*/React.createElement("div", {
+    id: descId,
+    className: "setting-desc"
+  }, desc)), children));
+};
 
 /* A compact trigger plus a themed menu. The native select rendered its own
    system popup, which did not follow the card surfaces or spacing. */
@@ -474,6 +487,15 @@ const SettingsPage = ({
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head"
   }, "\u76F4\u64AD\u5E94\u63F4"), /*#__PURE__*/React.createElement(SettingRow, {
+    name: "\u76F4\u64AD\u81EA\u52A8\u6302\u673A",
+    desc: "\u4E3B\u64AD\u5F00\u64AD\u540E\u81EA\u52A8\u8FDB\u5165\u76F4\u64AD\u95F4\u770B\u64AD\u6302\u673A\uFF1B\u5173\u95ED\u540E\u4E0D\u76D1\u63A7\u4E5F\u4E0D\u8FDE\u63A5\u76F4\u64AD\u95F4\uFF0C\u4EC5\u4FDD\u7559\u6BCF\u65E5\u7B7E\u5230"
+  }, /*#__PURE__*/React.createElement(Switch, {
+    label: "\u76F4\u64AD\u81EA\u52A8\u6302\u673A",
+    checked: settings.auto_watch !== false,
+    disabled: disabled("auto_watch"),
+    onChange: value => onSetting("auto_watch", value)
+  })), settings.auto_watch !== false && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(SettingRow, {
+    className: "setting-sub",
     name: "\u70B9\u4EAE\u7C89\u4E1D\u724C",
     desc: "\u4EC5\u5728\u4E3B\u64AD\u5F00\u64AD\u65F6\u53D1\u9001\u5F39\u5E55\u91CD\u65B0\u70B9\u4EAE\u7184\u706D\u7684\u724C\u5B50"
   }, /*#__PURE__*/React.createElement(Switch, {
@@ -482,6 +504,7 @@ const SettingsPage = ({
     disabled: disabled("auto_revive"),
     onChange: value => onSetting("auto_revive", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "setting-sub",
     name: "\u5B8C\u6210\u5F39\u5E55\u4EFB\u52A1",
     desc: "\u4EC5\u5728\u4E3B\u64AD\u5F00\u64AD\u65F6\u81EA\u52A8\u8865\u9F50\u6BCF\u65E5\u5F39\u5E55\u4EB2\u5BC6\u5EA6\u4EFB\u52A1"
   }, /*#__PURE__*/React.createElement(Switch, {
@@ -490,6 +513,7 @@ const SettingsPage = ({
     disabled: disabled("auto_danmaku_intimacy"),
     onChange: value => onSetting("auto_danmaku_intimacy", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "setting-sub",
     name: "\u53D1\u5F39\u5E55\u524D\u4F69\u6234\u7C89\u4E1D\u724C",
     desc: "\u5F00\u64AD\u6267\u884C\u5F39\u5E55\u4EFB\u52A1\u524D\u81EA\u52A8\u4F69\u6234\u5BF9\u5E94\u4E3B\u64AD\u7684\u7C89\u4E1D\u724C"
   }, /*#__PURE__*/React.createElement(Switch, {
@@ -498,6 +522,7 @@ const SettingsPage = ({
     disabled: disabled("auto_wear"),
     onChange: value => onSetting("auto_wear", value)
   })), /*#__PURE__*/React.createElement(SettingRow, {
+    className: "setting-sub",
     name: "\u76F4\u64AD\u70B9\u8D5E",
     desc: "\u8FDB\u5165\u5F00\u64AD\u76F4\u64AD\u95F4\u540E\u81EA\u52A8\u5B8C\u6210\u70B9\u8D5E"
   }, /*#__PURE__*/React.createElement(Switch, {
@@ -505,7 +530,7 @@ const SettingsPage = ({
     checked: settings.auto_like,
     disabled: disabled("auto_like"),
     onChange: value => onSetting("auto_like", value)
-  }))), /*#__PURE__*/React.createElement("section", {
+  })))), /*#__PURE__*/React.createElement("section", {
     className: "group card"
   }, /*#__PURE__*/React.createElement("header", {
     className: "group-head"
@@ -681,7 +706,7 @@ const AccountRow = ({
     className: "mini-tag warn"
   }, "\u9700\u5728\u5E73\u53F0\u5904\u7406")), /*#__PURE__*/React.createElement("div", {
     className: "account-item-meta"
-  }, "UID ", account.uid, account.room_count > 0 ? ` · 关注 ${account.room_count} 位` : "", account.live_room_count > 0 ? ` · ${account.live_room_count} 房直播中` : ""), issueText && /*#__PURE__*/React.createElement("div", {
+  }, "UID ", account.uid, account.room_count > 0 ? ` · 关注 ${account.room_count} 位` : "", account.auto_watch !== false && account.live_room_count > 0 ? ` · ${account.live_room_count} 房直播中` : ""), issueText && /*#__PURE__*/React.createElement("div", {
     className: "account-item-sub warn"
   }, issueText)), /*#__PURE__*/React.createElement("div", {
     className: "account-item-actions"
@@ -774,6 +799,7 @@ const AccountPage = ({
   const checkingSafety = Boolean(safetyProbe?.loading);
   const locationParts = [hold.room_label, hold.operation_label].filter(Boolean);
   const runningCount = (accounts || []).filter(item => item.running || item.engine_active).length;
+  const liveWatchingCount = (accounts || []).filter(item => (item.running || item.engine_active) && item.auto_watch !== false).length;
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "settings",
     "data-screen-label": "\u8D26\u53F7"
@@ -789,7 +815,7 @@ const AccountPage = ({
     className: "group-head-title"
   }, "B \u7AD9\u8D26\u53F7"), accounts.length > 1 && /*#__PURE__*/React.createElement("span", {
     className: "scope-tag"
-  }, runningCount > 1 ? `${runningCount} 号同时挂机中` : `最多支持 ${maxConcurrent} 号同时挂机`)), /*#__PURE__*/React.createElement("button", {
+  }, liveWatchingCount > 1 ? `${liveWatchingCount} 号同时看播中` : `最多支持 ${maxConcurrent} 号同时挂机`)), /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "btn primary sm",
     onClick: () => onScan(""),

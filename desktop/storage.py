@@ -5,6 +5,24 @@ from bilioshi.members import load_account_members, load_members
 from bilioshi.operating_mode import profile_for
 
 
+def resolve_auto_watch(config):
+    """Resolve live-watching enablement, respecting legacy all-off live configs."""
+    if not isinstance(config, dict):
+        return True
+    if "auto_watch" in config:
+        return bool(config["auto_watch"])
+    legacy_live_flags = (
+        "auto_revive",
+        "auto_danmaku_intimacy",
+        "auto_like",
+        "auto_wear",
+        "notify_on_live",
+    )
+    if all(config.get(key) is False for key in legacy_live_flags):
+        return False
+    return True
+
+
 def load_config(root):
     config = read_json(root / "settings.json")
     if not isinstance(config, dict):
@@ -30,6 +48,7 @@ def load_config(root):
     config.setdefault("coin_with_like", False)
     config.setdefault("auto_wear", True)
     for key in (
+        "auto_watch",
         "auto_revive",
         "auto_danmaku_intimacy",
         "auto_like",
@@ -43,6 +62,7 @@ def load_config(root):
     ):
         if key in config and type(config[key]) is not bool:
             raise ValueError(f"{key} 必须为 true 或 false")
+    config["auto_watch"] = resolve_auto_watch(config)
     coin_target = config.get("coin_target", 5)
     if type(coin_target) is not int or not 0 <= coin_target <= 5:
         raise ValueError("coin_target 必须为 0–5 的整数")
@@ -61,6 +81,7 @@ def initialize(root, defaults):
         settings = {
             "run_mode": "stable",
             "check_minutes": 5,
+            "auto_watch": True,
             "auto_revive": True,
             "auto_danmaku_intimacy": True,
             "auto_like": False,

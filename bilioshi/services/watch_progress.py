@@ -16,6 +16,21 @@ ACCOUNT_STALL_SECONDS = 60 * 60
 ROTATION_GRACE_SECONDS = 30 * 60
 
 
+def has_no_fans_medal(club):
+    """Return True when GetActivatedMedalInfo confirms no fan medal/tasks exist."""
+    if not isinstance(club, dict) or not club:
+        return False
+    tasks = club.get("task_info") if "task_info" in club else club.get("tasks")
+    if tasks not in (None, []):
+        return False
+    return (
+        "next_intimacy" in club
+        and club.get("next_intimacy") == 0
+        and not club.get("intimacy")
+        and not club.get("is_lighted")
+    )
+
+
 def _task_items(club):
     if not isinstance(club, dict):
         return []
@@ -119,6 +134,8 @@ class ProgressTracker:
             self.accepted_at = accepted_seconds
         progress = parse_watch_task(club)
         if progress is None:
+            if self.valid is None and has_no_fans_medal(club):
+                return {"status": "no_medal", "warning": "", "progress": None}
             age = max(0, now - (self.last_valid if self.last_valid is not None else self.baseline_at))
             warning = ("长时间无法核验看播任务，心跳成功不能证明亲密度到账，请点击立即检查或在 B 站核对。"
                        if age >= MIN_STALL_SECONDS else "")
@@ -217,6 +234,7 @@ class WatchProgressMonitor:
             verified = {
                 "day": self.tracker.day,
                 "verified_at": time.time(),
+                "has_medal": True,
                 "tasks": [
                     {key: task.get(key) for key in ("jump_type", "title", "sub_title", "is_done")}
                     for task in club.get("task_info", [])
@@ -231,6 +249,17 @@ class WatchProgressMonitor:
             if isinstance(free_intimacy, int) and not isinstance(free_intimacy, bool):
                 verified["free_intimacy"] = free_intimacy
             self.verified = verified
+        elif has_no_fans_medal(club) and not self.verified.get("has_medal"):
+            self.verified = {
+                "day": self.tracker.day,
+                "verified_at": time.time(),
+                "has_medal": False,
+                "tasks": [],
+                "intimacy": 0,
+                "next_intimacy": 0,
+                "is_lighted": False,
+                "reach_free_intimacy_limit": False,
+            }
         self.result.update(self.verified)
         self._publish()
 

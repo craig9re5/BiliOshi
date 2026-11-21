@@ -110,7 +110,25 @@ class Engine:
             self.error = f"配置错误：{exc}"
         self.paused = bool(self.config.get("paused", False))
         self.credentials_signature = self._credentials_signature()
+        if (
+            not self.account
+            and self.credentials_signature
+            and not self._live_monitoring_enabled()
+            and isinstance(self.daily, dict)
+            and self.daily.get("ok")
+            and self.daily.get("day") == task_day()
+        ):
+            name = (self.daily.get("user") or {}).get("name", "")
+            if name:
+                self.account = name
+                self.account_checked_at = number(self.daily.get("updated"), time.time())
         self.thread = threading.Thread(target=self.run, name="monitor", daemon=True)
+
+    def _live_watch_enabled(self):
+        return bool(self.config.get("auto_watch", True))
+
+    def _live_monitoring_enabled(self):
+        return self._live_watch_enabled() or bool(self.config.get("notify_on_live", True))
 
     def start(self):
         if self._started:
@@ -194,7 +212,7 @@ class Engine:
             policy_changed = any(
                 (
                     config.get(k) != self.config.get(k)
-                    for k in ("auto_revive", "auto_danmaku_intimacy", "auto_like")
+                    for k in ("auto_watch", "auto_revive", "auto_danmaku_intimacy", "auto_like")
                 )
             )
             credentials_changed = signature != self.credentials_signature
@@ -214,7 +232,10 @@ class Engine:
                 self.profile = {}
                 self.auto_daily_attempted_day = ""
                 self._probe_verified_for_daily = False
-            elif config.get("do_coin") and not self.config.get("do_coin"):
+            elif (
+                (config.get("do_coin") and not self.config.get("do_coin"))
+                or (config.get("auto_daily_exp", True) and not self.config.get("auto_daily_exp", True))
+            ):
                 self.auto_daily_attempted_day = ""
             keep = {m["room"] for m in members}
             self.manual_reconnects = {room: request for room, request in self.manual_reconnects.items() if room in keep}
@@ -231,12 +252,21 @@ class Engine:
                     self._record_interruption(room, "member_removed")
             self.config, self.members = (config, members)
             self.credentials_signature = signature
+            if not self._live_watch_enabled() and self.workers:
+                self.stop_children("watch_disabled")
+            if not self._live_monitoring_enabled():
+                self.known_live.clear()
             paused = bool(config.get("paused", False))
             if paused and (not self.paused):
                 self.stop_children("paused")
             self.paused = paused
-            if changed:
+            if changed and self._live_monitoring_enabled():
                 self.next_check = 0
+            if policy_changed and not self._live_watch_enabled():
+                try:
+                    self.persist()
+                except OSError:
+                    logging.warning("Cannot persist settings update for %s", self.account_id or "root")
             return changed
 
     def spawn(self, *args):
@@ -393,6 +423,8 @@ class Engine:
                 return False, "账号保护暂停中，请先处理账号异常。"
             if self.paused:
                 return False, "挂机已暂停，请先点击恢复挂机。"
+            if not self._live_watch_enabled():
+                return False, "已关闭此账号的直播自动挂机，请先在设置中开启后再重连。"
             previous = self.manual_reconnects.get(room, {})
             now = time.time()
             if previous.get("cooldown_until", 0) > now:
@@ -624,6 +656,7 @@ class Engine:
         return False
 
     def _run_daily_worker(self, *, auto=False, only_task=None):
+        res = None
         try:
             if auto:
                 with self.lock:
@@ -649,15 +682,27 @@ class Engine:
                 self.daily_running = False
                 if auto:
                     self._load_daily_cache()
+                    if isinstance(res, dict) and isinstance(res.get("user"), dict):
+                        user = res["user"]
+                        if user.get("name"):
+                            self.account = user["name"]
+                            self.account_checked_at = max(
+                                self.account_checked_at,
+                                float(res.get("updated") or time.time()),
+                            )
+                    self.safety = self.application.safety_status()
                     if not self.stopping.is_set() and not self.suspended:
                         self.persist()
 
     def _maybe_schedule_daily(self, now):
+        verified = self._probe_verified_for_daily or (
+            not self._live_monitoring_enabled() and bool(self.credentials_signature)
+        )
         if (
             self.suspended
             or self.paused
             or self.stopping.is_set()
-            or not self._probe_verified_for_daily
+            or not verified
             or blocks_watch(self.safety)
             or self.daily_running
             or not self.config.get("auto_daily_exp", True)
@@ -988,9 +1033,11 @@ class Engine:
                 self.last_check = now
                 if self.probe_generation == self.generation:
                     self._apply_probe(result, now)
+        allow_probe = self._live_monitoring_enabled() or getattr(self, "force_probe", False)
         if (
             not self.suspended
             and not self.probe
+            and allow_probe
             and now >= self.next_check
             and (not self.paused or getattr(self, "force_probe", False))
         ):
@@ -1108,6 +1155,10 @@ class Engine:
             if room in self.known_live:
                 logging.info("Room went offline room=%s name=%s", room, member["name"])
             self.known_live.discard(room)
+        if not self._live_watch_enabled():
+            if manual and request:
+                request.update(state="failed", message="已关闭此账号的直播自动挂机，请先开启后再重连。")
+            return
         if (
             self.suspended
             or self.paused

@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"547c3f235a537f43a3b915258e66bd3bf1dc29420e9f6c340f24873af027698c","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"bridge.jsx","source_sha256":"b3be83e2838ca47bd3bfb53a3320ca8758c11f759279f0e38e2d4e4d2fefa739"} */
+/* BiliOshi JSX {"code_sha256":"ebbe7dc038af585786645097e617c8550969d837e587acf9998e82c80507e0b5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"bridge.jsx","source_sha256":"0d5df057ea5c67a9088ac4a8c95a625cb76b7e38dfb9b01795c30f640a5ff28e"} */
 (function () {
 "use strict";
 /* Transport and presentation adapters. Business decisions stay in Python. */
@@ -129,6 +129,9 @@ function toRoom(row, snap) {
   } else if (row.active) state = "正在连接";else if (row.phase === "等待重试") {
     state = "等待重试";
     tone = "warn";
+  } else if (live && row.phase === "直播中 · 已关挂机") {
+    state = "已关挂机";
+    tone = "muted";
   } else if (live) {
     if (row.task_error) {
       state = "任务待处理";
@@ -140,6 +143,9 @@ function toRoom(row, snap) {
   } else if (row.task_error || hasRoomBlock) {
     state = row.task_error ? "任务异常" : "互动受限";
     tone = "warn";
+  } else if (row.phase === "已关直播监控" || row.phase === "已关直播挂机") {
+    state = "已关挂机";
+    tone = "muted";
   } else if (row.status_stale && row.status_updated) state = "状态已过期";else if (row.live_status == null) state = "等待检查";
   const fallback = "状态尚未确认，更新后可操作";
   return {

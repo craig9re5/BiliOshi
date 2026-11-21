@@ -1,4 +1,4 @@
-/* BiliOshi JSX {"code_sha256":"bf0a4cb23e0d6e32a3b435eb3b14eab371efaa7684bdd574d2a4f552c55ea6c5","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"0b7022f1a15ccc888e161d09478140e1d43efe42f45ce6ff9cf68a981ea60f00"} */
+/* BiliOshi JSX {"code_sha256":"406b0d638984eda1456ffdead4797140e3602bfeed34813fd46b38280226d1a4","compiler_sha256":"2623a9e22809915ce789b4461154e277ddce520d5a4320c14d44332a5d0dcea0","pipeline_sha256":"38ef510e7adae30e369b652f15eb1f93f974ca68daef2928f8b826127cbf0bc2","schema":1,"source":"accounts.jsx","source_sha256":"3040cb10348609a0961813d02f6c51723cd714ac114e3aac74bdd36c991f8b6f"} */
 (function () {
 "use strict";
 /* Account tabs. Selecting a tab only changes which account is viewed;
@@ -35,10 +35,21 @@ function accountStateLabel(account) {
     label: "全局暂停",
     tone: "muted"
   };
-  if (account.running) return {
-    label: "挂机中",
-    tone: "live"
-  };
+  if (account.running) {
+    if (account.auto_watch === false) {
+      return account.auto_daily_exp === false ? {
+        label: "仅在线",
+        tone: "muted"
+      } : {
+        label: "仅签到",
+        tone: "muted"
+      };
+    }
+    return {
+      label: "挂机中",
+      tone: "live"
+    };
+  }
   if (account.paused) return {
     label: "已暂停",
     tone: "muted"
@@ -130,7 +141,7 @@ const AccountTabs = ({
     }, account.name), /*#__PURE__*/React.createElement("i", {
       className: `tab-state ${state.tone}`,
       "aria-hidden": "true"
-    }), live > 0 && /*#__PURE__*/React.createElement("span", {
+    }), account.auto_watch !== false && live > 0 && /*#__PURE__*/React.createElement("span", {
       className: "tab-count",
       title: "\u76F4\u64AD\u4E2D\u7684\u76F4\u64AD\u95F4\u6570"
     }, live));

@@ -21,7 +21,14 @@ function accountStateLabel(account) {
   if (account.status === "blocked") return { label: "保护暂停", tone: "warn" };
   if (!account.signed_in || account.status === "needs_login") return { label: "登录失效", tone: "warn" };
   if (account.global_paused) return { label: "全局暂停", tone: "muted" };
-  if (account.running) return { label: "挂机中", tone: "live" };
+  if (account.running) {
+    if (account.auto_watch === false) {
+      return account.auto_daily_exp === false
+        ? { label: "仅在线", tone: "muted" }
+        : { label: "仅签到", tone: "muted" };
+    }
+    return { label: "挂机中", tone: "live" };
+  }
   if (account.paused) return { label: "已暂停", tone: "muted" };
   return { label: "未挂机", tone: "muted" };
 }
@@ -66,7 +73,7 @@ const AccountTabs = ({ accounts, viewId, activeId, avatars = {}, onSelect, onAdd
             </span>
             <span className="tab-name">{account.name}</span>
             <i className={`tab-state ${state.tone}`} aria-hidden="true" />
-            {live > 0 && <span className="tab-count" title="直播中的直播间数">{live}</span>}
+            {account.auto_watch !== false && live > 0 && <span className="tab-count" title="直播中的直播间数">{live}</span>}
           </button>;
         })}
         <button type="button" className="account-tab add" onClick={onAdd} title="添加账号" aria-label="添加账号">

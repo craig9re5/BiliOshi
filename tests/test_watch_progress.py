@@ -969,3 +969,147 @@ class DailyCompletionRetirementTests(unittest.TestCase):
         self.assertFalse(row3["daily_complete"])
         self.assertNotEqual(row3["phase"], "今日已完成")
 
+    def test_no_fans_medal_room_reports_no_medal_without_unavailable_warning(self):
+        from bilioshi.application import AppContext
+        from bilioshi.services.watch_progress import has_no_fans_medal
+        from desktop.interaction import action_reason
+
+        no_medal_payload = {
+            "task_info": None,
+            "intimacy": 0,
+            "next_intimacy": 0,
+            "task_light_days": 0,
+            "is_lighted": False,
+            "reach_free_intimacy_limit": False,
+            "free_intimacy": 0,
+        }
+        self.assertTrue(has_no_fans_medal(no_medal_payload))
+        self.assertFalse(has_no_fans_medal({}))
+
+        tracker = ProgressTracker()
+        first = tracker.observe(no_medal_payload, "day", 0, 0)
+        later = tracker.observe(no_medal_payload, "day", 7200, 7200)
+        self.assertEqual(first["status"], "no_medal")
+        self.assertEqual(later["status"], "no_medal")
+        self.assertEqual(later["warning"], "")
+
+        app = AppContext(self.root)
+        app.call = Mock(return_value=no_medal_payload)
+        key, probed, err = app._query_one_task({"room": 1, "uid": 2}, ("s", "c"))
+        self.assertEqual((key, err), ("1", None))
+        self.assertEqual(probed["tasks"], [])
+        self.assertFalse(probed["has_medal"])
+
+        engine = Engine(self.root, job=Mock())
+        now = time.time()
+        engine.statuses = {"1": {"live_status": 1}}
+        engine.status_times = {"1": now}
+        engine.medals = {}
+        engine.tasks = {"1": probed}
+        engine.workers[1] = Mock(poll=Mock(return_value=None))
+        recorder = RoomStateRecorder(self.root / "state/1.json", {"name": "test", "room": 1})
+        recorder({"type": "x25kn_x_success", "interval": 60})
+        recorder({
+            "type": "watch_progress",
+            "status": "no_medal",
+            "day": task_day(),
+            "checked_at": now,
+            "verified_at": now,
+            "has_medal": False,
+            "tasks": [],
+            "progress": None,
+            "warning": "",
+        })
+        snap = engine.snapshot()
+        snap["account"] = "tester"
+        snap["account_confirmed"] = True
+        row = snap["rows"][0]
+        self.assertTrue(row["no_medal"])
+        self.assertEqual(row["tasks"], [])
+        self.assertFalse(row["tasks_stale"])
+        self.assertEqual(row["watch_warning"], "")
+        self.assertIn("粉丝牌", row["watch_note"])
+        self.assertIn("粉丝牌", action_reason(snap, row, "redo"))
+
+    def test_auto_watch_disabled_stops_workers_skips_auto_probe_and_keeps_daily_exp(self):
+        from bilioshi.runtime import save_login
+        from desktop.interaction import recovery_route
+        from desktop.storage import load_config, resolve_auto_watch
+
+        # Legacy config with all 5 live/notify switches explicitly False disables auto_watch.
+        write_json(self.root / "settings.json", {
+            "run_mode": "stable",
+            "check_minutes": 5,
+            "auto_revive": False,
+            "auto_danmaku_intimacy": False,
+            "auto_like": False,
+            "auto_wear": False,
+            "notify_on_live": False,
+            "auto_daily_exp": True,
+        })
+        cfg, _ = load_config(self.root)
+        self.assertFalse(cfg["auto_watch"])
+
+        # Watch-only config (reaction switches off, notify_on_live/auto_wear omitted) keeps auto_watch True.
+        self.assertTrue(resolve_auto_watch({
+            "auto_revive": False,
+            "auto_danmaku_intimacy": False,
+            "auto_like": False,
+        }))
+        # Explicit auto_watch always wins.
+        self.assertTrue(resolve_auto_watch({
+            "auto_watch": True,
+            "auto_revive": False,
+            "auto_danmaku_intimacy": False,
+            "auto_like": False,
+            "auto_wear": False,
+            "notify_on_live": False,
+        }))
+
+        save_login("sess-daily", "csrf-daily", self.root / "credentials.json")
+        engine = Engine(self.root, job=Mock())
+        now = time.time()
+        engine.statuses = {"1": {"live_status": 1}}
+        engine.status_times = {"1": now}
+        proc = Mock(poll=Mock(return_value=None))
+        engine.workers[1] = proc
+        engine.known_live.add(1)
+        engine.reload_settings()
+        proc.terminate.assert_called_once()
+        self.assertEqual(engine.workers, {})
+        self.assertEqual(engine.known_live, set())
+        self.assertFalse(engine.reconnect_room(1)[0])
+
+        with patch.object(engine, "spawn") as spawn:
+            engine._reconcile_live_member({"name": "test", "room": 1, "uid": 2}, {"live_status": 1}, now)
+            spawn.assert_not_called()
+
+        # Background periodic probe is skipped when auto_watch=False and notify_on_live=False,
+        # while daily EXP automation still schedules when credentials exist.
+        engine.next_check = 0
+        engine.auto_daily_attempted_day = ""
+        daily_calls = []
+        with patch.object(engine, "spawn") as spawn, \
+             patch.object(engine.application, "run_daily", side_effect=lambda **kw: daily_calls.append(kw) or {"ok": True, "user": {"name": "二号机"}}):
+            engine.tick()
+            if engine.daily_thread is not None:
+                engine.daily_thread.join(timeout=2)
+        spawn.assert_not_called()
+        self.assertEqual(len(daily_calls), 1)
+        self.assertEqual(engine.account, "二号机")
+
+        # Manual check_now still probes on demand.
+        engine.check_now()
+        with patch.object(engine, "spawn", return_value=Mock(poll=Mock(return_value=None), pid=321)) as spawn:
+            engine.tick()
+        spawn.assert_called_once()
+        engine.probe = None
+
+        snap = engine.snapshot()
+        self.assertFalse(snap["auto_watch"])
+        self.assertFalse(snap["live_monitoring"])
+        self.assertTrue(snap["account_confirmed"])
+        self.assertEqual(snap["rows"][0]["phase"], "直播中 · 已关挂机")
+        self.assertEqual(recovery_route(snap), {})
+
+

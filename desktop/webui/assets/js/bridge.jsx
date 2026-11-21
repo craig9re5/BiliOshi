@@ -97,6 +97,10 @@ function toRoom(row, snap) {
   }
   else if (row.active) state = "正在连接";
   else if (row.phase === "等待重试") { state = "等待重试"; tone = "warn"; }
+  else if (live && row.phase === "直播中 · 已关挂机") {
+    state = "已关挂机";
+    tone = "muted";
+  }
   else if (live) {
     if (row.task_error) { state = "任务待处理"; tone = "warn"; }
     else if (row.daily_complete) { state = "今日已完成"; tone = ""; }
@@ -106,6 +110,7 @@ function toRoom(row, snap) {
     state = row.task_error ? "任务异常" : "互动受限";
     tone = "warn";
   }
+  else if (row.phase === "已关直播监控" || row.phase === "已关直播挂机") { state = "已关挂机"; tone = "muted"; }
   else if (row.status_stale && row.status_updated) state = "状态已过期";
   else if (row.live_status == null) state = "等待检查";
   const fallback = "状态尚未确认，更新后可操作";

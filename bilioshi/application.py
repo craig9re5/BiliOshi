@@ -14,6 +14,7 @@ from .runtime import data_dir, file_stat_signature, read_json, task_day, update_
 from .members import load_members, validate_members
 from .session_headers import session_headers
 from .launch import watch_arguments
+from .services.watch_progress import has_no_fans_medal
 from . import safety
 
 _DEFAULT_READ_JSON = read_json
@@ -439,7 +440,8 @@ class AppContext:
         if not club:
             return key, None, "任务进度查询失败"
         entry = {
-            "tasks": club.get("task_info", []),
+            "tasks": club.get("task_info") or [],
+            "has_medal": not has_no_fans_medal(club),
             "intimacy": club.get("intimacy", 0),
             "next_intimacy": club.get("next_intimacy", 0),
             "task_light_days": club.get("task_light_days", 0),

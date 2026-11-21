@@ -6,6 +6,7 @@ from bilioshi.runtime import APP_VERSION, task_day
 from bilioshi.safety import blocks_watch, describe_hold, format_task_errors
 from bilioshi.services.watch_progress import (
     CHECK_INTERVAL,
+    has_no_fans_medal,
     parse_watch_task,
     room_daily_complete,
 )
@@ -20,6 +21,14 @@ def project_snapshot(engine, states, now):
     safety_state = dict(getattr(engine, "safety", None) or {"blocked": False})
     if safety_state.get("blocked"):
         safety_state.update(describe_hold(safety_state, engine.members))
+    auto_watch = bool(engine.config.get("auto_watch", True))
+    notify_on_live = bool(engine.config.get("notify_on_live", True))
+    live_monitoring = auto_watch or notify_on_live
+    confirm_window = (
+        max(180, engine.config.get("check_minutes", 30) * 60 + 180)
+        if live_monitoring
+        else max(86400, engine.config.get("check_minutes", 30) * 60 + 180)
+    )
     return {
         "paused": engine.paused,
         "safety": safety_state,
@@ -34,10 +43,7 @@ def project_snapshot(engine, states, now):
         "account_confirmed": bool(
             engine.account
             and engine.account_checked_at
-            and (
-                now - engine.account_checked_at
-                <= max(180, engine.config.get("check_minutes", 30) * 60 + 180)
-            )
+            and (now - engine.account_checked_at <= confirm_window)
         ),
         "account_checked_at": engine.account_checked_at,
         "medals": engine.medals,
@@ -45,6 +51,8 @@ def project_snapshot(engine, states, now):
         "daily": dict(getattr(engine, "daily", {}) or {}),
         "daily_running": bool(getattr(engine, "daily_running", False)),
         "profile": dict(getattr(engine, "profile", {}) or {}),
+        "auto_watch": auto_watch,
+        "live_monitoring": live_monitoring,
         "today": task_day(),
         "last_check": engine.last_check,
         "next_check": engine.next_check,
@@ -170,6 +178,8 @@ def _resolve_row_phase(
     observed,
     live_status,
     daily_complete=False,
+    auto_watch=True,
+    live_monitoring=True,
 ):
     """Choose the primary status label for a projected room row."""
     if heartbeat_stale:
@@ -178,6 +188,14 @@ def _resolve_row_phase(
         return state.get("phase", "正在连接")
     if engine.paused:
         return "已暂停"
+    if not auto_watch:
+        if query_error:
+            return "查询失败"
+        if live_status == 1:
+            return "直播中 · 已关挂机"
+        if live_status in (0, 2):
+            return "未开播"
+        return "已关直播监控" if not live_monitoring else "已关直播挂机"
     if query_error:
         return "查询失败"
     if status_stale and observed:
@@ -204,6 +222,7 @@ def _row_connection_state(
     safety_blocked,
     recovering,
     daily_complete,
+    auto_watch=True,
     now,
 ):
     """Compute heartbeat health, warning banner, and manual reconnect eligibility."""
@@ -222,7 +241,8 @@ def _row_connection_state(
     elif recovery.get("state") == "failed" and not engine.paused and not safety_blocked:
         connection_warning = recovery.get("message", "重连失败，请稍后再试。")
     reconnect_allowed = bool(
-        (active or (live_status == 1 and not daily_complete) or connection_warning)
+        auto_watch
+        and (active or (live_status == 1 and not daily_complete) or connection_warning)
         and not engine.paused
         and not safety_blocked
         and not recovering
@@ -288,6 +308,8 @@ def project_row(engine, member, state, now):
         task_day(),
         task_error=engine.task_errors.get(room_str, ""),
     )
+    auto_watch = bool(engine.config.get("auto_watch", True))
+    live_monitoring = auto_watch or bool(engine.config.get("notify_on_live", True))
     wake_grace = 0 < now - getattr(engine, "resumed_from_sleep_at", 0) < 90
     heartbeat_stale = active and not wake_grace and now - number(
         state.get("last_heartbeat"), number(state.get("started"), now)
@@ -302,6 +324,8 @@ def project_row(engine, member, state, now):
         observed=observed,
         live_status=live_status,
         daily_complete=daily_complete,
+        auto_watch=auto_watch,
+        live_monitoring=live_monitoring,
     )
     recovery = getattr(engine, "manual_reconnects", {}).get(room, {})
     recovering = recovery.get("state") == "checking"
@@ -317,8 +341,10 @@ def project_row(engine, member, state, now):
         safety_blocked=safety_blocked,
         recovering=recovering,
         daily_complete=daily_complete,
+        auto_watch=auto_watch,
         now=now,
     )
+    has_medal = bool(medal) or bool(isinstance(task_entry, dict) and task_entry.get("has_medal"))
     watch, watch_warning, watch_note, task_entry, tasks_stale = watch_observation(
         state,
         task_entry,
@@ -326,6 +352,16 @@ def project_row(engine, member, state, now):
         tasks_stale,
         now,
         manual_checked_at=getattr(engine, "manual_check_at", 0),
+        has_medal=has_medal,
+        auto_watch=auto_watch,
+    )
+    no_medal = bool(
+        not tasks_stale
+        and not medal
+        and (
+            has_no_fans_medal(task_entry)
+            or (isinstance(task_entry, dict) and task_entry.get("has_medal") is False)
+        )
     )
     if safety_blocked or engine.paused or heartbeat_stale:
         watch_warning = ""
@@ -356,6 +392,7 @@ def project_row(engine, member, state, now):
         **member,
         "phase": phase,
         "daily_complete": bool(daily_complete),
+        "no_medal": no_medal,
         "room_blocks": room_blocks,
         "active": active,
         "status_stale": status_stale,
@@ -390,18 +427,46 @@ def project_row(engine, member, state, now):
         "intimacy_gain": gain,
         "avatar_url": live_info.get("face", ""),
         "day_limit": medal.get("day_limit", 0),
-        "tasks": [] if tasks_stale else task_entry.get("tasks", []),
+        "tasks": [] if tasks_stale else (task_entry.get("tasks") or []),
         "intimacy": task_entry.get("intimacy", 0),
         "next_intimacy": task_entry.get("next_intimacy", 0),
         "task_light_days": task_entry.get("task_light_days", 0),
     }
 
 
-def watch_observation(state, task_entry, active, tasks_stale, now, *, manual_checked_at=0):
+def watch_observation(
+    state,
+    task_entry,
+    active,
+    tasks_stale,
+    now,
+    *,
+    manual_checked_at=0,
+    has_medal=True,
+    auto_watch=True,
+):
     """Project verified task rows without making an old medal counter look fresh."""
     watch = state.get("watch_progress", {}) if active else {}
-    if watch.get("day") != task_day():
+    if not auto_watch and not active:
         return {}, "", "", task_entry, tasks_stale
+    if watch.get("day") != task_day():
+        note = ""
+        if active and not tasks_stale and not has_medal and has_no_fans_medal(task_entry):
+            note = "尚未拥有该主播粉丝牌，看播不会累计粉丝牌亲密度；加入粉丝团后即可统计进度。"
+        return {}, "", note, task_entry, tasks_stale
+    no_medal_entry = (
+        not tasks_stale
+        and not has_medal
+        and (
+            has_no_fans_medal(task_entry)
+            or (isinstance(task_entry, dict) and task_entry.get("has_medal") is False)
+        )
+    )
+    if no_medal_entry or watch.get("status") == "no_medal":
+        note = "尚未拥有该主播粉丝牌，看播不会累计粉丝牌亲密度；加入粉丝团后即可统计进度。"
+        if not tasks_stale and not has_medal:
+            return watch, "", note, task_entry, False
+        return watch, "", note, task_entry, tasks_stale
     note = ""
     minutes = int(watch.get("unchanged_minutes") or 0)
     if watch.get("rotation") and minutes >= 30:

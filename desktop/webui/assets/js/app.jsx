@@ -2,7 +2,7 @@
 
 const { useState, useEffect, useRef, useCallback } = React;
 const { Icon, Pulse, call, bridgeReady, toRoom, roomSortTier } = window;
-const DEFAULT_SETTINGS = { auto_revive: true, auto_danmaku_intimacy: true, auto_like: false, auto_wear: true,
+const DEFAULT_SETTINGS = { auto_watch: true, auto_revive: true, auto_danmaku_intimacy: true, auto_like: false, auto_wear: true,
   auto_daily_exp: true, do_coin: false, coin_target: 5, prefer_medals: true, coin_with_like: false,
   notify_on_live: true, run_mode: "stable", check_minutes: 5, autostart: false, auto_update: true };
 const THEME_KEYS = ["system", "white", "paper", "mist", "dark"];
@@ -803,6 +803,9 @@ function App() {
 
   const maxConcurrent = snap.max_concurrent_accounts || 3;
   const runningAccountsCount = accounts.filter((item) => item.running || item.engine_active).length;
+  const liveWatchAccountsCount = accounts.filter(
+    (item) => (item.running || item.engine_active) && item.auto_watch !== false
+  ).length;
 
   const setAccountRunning = async (accountId, enabled) => {
     if (!accountId) return;
@@ -993,7 +996,7 @@ function App() {
   return (
     <div className={`app ${collapsed ? "side-collapsed" : ""}`}>
       <Sidebar page={page} onPage={setPage} account={account} activeAccount={viewedAccountObj}
-        runningCount={runningAccountsCount} paused={viewed.paused}
+        runningCount={liveWatchAccountsCount} paused={viewed.paused}
         avatar={accountAvatar || accountAvatars[viewId]}
         onQuit={() => setDialog({ type: "quit" })} brandHidden collapsed={collapsed} inert={modalOpen} />
       <main className="main" aria-busy={!connected} inert={modalOpen ? "" : undefined}>
@@ -1039,6 +1042,8 @@ function App() {
         {page === "monitor" && <window.Overview key={viewId} rooms={rooms} selectedId={selectedId} onSelect={select}
           paused={viewed.paused} globalPaused={Boolean(snap.global_paused)}
           viewedRunning={viewedRunning} multiAccount={accounts.length > 0}
+          autoWatch={viewedSettings.auto_watch !== false}
+          onEnableAutoWatch={() => setSetting("auto_watch", true)}
           accountName={viewedAccountObj?.name || account.name || ""}
           blocked={viewedBlocked}
           onStartWatch={() => setAccountRunning(viewId, true)}

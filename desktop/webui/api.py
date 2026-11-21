@@ -43,7 +43,7 @@ _SECRET_FIELDS = {
     "access_token", "refresh_token", "secret_key",
 }
 _SETTING_FLAGS = (
-    "auto_revive", "auto_danmaku_intimacy", "auto_like", "auto_wear",
+    "auto_watch", "auto_revive", "auto_danmaku_intimacy", "auto_like", "auto_wear",
     "auto_daily_exp", "do_coin", "prefer_medals", "coin_with_like",
     "notify_on_live", "autostart", "auto_update", "paused",
 )
@@ -339,7 +339,8 @@ class Api:
         value = {key: summary.get(key) for key in (
             "id", "uid", "name", "face", "created_at", "last_used_at",
             "last_checked_at", "status", "watch_enabled", "credential_token",
-            "signed_in", "engine_active", "running", "paused", "global_paused", "state", "room_count",
+            "signed_in", "engine_active", "running", "live_watching", "auto_watch",
+            "auto_daily_exp", "paused", "global_paused", "state", "room_count",
             "live_room_count", "gain", "snapshot_at", "stale", "safety", "account",
         )}
         return _public(value)
